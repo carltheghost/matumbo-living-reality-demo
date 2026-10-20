@@ -74,6 +74,32 @@ test('duplicate feature records render as one real-world tab',()=>{
   scene.destroy();assert.equal(parent.children.length,0);assert.equal(targets.length,0);
 });
 
+test('TUMBO coin ownership disposes all six materials and seven geometries once across repeated mounts',()=>{
+  const parent=new THREE.Scene(),targets=[];
+  for(let cycle=0;cycle<3;cycle++){
+    const scene=buildRealityAssemblyScene({
+      THREE,
+      parent,
+      features:[{id:'asset-token',assemblyTier:'tab',initialTabShape:'cylinder',sources:['tumbo-asset-token']}],
+      targets,
+    });
+    const visual=scene.nodes.get('asset-token')?.coinVisual;
+    assert.ok(visual,'asset-token should own a complete coin visual');
+    assert.equal(visual.materials.length,6,'body plus five shared detail materials are owned');
+    assert.equal(visual.geometries.length,7,'body plus six detail geometries are owned');
+    const resources=[...visual.materials,...visual.geometries];
+    const disposalCounts=new Map(resources.map((resource)=>[resource,0]));
+    resources.forEach((resource)=>{
+      const dispose=resource.dispose.bind(resource);
+      resource.dispose=()=>{disposalCounts.set(resource,disposalCounts.get(resource)+1);return dispose();};
+    });
+    scene.destroy();
+    resources.forEach((resource)=>assert.equal(disposalCounts.get(resource),1,`${resource.type??'resource'} must be disposed exactly once`));
+    assert.equal(parent.children.length,0);
+    assert.equal(targets.length,0);
+  }
+});
+
 test('focus fades context during approach then clears it for the selected working surface',()=>{
   const parent=new THREE.Scene(),targets=[],features=[
     {id:'block-world',assemblyTier:'tab',sources:['semantic-block-fabric']},

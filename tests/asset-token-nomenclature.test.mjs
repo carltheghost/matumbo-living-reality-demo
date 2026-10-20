@@ -17,6 +17,7 @@ test("visible TUMBO surfaces use Asset Token nomenclature", async () => {
   const navigatorSource = await readFile(new URL("../src/render/feature-navigator.js", import.meta.url), "utf8");
   const marketSource = await readFile(new URL("../src/domains/asset-market.js", import.meta.url), "utf8");
   const currentState = await readFile(new URL("../docs/CURRENT_STATE.md", import.meta.url), "utf8");
+  const assemblySource = await readFile(new URL("../src/render/reality-assembly.js", import.meta.url), "utf8");
 
   assert.match(html, /TUMBO Asset Token/);
   assert.match(html, /TUMBO-SIM/);
@@ -26,6 +27,7 @@ test("visible TUMBO surfaces use Asset Token nomenclature", async () => {
   assert.match(navigatorSource, /label: "TUMBO Asset Token"/);
   assert.match(navigatorSource, /TUMBO-SIM/);
   assertTumboLinesStayAssetTokenFirst(navigatorSource, "feature navigator");
+  assert.doesNotMatch(assemblySource, /TUMBO-SIM\s+coin/i);
 
   assert.match(marketSource, /CoinGecko/);
   assert.match(marketSource, /asset-token display unit/i);
