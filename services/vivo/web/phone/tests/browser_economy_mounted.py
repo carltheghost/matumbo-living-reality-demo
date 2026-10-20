@@ -41,7 +41,7 @@ def wait_for_local(page: Page, route: str) -> None:
     page.wait_for_selector("#simulated-economy-panel:not([hidden])")
     page.wait_for_selector(".token-economy-overview")
     page.wait_for_function(
-        "document.querySelector('.token-economy-overview')?.textContent.includes('Intended fixed maximum: 42,000,000,000,000 TUMBO')"
+        "document.querySelector('.token-economy-overview')?.textContent.includes('Intended fixed maximum: 40,000,000,000,000 TUMBO')"
     )
     page.wait_for_function(
         "document.querySelector('.token-economy-overview-host')?.dataset.auditState === 'current'"
@@ -51,7 +51,7 @@ def wait_for_local(page: Page, route: str) -> None:
     overview_text = page.locator(".token-economy-overview").inner_text()
     assert re.search(r"Overall accounting\s+healthy", overview_text), overview_text
     assert "Current issued simulation supply: 10,000,000 TUMBO-SIM (10,000,000,000 fluff)" in overview_text
-    assert "Intended fixed maximum: 42,000,000,000,000 TUMBO (42,000,000,000,000,000 fluff)" in overview_text
+    assert "Intended fixed maximum: 40,000,000,000,000 TUMBO (40,000,000,000,000,000 fluff)" in overview_text
     assert re.search(r"Rewards\s+not-observed", overview_text)
     counts = page.evaluate(
         """
@@ -182,7 +182,7 @@ def flow(page: Page) -> dict[str, Any]:
 
     overview_text = page.locator(".token-economy-overview").inner_text()
     assert "Current issued simulation supply: 10,000,000 TUMBO-SIM" in overview_text
-    assert "Intended fixed maximum: 42,000,000,000,000 TUMBO" in overview_text
+    assert "Intended fixed maximum: 40,000,000,000,000 TUMBO" in overview_text
     assert "not-observed" in overview_text
     assert page.locator(".token-economy-overview").count() == 1
 

@@ -16,11 +16,14 @@ surface labels itself simulated.
 ## 2. Assets and config
 
 - Assets: `TUMBO` (native), `sMIMAS` (synthetic demo asset).
-- All tunables live in **one** config module, `src/domains/token-config.js`:
-  `TOKEN_TOTAL_SUPPLY`, `FLUFF_PER_TUMBO`, `REVERSE_WINDOW_TICKS` (1000),
-  `VOID_TITHE_BPS` (10), `RIBBON_CAP` (5000), asset metadata.
-- No module hardcodes a supply number. No UI quotes a total supply figure
-  publicly — the user has not chosen one.
+- Simulation tunables live in **one** config module, `src/domains/token-config.js`:
+  `TOKEN_TOTAL_SUPPLY` (10,000,000,000 fluff currently issued in the demo), the intended
+  maximum (40,000,000,000,000 TUMBO-SIM), `FLUFF_PER_TUMBO`,
+  `REVERSE_WINDOW_TICKS` (1000), `VOID_TITHE_BPS` (10), `RIBBON_CAP` (5000),
+  and asset metadata. `src/domains/token-supply-policy.js` exposes the exact maximum
+  as JSON-safe decimal strings; it does not mint, allocate, or change genesis.
+- UI may show current issued simulation supply and intended maximum with explicit labels.
+  It must not present the maximum as already issued or imply real-world token supply.
 
 ## 3. Accounts
 

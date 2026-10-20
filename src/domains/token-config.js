@@ -26,7 +26,7 @@ export const TOKEN_TOTAL_SUPPLY = 10_000_000_000;
  * Keep the exact-unit representation as BigInt because the equivalent fluff
  * amount is larger than Number.MAX_SAFE_INTEGER.
  */
-export const TUMBO_INTENDED_MAX_SUPPLY_TUMBO = 42_000_000_000_000n;
+export const TUMBO_INTENDED_MAX_SUPPLY_TUMBO = 40_000_000_000_000n;
 export const TUMBO_INTENDED_MAX_SUPPLY_FLUFF =
   TUMBO_INTENDED_MAX_SUPPLY_TUMBO * BigInt(FLUFF_PER_TUMBO);
 export const TUMBO_INTENDED_MAX_SUPPLY_TUMBO_DECIMAL =
