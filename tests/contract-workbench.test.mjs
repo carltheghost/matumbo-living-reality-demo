@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { mountContractWorkbench, buildWorkbenchContract, parseContractValue, describePredicate, publicEventOutcomeNames } from '../src/render/contract-workbench.js';
-import { createContractAutomation } from '../src/domains/contract-automation.js';
+import { createContractAutomation, previewContractTerms } from '../src/domains/contract-automation.js';
 
 // Deliberately exercises real DOM handlers, not copies of their callbacks.
 function documentFixture() {
@@ -112,6 +112,35 @@ test('native composer creates edited service terms; engine owns selected persist
   assert.equal(fixture.selections[0].id, saved.id);
   assert.match(fixture.root.textContent, /not verified signatures/);
   fixture.api.destroy();
+});
+test('draft preview evaluates assumed evidence without creating or mutating a contract', () => {
+  const engine = createContractAutomation();
+  const before = engine.exportState();
+  const result = previewContractTerms({
+    contractId: 'preview:test',
+    title: 'Preview agreement',
+    parties: ['owner', 'reviewer'],
+    terms: engine.listTemplates().find((template) => template.id === 'service').defaults,
+    assumedEvidence: { accepted: true },
+  });
+  assert.equal(result.persisted, false);
+  assert.equal(result.mutated, false);
+  assert.equal(result.rules[0].state, 'triggered');
+  assert.equal(result.projectedEffects[0].simulation, true);
+  assert.equal(engine.exportState(), before);
+});
+test('native draft review shows a deterministic no-write forecast', () => {
+  const fixture = documentFixture();
+  const engine = createContractAutomation();
+  const api = mountContractWorkbench({ ...fixture, engine });
+  button(fixture.root, 'Create contract').click();
+  named(fixture.root, 'title').value = 'Forecast only';
+  named(fixture.root, 'preview-evidence').value = '{"accepted":true}';
+  button(fixture.root, 'Preview simulated lifecycle').click();
+  assert.equal(engine.list().length, 0);
+  assert.match(fixture.root.textContent, /PREVIEW ONLY · NO STATE CHANGED/);
+  assert.match(fixture.root.textContent, /TRIGGERED/);
+  api.destroy();
 });
 test('create -> required approvals -> local evidence invokes real handlers and displays receipt', () => {
   const fixture = setup(); create(fixture);
