@@ -2,6 +2,8 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -84,5 +86,14 @@ class ReleaseTests(unittest.TestCase):
         p = self.root / build.PHONE / 'index.html'
         p.write_text(p.read_text() + 'Choose original Field Lab')
         with self.assertRaises(ValueError): self.run_build()
+
+    def test_cli_retains_full_dotted_release_name(self):
+        output = self.out.with_name('release.2026.10.22')
+        result = subprocess.run([sys.executable, str(Path(__file__).with_name('build.py')),
+            '--source', str(self.root), '--out', str(output), '--commit', 'a' * 40],
+            capture_output=True, text=True, check=True)
+        archive = Path(json.loads(result.stdout)['archive'])
+        self.assertEqual(archive.name, 'release.2026.10.22.zip')
+        self.assertTrue(archive.is_file())
 
 if __name__ == '__main__': unittest.main()

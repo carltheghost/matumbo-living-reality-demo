@@ -18,9 +18,10 @@ def main(base, output):
             errors, failed = [], []
             page.on('pageerror', lambda e: errors.append(str(e)))
             page.on('response', lambda r: failed.append(r.url) if r.status>=400 and not r.url.endswith('/favicon.ico') else None)
+            print(json.dumps({'viewport': label, 'step': 'open-release'}), flush=True)
             response = page.goto(base.rstrip('/') + '/Field-Lab.html', wait_until='domcontentloaded')
             page.wait_for_url('**/phone/field-lab-unified.html')
-            page.get_by_role('button', name='Enter local Vivo', exact=True).click()
+            page.locator('#enterPhoneLocal').click()
             page.wait_for_function('Boolean(window.VivaPhoneEngine?.active)')
             page.wait_for_function("document.querySelector('#phoneFieldStatus').textContent.includes('coordinate planes')")
             assert page.locator('meta[name="vivo-release"]').get_attribute('content') == '2026.10.22'
@@ -28,6 +29,7 @@ def main(base, output):
             assert page.locator('text=Choose original Field Lab').count() == 0
             snapshot = page.evaluate('async () => await window.VivaPhoneEngine.snapshot()')
             assert snapshot['snapshot']['spaces']['root']['entities']['relic']
+            print(json.dumps({'viewport': label, 'step': 'worker-ready'}), flush=True)
             page.screenshot(path=str(output / f'{label}-field-lab.png'), full_page=True)
             page.evaluate("async () => {await navigator.serviceWorker.register('../vivo-sw.js',{scope:'../'});await navigator.serviceWorker.ready;}")
             page.wait_for_function('Boolean(navigator.serviceWorker.controller)')
@@ -35,7 +37,7 @@ def main(base, output):
             assert cached, 'new application alias is not in the offline shell'
             ctx.set_offline(True)
             page.reload(wait_until='domcontentloaded')
-            page.get_by_role('button', name='Enter local Vivo', exact=True).click()
+            page.locator('#enterPhoneLocal').click()
             page.wait_for_function('Boolean(window.VivaPhoneEngine?.active)')
             assert page.evaluate('window.cameraCalls') == 0
             assert not errors, errors
