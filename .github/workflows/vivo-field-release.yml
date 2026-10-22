@@ -1,0 +1,85 @@
+name: Build consolidated Field Lab package
+on:
+  push:
+    branches: ['vivo/field-lab-unified-2026-10-22']
+  pull_request:
+    paths: ['releases/field-lab/**', '.github/workflows/vivo-field-release.yml']
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  package-and-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify runtime remains exactly at reviewed base
+        run: |
+          set -euo pipefail
+          git diff --exit-code 1da8a2f81aaebd529e1129d4cfd147d7a98ab157 -- services/vivo/web services/vivo/contracts research/vivo-phase-fabric/web
+          mkdir -p release-evidence
+          git rev-parse HEAD | tee release-evidence/build-commit.txt
+      - name: Check assembler and existing phone/input suites
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s releases/field-lab -p 'test_*.py' -v 2>&1 | tee release-evidence/assembler.log
+          node --test services/vivo/web/phone/tests/*.test.mjs | tee release-evidence/phone.tap
+          node --test services/vivo/tests/input/*.test.mjs | tee release-evidence/input.tap
+          python scripts/vivo/stage_economy_dependencies.py --check
+          python scripts/vivo/verify_economy_asset_coverage.py
+      - name: Assemble the current runtime with a new cached entry
+        run: |
+          set -euo pipefail
+          python releases/field-lab/build.py --source . --out "$RUNNER_TEMP/Vivo-Field-Lab-2026.10.22" --commit "$(git rev-parse HEAD)" | tee release-evidence/build.json
+      - name: Install pinned test browser
+        run: |
+          set -euo pipefail
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Check actual packaged pages on desktop and phone viewport
+        run: |
+          set -euo pipefail
+          python -m http.server 9897 --bind 127.0.0.1 --directory "$RUNNER_TEMP/Vivo-Field-Lab-2026.10.22" >release-evidence/server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          python - <<'PY'
+          import time
+          from urllib.request import urlopen
+          for attempt in range(100):
+              try:
+                  with urlopen('http://127.0.0.1:9897/Field-Lab.html', timeout=2) as response:
+                      assert response.status == 200
+                  break
+              except Exception:
+                  time.sleep(.1)
+          else:
+              raise SystemExit('server did not start')
+          PY
+          python releases/field-lab/smoke.py http://127.0.0.1:9897/ release-evidence | tee release-evidence/alias.log
+          for probe in browser_field_world_static browser_phone_route_repair browser_bimanual_transform browser_material_deformation browser_economy_mounted browser_agent_stop browser_dimensional_contact browser_conversation_transport; do
+            python "services/vivo/web/phone/tests/${probe}.py" http://127.0.0.1:9897/ | tee "release-evidence/${probe}.log"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-field-lab-2026-10-22-package
+          path: ${{ runner.temp }}/Vivo-Field-Lab-2026.10.22.zip
+          if-no-files-found: warn
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-field-lab-2026-10-22-evidence
+          path: release-evidence/
+          retention-days: 30
