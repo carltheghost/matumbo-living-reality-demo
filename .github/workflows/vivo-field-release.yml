@@ -42,6 +42,12 @@ jobs:
         run: |
           set -euo pipefail
           python releases/field-lab/build.py --source . --out "$RUNNER_TEMP/Vivo-Field-Lab-2026.10.22" --commit "$(git rev-parse HEAD)" | tee release-evidence/build.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vivo-field-lab-2026-10-22-package
+          path: ${{ runner.temp }}/Vivo-Field-Lab-2026.10.22.zip
+          if-no-files-found: error
+          retention-days: 30
       - name: Install pinned test browser
         run: |
           set -euo pipefail
@@ -66,17 +72,12 @@ jobs:
           else:
               raise SystemExit('server did not start')
           PY
-          python releases/field-lab/smoke.py http://127.0.0.1:9897/ release-evidence | tee release-evidence/alias.log
+          status=0
+          timeout 120s python releases/field-lab/smoke.py http://127.0.0.1:9897/ release-evidence 2>&1 | tee release-evidence/alias.log || status=1
           for probe in browser_field_world_static browser_phone_route_repair browser_bimanual_transform browser_material_deformation browser_economy_mounted browser_agent_stop browser_dimensional_contact browser_conversation_transport; do
-            python "services/vivo/web/phone/tests/${probe}.py" http://127.0.0.1:9897/ | tee "release-evidence/${probe}.log"
+            timeout 120s python "services/vivo/web/phone/tests/${probe}.py" http://127.0.0.1:9897/ 2>&1 | tee "release-evidence/${probe}.log" || status=1
           done
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: vivo-field-lab-2026-10-22-package
-          path: ${{ runner.temp }}/Vivo-Field-Lab-2026.10.22.zip
-          if-no-files-found: warn
-          retention-days: 30
+          exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
