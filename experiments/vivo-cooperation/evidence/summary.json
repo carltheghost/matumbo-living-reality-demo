@@ -1,0 +1,135 @@
+{
+  "schema": "vivo.cooperation.local-evidence/1",
+  "evidenceClass": "local native Node/Python composition; no browser/device/PR-CI claim",
+  "parentCommit": "e3873f342b3936d1fafdabbaf7f0c24eb7bc522a",
+  "runtime": {
+    "node": "v22.16.0",
+    "python": "3.13.5",
+    "numpy": "2.3.5"
+  },
+  "tests": {
+    "newLifecycle": 25,
+    "newRealNeural": 8,
+    "unchangedAdjacent": 26,
+    "combined": 59,
+    "failed": 0,
+    "skipped": 0
+  },
+  "protocolSha256": "1a32a354f910a45d2f7df79b26bc96e157f9ed9786c2d93197e3a02d717978c8",
+  "benchmarkReportSha256": "f62e232940c07f474f08c7a7e868e997a0f4de53020aaa152082b4848bc1be82",
+  "benchmark": {
+    "worldCases": 48,
+    "modelRuns": 384,
+    "byMode": {
+      "intact": {
+        "cases": 48,
+        "correct": 48,
+        "abstentions": 0,
+        "errors": 0
+      },
+      "no_lateral": {
+        "cases": 48,
+        "correct": 48,
+        "abstentions": 0,
+        "errors": 0
+      },
+      "no_memory": {
+        "cases": 48,
+        "correct": 48,
+        "abstentions": 0,
+        "errors": 0
+      },
+      "no_branch0": {
+        "cases": 48,
+        "correct": 24,
+        "abstentions": 0,
+        "errors": 0
+      },
+      "no_branch1": {
+        "cases": 48,
+        "correct": 24,
+        "abstentions": 0,
+        "errors": 0
+      },
+      "no_branch2": {
+        "cases": 48,
+        "correct": 48,
+        "abstentions": 0,
+        "errors": 0
+      },
+      "no_branch3": {
+        "cases": 48,
+        "correct": 48,
+        "abstentions": 0,
+        "errors": 0
+      },
+      "silence_decision": {
+        "cases": 48,
+        "correct": 0,
+        "abstentions": 48,
+        "errors": 0
+      }
+    },
+    "pairedEffects": {
+      "cue": {
+        "pairs": 24,
+        "decisionChanged": 24
+      },
+      "query": {
+        "pairs": 24,
+        "decisionChanged": 24
+      }
+    },
+    "ablationEffects": {
+      "no_lateral": {
+        "decisionChanged": 0,
+        "logitsChanged": 48
+      },
+      "no_memory": {
+        "decisionChanged": 0,
+        "logitsChanged": 48
+      },
+      "no_branch0": {
+        "decisionChanged": 24,
+        "logitsChanged": 48
+      },
+      "no_branch1": {
+        "decisionChanged": 24,
+        "logitsChanged": 48
+      },
+      "no_branch2": {
+        "decisionChanged": 0,
+        "logitsChanged": 0
+      },
+      "no_branch3": {
+        "decisionChanged": 0,
+        "logitsChanged": 0
+      },
+      "silence_decision": {
+        "decisionChanged": 48,
+        "logitsChanged": 0
+      }
+    },
+    "acceptedWorldEdits": 48,
+    "correctWorldEdits": 48,
+    "exactReloads": 48,
+    "automaticRetries": 0,
+    "faults": 0,
+    "parameterDigests": [
+      "aacefe3548192e365aa14c7305713693f011338dcd9034c7faaf204f57cae368"
+    ],
+    "allSameParameters": true,
+    "symbolicTaskBaseline": {
+      "correct": 48,
+      "total": 48,
+      "usesNeuralModel": false
+    },
+    "checkpointPromotion": "experimental_only; original result-task development gate remains rejected"
+  },
+  "limits": [
+    "Synthetic integration benchmark, not held-out intelligence evidence.",
+    "The prior 55/64 result-task gate remains rejected.",
+    "No evidence that all five compartments, lateral connection, or slot memory are necessary on this task.",
+    "No model training, live mount, merge, deployment, or user data modification."
+  ]
+}
