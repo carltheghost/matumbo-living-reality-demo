@@ -390,3 +390,110 @@ body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surfa
   #immersive-toolbar *{animation:none!important;transition:none!important}
   #immersive-toolbar button{scroll-behavior:auto!important}
 }
+
+/* The asset-token surface is a companion reading skin on the coin, not a
+   full-bleed opaque card. Keep the rim and the real geometric emblem visible
+   around it while giving the policy/interaction copy its own bounded scroll. */
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true]{
+  width:min(320px,calc(100vw - 64px))!important;
+  height:min(176px,calc(100dvh - 320px))!important;
+  max-width:min(320px,calc(100vw - 64px))!important;
+  max-height:min(176px,calc(100dvh - 320px))!important;
+  gap:6px!important;
+  padding:10px 12px!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  background:linear-gradient(155deg,rgba(9,22,31,.72),rgba(3,10,16,.58))!important;
+  border-color:rgba(225,191,112,.74)!important;
+  box-shadow:inset 0 1px 0 rgba(255,239,183,.14),inset 0 0 26px rgba(207,163,71,.08),0 14px 42px rgba(0,0,0,.55)!important;
+}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] :is(.eyebrow,h2,.asset-launch-strap,.asset-supply-note){display:none!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true]>.assembly-surface-provenance{display:none!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .asset-launch-identity{gap:8px;margin-bottom:4px;padding:5px 6px!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .asset-launch-identity-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .launch-metrics{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:4px!important;
+  margin:4px 0!important;
+}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .metric{padding:4px 5px!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .metric b{font-size:12px!important;line-height:1.1!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .metric span{font-size:7px!important;line-height:1.1!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .asset-launch-details{margin-top:3px!important;padding-top:3px!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .asset-launch-details summary{min-height:34px!important;padding:5px 6px!important;font-size:10px!important;line-height:1.2!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] #distribution-list{
+  max-height:150px;
+}
+@media(max-width:700px){
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true]{
+    width:min(320px,calc(100vw - 48px))!important;
+    height:min(172px,calc(100dvh - 300px))!important;
+    max-width:min(320px,calc(100vw - 48px))!important;
+    max-height:min(172px,calc(100dvh - 300px))!important;
+  }
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .launch-metrics{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:6px;
+  }
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] .metric:last-child{grid-column:auto}
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true] #distribution-list{max-height:112px}
+}
+@media(max-width:420px){
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true]{
+    width:calc(100vw - 48px)!important;
+    height:min(168px,calc(100dvh - 300px))!important;
+    max-width:calc(100vw - 48px)!important;
+    max-height:min(168px,calc(100dvh - 300px))!important;
+  }
+}
+
+/* The full registry is a second reading level from the coin surface. The
+   centered-surface manager normally hides managed panels while Reality
+   Assembly is active; keep this route's existing console reachable,
+   viewport-bounded, and independent of the CSS3D coin membrane. */
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden]){
+  display:flex!important;
+  position:fixed!important;
+  inset:145px 24px 96px auto!important;
+  width:min(560px,calc(100vw - 48px))!important;
+  min-width:0!important;
+  max-width:min(560px,calc(100vw - 48px))!important;
+  max-height:none!important;
+  overflow:auto!important;
+  z-index:130!important;
+  transform:none!important;
+  filter:none!important;
+  pointer-events:auto!important;
+}
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden]) > .surface-grip{
+  display:none!important;
+}
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden])[data-compact="true"] > :not(.surface-grip){
+  display:revert!important;
+}
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden])[data-compact="true"] > #launch-console-head,
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden])[data-compact="true"] > #launch-console-toolbar,
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden])[data-compact="true"] > #launch-console-coverage-lens{
+  display:flex!important;
+}
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden])[data-compact="true"] > #launch-console-summary,
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden])[data-compact="true"] > #launch-console-allocation-classes,
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden])[data-compact="true"] > #launch-console-selected,
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden])[data-compact="true"] > #launch-console-rows,
+body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden])[data-compact="true"] > #launch-console-population{
+  display:grid!important;
+}
+body.assembly-mode.asset-registry-open #reality-assembly .reality-lens-feature-panel#asset-launch[data-lens-surface-attached=true]{
+  visibility:hidden!important;
+  opacity:0!important;
+  pointer-events:none!important;
+}
+@media(max-width:700px){
+  body.assembly-mode #hud > #launch-console.tl-panel-movable:not([hidden]){
+    inset:152px 12px 12px!important;
+    width:auto!important;
+    max-width:none!important;
+    max-height:none!important;
+    padding:11px!important;
+  }
+}

@@ -8,6 +8,7 @@ import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260923-
 import { createImmersiveSession } from './render/immersive-session.js?v=20261011-xr-acceptance1';
 import { createMediaPreview } from './render/media-preview.js?v=20260922-cache2';
 import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
+import { createTumboCoinVisual, readTumboCoinState } from './render/tumbo-coin.js';
 // Hibernation vault console — mounts the vault glass-cube chip.
 // Guarded dynamic import: token-vault-ui.js is mid-flight (its imports don't
 // match token.js yet); a static import would fail the whole module graph and
@@ -4253,15 +4254,18 @@ function buildLogo(o){
 }
 
 function buildAssetTokenOrgan(o){
-  const g=o.inner;
-  const shell=taggedMesh(new THREE.CylinderGeometry(1.45,1.45,.42,96,1,false),mats.gold,o,'reserve shell');shell.rotation.x=Math.PI/2;g.add(shell);
-  const face=taggedMesh(new THREE.TorusGeometry(1.12,.12,12,96),mats.dark,o,'outer value ring');face.rotation.x=Math.PI/2;g.add(face);
-  const ledger=taggedMesh(new THREE.TorusGeometry(.78,.055,10,96),mats.cyan,o,'ledger ring');ledger.rotation.x=Math.PI/2;g.add(ledger);
-  const core=taggedMesh(new THREE.SphereGeometry(.37,48,32),mats.crystal,o,'value core');g.add(core);
-  const spokes=new THREE.Group();g.add(spokes);
-  for(let i=0;i<12;i++){const a=i/12*Math.PI*2;const b=new THREE.Mesh(new THREE.BoxGeometry(.04,.035,.62),i%3?mats.metal:mats.cyan);b.position.set(Math.cos(a)*.58,Math.sin(a)*.58,0);b.rotation.z=a;b.rotation.x=Math.PI/2;spokes.add(b)}
-  const pulses=[];for(let i=0;i<7;i++)pulses.push(makePulseParticle(g,1.12,mats.cyan,.55+i*.035));
-  o.update=(dt,t)=>{shell.rotation.z+=dt*.08;face.rotation.z+=dt*.26;ledger.rotation.z-=dt*.43;core.rotation.y+=dt*.32;core.scale.setScalar(1+Math.sin(t*2.6)*.06);spokes.rotation.z-=dt*.16;pulses.forEach((p,i)=>{const q=p.userData.pulse;q.phase+=dt*q.speed;const r=q.radius; p.position.set(Math.cos(q.phase)*r,Math.sin(q.phase)*r,Math.sin(q.phase*3)*.08)}); face.position.z=.22+o.awake*.18;ledger.position.z=.28+o.awake*.28;core.position.z=o.awake*.18;};
+  const coin=createTumboCoinVisual(THREE,{radius:1.45,thickness:.42,frontZ:.23});
+  o.inner.add(coin.root);
+  coin.body.userData.organ=o;
+  coin.body.userData.partName='TUMBO-SIM coin body';
+  let coinState=readTumboCoinState(),coinStateAt=-Infinity;
+  o.update=(dt,t)=>{
+    if(t-coinStateAt>.5){coinState=readTumboCoinState();coinStateAt=t;}
+    coin.update(coinState,{selected:o===selectedPulse,hovered:o===hovered});
+    coin.animate({time:t,reducedMotion});
+    coin.root.rotation.y=reducedMotion?0:Math.sin(t*.09)*.018;
+    coin.root.position.z=o.awake*.12;
+  };
 }
 
 function buildExchange(o){
@@ -4527,8 +4531,20 @@ const assetSupplyEl=document.getElementById('asset-supply');
 const assetAllocationCountEl=document.getElementById('asset-allocation-count');
 const distributionList=document.getElementById('distribution-list');
 const integerFormatter=new Intl.NumberFormat('en-US');
+const assetPolicyMaxEl=document.getElementById('asset-policy-max');
+const assetSupplyNoteEl=document.getElementById('asset-supply-note');
+const assetTokenStateEl=document.getElementById('asset-token-state');
 
 function formatAssetUnits(value){return Number.isSafeInteger(value)?integerFormatter.format(value):'—'}
+function formatExactPolicyUnits(value){return typeof value==='string'&&/^\d+$/.test(value)?value.replace(/\B(?=(\d{3})+(?!\d))/g,','):'—'}
+function readAssetRoutePolicy(){
+  const state=readTumboCoinState();
+  return Object.freeze({
+    ...state,
+    intendedMaximumPolicyLabel:`${formatExactPolicyUnits(state.intendedMaximum.wholeTumbo)} TUMBO`,
+    fluffPerTumboLabel:formatExactPolicyUnits(state.fluffPerTumbo),
+  });
+}
 
 function showDistributionReadout(target){
   if (portalCubeSubstrateActive || blockWorldPresentationActive) {
@@ -4537,10 +4553,12 @@ function showDistributionReadout(target){
   }
   const allocation=target?.allocation;
   if(!allocation)return;
+  const coinState=readAssetRoutePolicy();
   const percentage=allocation.percent??allocation.percentage??0;
+  const basisPoints=allocation.basisPoints??Math.round(Number(percentage)*100);
   eyebrowEl.textContent='TUMBO ASSET TOKEN · ALLOCATION PREVIEW';
   titleEl.textContent=allocation.label??allocation.recipientClass??'Aggregate cohort';
-  bodyEl.textContent=`${percentage}% of the fixed ${formatAssetUnits(distributionExplorer.getSnapshot().totalSupply)} ${distributionExplorer.getSnapshot().unit} supply · ${formatAssetUnits(allocation.tokenUnits)} units. ${allocation.purpose??'Fictional aggregate cohort in the local demo.'} No transfer occurs.`;
+  bodyEl.textContent=`${percentage}% allocation share · ${basisPoints} bp · current issued simulation supply ${coinState.currentIssuedLabel} · intended maximum ${coinState.intendedMaximumPolicyLabel} (policy metadata only). ${allocation.purpose??'Fictional aggregate cohort in the local demo.'} No mint or transfer occurs.`;
   metaEl.innerHTML='';
   ['simulation only','aggregate cohort','no transfer',`${percentage}%`].forEach((tag)=>{const s=document.createElement('span');s.className='pill';s.textContent=tag;metaEl.appendChild(s)});
   readout.classList.add('visible');
@@ -4608,11 +4626,15 @@ function showBlockReadout(block,action='select',contentFocus=null){
 
 function renderDistributionPanel(snapshot=distributionExplorer.getSnapshot()){
   if(!snapshot)return;
-  if(assetSupplyEl)assetSupplyEl.textContent=formatAssetUnits(snapshot.totalSupply);
+  const coinState=readAssetRoutePolicy();
+  if(assetSupplyEl)assetSupplyEl.textContent=coinState.currentIssuedLabel.replace(/\s+TUMBO-SIM$/,'');
+  if(assetPolicyMaxEl)assetPolicyMaxEl.textContent=formatExactPolicyUnits(coinState.intendedMaximum.wholeTumbo);
   if(assetAllocationCountEl)assetAllocationCountEl.textContent=String(snapshot.allocationCount??0);
+  if(assetTokenStateEl)assetTokenStateEl.textContent=`${coinState.currentIssuedLabel} issued · ${coinState.ledgerLabel}`;
+  if(assetSupplyNoteEl)assetSupplyNoteEl.textContent=`1 TUMBO-SIM = ${coinState.fluffPerTumboLabel} fluff · intended maximum ${coinState.intendedMaximumPolicyLabel} is policy metadata only; balances and ledger stay unchanged.`;
   if(assetLaunchStatus){
     const state=snapshot.launchState?.launched?'SIMULATED MAP ACTIVE':'SIMULATED MAP READY';
-    assetLaunchStatus.textContent=`${state} · NO WALLET · NO TRANSFER`;
+    assetLaunchStatus.textContent=`${state} · POLICY METADATA ONLY · NO WALLET · NO TRANSFER`;
   }
   if(assetLaunchButton)assetLaunchButton.textContent=snapshot.launchState?.launched?'Replay launch preview':'Preview launch map';
   if(!distributionList)return;
@@ -4625,7 +4647,7 @@ function renderDistributionPanel(snapshot=distributionExplorer.getSnapshot()){
     item.dataset.allocationId=allocation.id;
     item.innerHTML=`<span class="distribution-row-label"></span><span class="distribution-row-value"></span>`;
     item.querySelector('.distribution-row-label').textContent=allocation.label;
-    item.querySelector('.distribution-row-value').textContent=`${allocation.percent??allocation.percentage??0}% · ${formatAssetUnits(allocation.tokenUnits)}`;
+    item.querySelector('.distribution-row-value').textContent=`${allocation.percent??allocation.percentage??0}% · ${allocation.basisPoints??'—'} bp`;
     item.addEventListener('click',()=>{
       const next=distributionExplorer.selectAllocation(allocation.id);
       showDistributionReadout({id:allocation.id,allocation:next.selectedAllocation??allocation});

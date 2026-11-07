@@ -5,6 +5,7 @@ import {
   geometryFamilyForKind,
   normalizeUniversalEntity,
 } from "./universal-entity.js";
+import { createTumboCoinDetails, createTumboCoinGeometry, readTumboCoinState } from "../render/tumbo-coin.js";
 
 const FAMILY_SHAPE = Object.freeze({
   "contract-shell": "capsule",
@@ -139,9 +140,7 @@ export function createGeometryForFamily(family) {
     case "artifact-stone":
       return deterministicWarp(new THREE.IcosahedronGeometry(1.12, 3), .095);
     case "token-coin": {
-      const geometry = new THREE.CylinderGeometry(1.0, 1.0, .38, 48, 8, false);
-      geometry.rotateZ(Math.PI / 2);
-      return geometry;
+      return createTumboCoinGeometry(THREE, { radius: 1, thickness: .38 });
     }
     case "gateway-ring": {
       const geometry = new THREE.TorusGeometry(1.25, .16, 26, 110);
@@ -193,6 +192,20 @@ export class UniversalRenderedEntity {
     this.mesh.userData.universalEntityId = this.entity.id;
     this.mesh.userData.universalKind = this.entity.kind;
     this.mesh.userData.geometryFamily = this.geometryFamily;
+    this.coinDetails = null;
+    this.coinState = null;
+    this.coinStateAt = -Infinity;
+    if (this.geometryFamily === "token-coin") {
+      this.coinDetails = createTumboCoinDetails(THREE, {
+        radius: 1,
+        thickness: .38,
+        frontZ: .21,
+      });
+      this.mesh.add(this.coinDetails.root);
+      this.coinState = readTumboCoinState();
+      this.mesh.userData.tumboCoinState = this.coinState;
+      this.mesh.userData.tumboCoinAccessibility = this.coinState.accessibilityLabel;
+    }
 
     this.surface = new TopologySurfaceObject({
       id: this.entity.id,
@@ -245,7 +258,7 @@ export class UniversalRenderedEntity {
     this.surface.focus(regionId);
   }
 
-  updateFrame({ camera = null, viewportHeight = 900, time = 0, budget = 1 } = {}) {
+  updateFrame({ camera = null, viewportHeight = 900, time = 0, budget = 1, reducedMotion = false } = {}) {
     if (this.disposed) return;
     if (camera) this.surface.updateLod({
       camera,
@@ -253,6 +266,18 @@ export class UniversalRenderedEntity {
       focused: Boolean(this.surface.focusedRegionId),
       budget,
     });
+    if (this.coinDetails) {
+      if (time - this.coinStateAt > .5) {
+        this.coinState = readTumboCoinState();
+        this.coinStateAt = time;
+        this.mesh.userData.tumboCoinState = this.coinState;
+        this.mesh.userData.tumboCoinAccessibility = this.coinState.accessibilityLabel;
+      }
+      this.coinDetails.update(this.coinState, {
+        selected: Boolean(this.surface.focusedRegionId),
+      });
+      this.coinDetails.animate({ time, reducedMotion });
+    }
     this.surface.update(time);
   }
 
@@ -260,6 +285,11 @@ export class UniversalRenderedEntity {
     if (this.disposed) return;
     this.disposed = true;
     this.surface.dispose();
+    if (this.coinDetails) {
+      this.coinDetails.geometries.forEach((geometry) => geometry.dispose());
+      this.coinDetails.materials.forEach((material) => material.dispose());
+      this.coinDetails.root.removeFromParent();
+    }
     this.mesh.geometry.dispose();
     this.mesh.removeFromParent();
   }
@@ -318,9 +348,9 @@ export class UniversalObjectRenderer {
     return true;
   }
 
-  tick({ camera = null, viewportHeight = 900, time = 0, budget = 1 } = {}) {
+  tick({ camera = null, viewportHeight = 900, time = 0, budget = 1, reducedMotion = false } = {}) {
     for (const rendered of this.objects.values()) {
-      rendered.updateFrame({ camera, viewportHeight, time, budget });
+      rendered.updateFrame({ camera, viewportHeight, time, budget, reducedMotion });
     }
   }
 

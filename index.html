@@ -143,6 +143,19 @@
     #reality-lens button:hover{color:#d8fbff;background:rgba(104,225,255,.09)}
     #reality-lens button[aria-pressed="true"]{border-color:rgba(139,241,255,.35);background:rgba(104,225,255,.13);color:#e4fcff;box-shadow:0 0 16px rgba(92,222,255,.1)}
     #asset-launch{position:absolute;right:20px;left:auto;top:280px;z-index:22;width:min(330px,calc(100vw - 40px));max-height:calc(100vh - 300px);padding:14px 15px 12px;border:1px solid rgba(188,156,255,.2);border-radius:18px;background:linear-gradient(160deg,rgba(13,10,25,.9),rgba(3,8,13,.82));box-shadow:0 16px 52px rgba(0,0,0,.34),inset 0 0 28px rgba(176,134,255,.055);backdrop-filter:blur(14px);pointer-events:auto;overflow:hidden}
+    #asset-launch .asset-launch-identity{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:7px 8px;border:1px solid rgba(232,201,121,.3);border-radius:12px;background:linear-gradient(135deg,rgba(232,201,121,.12),rgba(7,23,35,.52));box-shadow:inset 0 1px 0 rgba(255,239,183,.12)}
+    #asset-launch .asset-launch-emblem{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border:2px solid #e8c979;border-radius:50%;background:radial-gradient(circle at 34% 28%,#fff1bb 0,#c99b47 35%,#4b2d14 100%);box-shadow:inset 0 0 0 3px rgba(57,34,14,.72),0 0 18px rgba(232,201,121,.2);color:#173c53;font:800 22px/1 system-ui,sans-serif;text-shadow:0 1px 0 rgba(255,255,255,.55)}
+    #asset-launch .asset-launch-identity-copy{display:grid;min-width:0;gap:2px}
+    #asset-launch .asset-launch-identity-copy strong{color:#f2e2b6;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+    #asset-launch .asset-launch-identity-copy small{color:#b7c5bf;font-size:8px;line-height:1.35;letter-spacing:.04em;overflow-wrap:anywhere}
+    #asset-launch .asset-launch-strap{margin:0;color:#b8b0c9;font-size:10px;line-height:1.35}
+    #asset-launch .asset-launch-details{margin-top:8px;border-top:1px solid rgba(232,201,121,.22);padding-top:7px}
+    #asset-launch .asset-launch-details summary{display:flex;align-items:center;min-height:40px;padding:7px 8px;border:1px solid rgba(232,201,121,.28);border-radius:9px;background:rgba(232,201,121,.08);color:#f0dfb2;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;list-style:none}
+    #asset-launch .asset-launch-details summary::-webkit-details-marker{display:none}
+    #asset-launch .asset-launch-details summary::before{content:'+';margin-right:7px;color:#e8c979;font-size:16px;line-height:1}
+    #asset-launch .asset-launch-details[open] summary::before{content:'−'}
+    #asset-launch .asset-launch-details-body{display:grid;gap:8px;padding-top:8px}
+    #asset-launch .asset-launch-details-body p{font-size:10px}
     /* Cube-first mode keeps the field readable instead of stacking the old
        rounded selector rails and launch map over the interaction surface.
        The feature directory remains available through OPEN FEATURES / F. */
@@ -161,14 +174,15 @@
     #asset-launch .eyebrow{font-size:9px;letter-spacing:.18em;color:#bba6ef;text-transform:uppercase}
     #asset-launch h2{margin:5px 0 4px;font-size:17px;letter-spacing:.02em;font-weight:650}
     #asset-launch p{margin:0;color:#a9a0bc;font-size:11px;line-height:1.4}
-    #asset-launch .launch-metrics{display:flex;gap:8px;margin:11px 0 9px}
+    #asset-launch .launch-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:11px 0 9px}
     #asset-launch .metric{flex:1;padding:7px 8px;border:1px solid rgba(190,159,255,.12);border-radius:10px;background:rgba(151,114,235,.05)}
     #asset-launch .metric b{display:block;color:#e3d9ff;font-size:13px;font-weight:650}
-    #asset-launch .metric span{display:block;margin-top:2px;color:#8e83aa;font-size:8px;letter-spacing:.09em;text-transform:uppercase}
+    #asset-launch .metric span{display:block;margin-top:2px;color:#8e83aa;font-size:8px;line-height:1.25;letter-spacing:.09em;text-transform:uppercase}
+    #asset-launch .asset-supply-note{margin:0 0 9px;padding:6px 7px;border-left:2px solid rgba(141,225,193,.52);border-radius:0 7px 7px 0;background:rgba(68,139,112,.08);color:#a8ddc9;font-size:8px;line-height:1.35;letter-spacing:.03em;overflow-wrap:anywhere}
     #asset-launch-button{appearance:none;width:100%;border:1px solid rgba(202,176,255,.27);border-radius:10px;padding:8px 10px;background:rgba(155,119,238,.13);color:#eadfff;font-size:10px;letter-spacing:.09em;text-transform:uppercase;cursor:pointer;transition:.2s ease}
     #asset-launch-button:hover{background:rgba(174,138,255,.23);border-color:rgba(221,202,255,.55);transform:translateY(-1px)}
     #asset-launch-status{margin-top:8px;color:#88d9c1;font-size:8px;letter-spacing:.1em;text-transform:uppercase}
-    #distribution-list{display:grid;gap:4px;margin-top:10px;max-height:22vh;overflow:auto;padding-right:2px}
+    #distribution-list{display:grid;gap:4px;margin-top:10px;max-height:20vh;overflow:auto;padding-right:2px;scrollbar-width:thin;scrollbar-color:rgba(188,156,255,.6) rgba(7,15,22,.6)}
     .distribution-row{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;border:1px solid rgba(145,232,255,.08);border-radius:8px;padding:6px 7px;background:rgba(7,15,22,.48);color:#9ab6c0;text-align:left;font-size:9px;cursor:pointer}
     .distribution-row:hover,.distribution-row[aria-pressed="true"]{border-color:rgba(173,145,255,.35);background:rgba(121,93,203,.15);color:#ecf5ff}
     .distribution-row-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1923,7 +1937,7 @@
     .intent-timeline-entry-summary{grid-area:summary;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9dbbc3;font-size:8px;line-height:1.25}
     .intent-timeline-empty{padding:13px;color:#91b4bf;font-size:9px;line-height:1.4}
     #intent-timeline-boundary{padding:8px 9px;border-left:2px solid rgba(255,194,139,.62);border-radius:0 8px 8px 0;background:rgba(121,75,40,.13);color:#dbc6af;font-size:9px;line-height:1.4}
-    @media(max-width:700px){#readout{top:auto;bottom:104px;right:12px;left:12px;width:auto;max-height:28vh;overflow:auto}#selector{left:12px;bottom:45px;max-width:calc(100vw - 24px)}#selector button{padding:6px 8px;font-size:9px}#hint{bottom:10px;font-size:9px}#legend{display:none}#brand{left:14px;top:13px}#runtime-status[data-runtime-state="ready"]{left:auto;right:12px;top:8px;width:auto;max-width:calc(100vw - 156px);gap:5px;padding:5px 7px;transform:none}#runtime-status[data-runtime-state="ready"] #runtime-status-mark{width:6px;height:6px;box-shadow:0 0 0 3px rgba(114,228,181,.1),0 0 12px rgba(114,228,181,.5)}#runtime-status[data-runtime-state="ready"] #runtime-status-message{display:none}#runtime-status[data-runtime-state="ready"] #runtime-status-title{font-size:7px;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#feature-toggle{left:12px;top:50px;padding:7px 9px;font-size:9px}#feature-shell{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 155px);padding:11px}#feature-nav{max-height:25vh;grid-template-columns:repeat(2,minmax(0,1fr))}.feature-button{padding:7px}.feature-button-title{font-size:9px}.feature-button-meta{font-size:7px}#feature-detail{padding:10px}.feature-records{max-height:13vh}#reality-lens{left:auto;right:12px;top:50px;bottom:auto;display:grid;width:min(230px,calc(100vw - 170px));max-width:calc(100vw - 170px);grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;padding:5px;overflow:hidden}#reality-lens .lens-label{display:none}#reality-lens button{width:100%;min-width:0;padding:4px 2px;font-size:7px;white-space:nowrap}#asset-launch{right:12px;left:auto;top:auto;bottom:92px;width:min(300px,calc(100vw - 24px));max-height:24vh;padding:11px 12px 10px}#feature-shell.open~#asset-launch{display:none}#asset-launch p{font-size:10px}#asset-launch .launch-metrics{margin:8px 0 7px}#asset-launch .metric{padding:5px 6px}#distribution-list{max-height:17vh}#block-world-quick-actions{left:12px;right:12px;bottom:10px;width:auto;padding:8px 9px;gap:5px}#block-world-quick-actions-toolbar{gap:4px}#block-world-quick-actions-toolbar button{font-size:7px;padding:6px 3px}#block-world-quick-view-toolbar{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}#block-world-quick-view-toolbar button{font-size:7px;padding:6px 3px}#block-world-quick-actions-boundary,#block-world-quick-view-boundary{font-size:6px}}
+    @media(max-width:700px){#readout{top:auto;bottom:104px;right:12px;left:12px;width:auto;max-height:28vh;overflow:auto}#selector{left:12px;bottom:45px;max-width:calc(100vw - 24px)}#selector button{padding:6px 8px;font-size:9px}#hint{bottom:10px;font-size:9px}#legend{display:none}#brand{left:14px;top:13px}#runtime-status[data-runtime-state="ready"]{left:auto;right:12px;top:8px;width:auto;max-width:calc(100vw - 156px);gap:5px;padding:5px 7px;transform:none}#runtime-status[data-runtime-state="ready"] #runtime-status-mark{width:6px;height:6px;box-shadow:0 0 0 3px rgba(114,228,181,.1),0 0 12px rgba(114,228,181,.5)}#runtime-status[data-runtime-state="ready"] #runtime-status-message{display:none}#runtime-status[data-runtime-state="ready"] #runtime-status-title{font-size:7px;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#feature-toggle{left:12px;top:50px;padding:7px 9px;font-size:9px}#feature-shell{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 155px);padding:11px}#feature-nav{max-height:25vh;grid-template-columns:repeat(2,minmax(0,1fr))}.feature-button{padding:7px}.feature-button-title{font-size:9px}.feature-button-meta{font-size:7px}#feature-detail{padding:10px}.feature-records{max-height:13vh}#reality-lens{left:auto;right:12px;top:50px;bottom:auto;display:grid;width:min(230px,calc(100vw - 170px));max-width:calc(100vw - 170px);grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;padding:5px;overflow:hidden}#reality-lens .lens-label{display:none}#reality-lens button{width:100%;min-width:0;padding:4px 2px;font-size:7px;white-space:nowrap}#asset-launch{right:12px;left:auto;top:auto;bottom:92px;width:min(300px,calc(100vw - 24px));max-height:24vh;padding:11px 12px 10px}#feature-shell.open~#asset-launch{display:none}#asset-launch p{font-size:10px}#asset-launch .launch-metrics{margin:8px 0 7px}#asset-launch .metric{padding:5px 6px}#distribution-list{max-height:17vh}#block-world-quick-actions{left:12px;right:12px;bottom:10px;width:auto;padding:8px 9px;gap:5px}#block-world-quick-actions-toolbar{gap:4px}#block-world-quick-view-toolbar{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}#block-world-quick-view-toolbar button{font-size:7px;padding:6px 3px}#block-world-quick-actions-boundary,#block-world-quick-view-boundary{font-size:6px}}
     /* A focused Contracts/Sports console must leave a touch-sized lane for
        the shared cube rail on phones. The rail remains the same Block World
        state owner; z-index only makes its existing controls reachable while
@@ -2285,17 +2299,32 @@
       <div id="readout-meta" class="meta"></div>
     </div>
     <aside id="asset-launch" aria-labelledby="asset-launch-title">
+      <div class="asset-launch-identity" aria-label="TUMBO Asset Token simulation display">
+        <span class="asset-launch-emblem" aria-hidden="true">T</span>
+        <div class="asset-launch-identity-copy">
+          <strong>TUMBO Asset Token</strong>
+          <small id="asset-token-state">TUMBO-SIM display unit · policy metadata only</small>
+        </div>
+      </div>
       <div class="eyebrow">Social experiment · space explorer</div>
       <h2 id="asset-launch-title">TUMBO Asset Token</h2>
-      <p>Explore a fixed fictional allocation map. This preview has no value, wallet, claim, or external transfer.</p>
+      <p class="asset-launch-strap">Fictional allocation map · local simulation only · no wallet, claim, mint, or external transfer.</p>
       <div class="launch-metrics" aria-label="TUMBO asset-token summary">
-        <div class="metric"><b id="asset-supply">—</b><span>fixed TUMBO-SIM units</span></div>
+        <div class="metric"><b id="asset-supply">—</b><span>issued simulation</span></div>
+        <div class="metric"><b id="asset-policy-max">—</b><span>intended max · policy</span></div>
         <div class="metric"><b id="asset-allocation-count">—</b><span>aggregate pools</span></div>
       </div>
-      <button id="asset-launch-button" type="button">Preview launch map</button>
-      <button id="launch-console-open" type="button" aria-controls="launch-console" aria-expanded="false">Open full launch registry</button>
-      <div id="asset-launch-status" role="status" aria-live="polite">SIMULATED MAP READY · NO WALLET · NO TRANSFER</div>
-      <div id="distribution-list" role="group" aria-label="Simulated TUMBO allocation pools"></div>
+      <p id="asset-supply-note" class="asset-supply-note">Exact unit and supply policy load from the local simulation.</p>
+      <details id="asset-launch-details" class="asset-launch-details">
+        <summary>Inspect allocation map and controls</summary>
+        <div class="asset-launch-details-body">
+          <p>Rows are aggregate fictional cohorts in the local launch registry. Replay stays in this browser; no issuance or transfer occurs.</p>
+          <button id="asset-launch-button" type="button">Preview launch map</button>
+          <button id="launch-console-open" type="button" aria-controls="launch-console" aria-expanded="false">Open full launch registry</button>
+          <div id="asset-launch-status" role="status" aria-live="polite">SIMULATED MAP READY · NO WALLET · NO TRANSFER</div>
+          <div id="distribution-list" role="group" aria-label="Simulated TUMBO allocation pools"></div>
+        </div>
+      </details>
     </aside>
     <aside id="launch-console" hidden aria-hidden="true" aria-labelledby="launch-console-title">
       <div id="launch-console-head">
@@ -2330,10 +2359,10 @@
         </div>
       </section>
       <div id="launch-console-summary" aria-label="Launch distribution reconciliation summary">
-        <div class="launch-console-metric"><b id="launch-console-supply">—</b><span>fixed supply</span></div>
+        <div class="launch-console-metric"><b id="launch-console-supply">—</b><span>issued simulation · policy</span></div>
         <div class="launch-console-metric"><b id="launch-console-row-count">—</b><span>registry rows</span></div>
         <div class="launch-console-metric"><b id="launch-console-basis">—</b><span>basis points</span></div>
-        <div class="launch-console-metric"><b id="launch-console-units">—</b><span>row units</span></div>
+        <div class="launch-console-metric"><b id="launch-console-units">—</b><span>fictional registry units</span></div>
       </div>
       <div id="launch-console-coverage-lens" role="group" aria-label="Launch registry coverage lens">
         <span id="launch-console-coverage-lens-label">Coverage</span>
@@ -2345,7 +2374,7 @@
         <button type="button" data-launch-coverage-lens="grants" aria-pressed="false">GRANTS</button>
         <button type="button" data-launch-coverage-lens="reserves" aria-pressed="false">RESERVES</button>
       </div>
-      <div id="launch-console-coverage-lens-status" role="status" aria-live="polite">COVERAGE · ALL · 18/18 ROWS · 10,000 BP · 1,000,000,000 TUMBO-SIM · CANONICAL TOTALS UNCHANGED</div>
+      <div id="launch-console-coverage-lens-status" role="status" aria-live="polite">COVERAGE · ALL · 18/18 ROWS · 10,000 BP · registry rehearsal · issued simulation/policy shown on Asset Token surface · CANONICAL TOTALS UNCHANGED</div>
       <div id="launch-console-event" aria-label="Deterministic launch event">—</div>
       <div id="launch-console-reconciliation" role="status" aria-live="polite">RECONCILIATION PENDING</div>
       <div id="launch-console-rehearsal-status" role="status" aria-live="polite" data-status="pending">FULL REGISTRY REHEARSAL NOT RUN · SELECT THE ACTION TO CHECK EVERY ROW</div>

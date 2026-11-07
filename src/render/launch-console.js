@@ -8,6 +8,8 @@
  * wallets, claims, payment instructions, or mutable domain state.
  */
 
+import { formatExactInteger, getTumboSupplyPolicy } from "../domains/token-supply-policy.js";
+
 export const LAUNCH_CONSOLE_SOURCE = "tumbo-distribution-registry";
 export const DEFAULT_LAUNCH_EVENT_ID = "distribution-event:tumbo-demo-launch";
 export const DEFAULT_LAUNCH_ID = "distribution:tumbo-demo-launch";
@@ -15,12 +17,15 @@ export const LAUNCH_REHEARSAL_ACTION_ID = "distribution-action:tumbo-demo-launch
 export const POPULATION_CONTEXT_RENDER_SOURCE = "public-population-context-world-bank";
 export const LAUNCH_COHORT_ROUTE_PARAM = "cohort";
 export const LAUNCH_COHORT_ROUTE_PANEL = "launch-distribution";
+const TUMBO_POLICY = getTumboSupplyPolicy();
+const TUMBO_CURRENT_ISSUED_LABEL = `${formatExactInteger(BigInt(TUMBO_POLICY.currentIssued.wholeTumbo))} ${TUMBO_POLICY.asset}`;
+const TUMBO_INTENDED_MAXIMUM_LABEL = `${formatExactInteger(BigInt(TUMBO_POLICY.intendedMaximum.wholeTumbo))} TUMBO`;
 export function validateLaunchCohortCompareRoute({ compare, projection } = {}) { const ids=typeof compare==='string'?compare.split(','):[]; if(ids.length!==2||ids[0]===ids[1]||ids.some(id=>!/^[a-z0-9:_-]{1,160}$/i.test(id))) return null; const rows=summarizeLaunchDistribution(projection).rows; const found=ids.map(id=>rows.find(row=>row.id===id)); return found.some(row=>!row)?null:Object.freeze({ids:Object.freeze(ids),rows:Object.freeze(found)}); }
 const POPULATION_CONTEXT_MAX_ROWS_RENDER = 18;
 
 // Coverage lenses are presentation filters over the existing canonical
 // registry rows. They never create a second schedule or alter the fixed
-// 10,000-basis-point / 1,000,000,000-unit reconciliation.
+// 10,000-basis-point / registry-unit reconciliation.
 export const LAUNCH_COVERAGE_LENSES = Object.freeze([
   Object.freeze({ id: "all", label: "ALL", description: "all 18 aggregate registry rows", recipientClasses: Object.freeze([]) }),
   Object.freeze({ id: "social", label: "SOCIAL", description: "public social-experiment cohorts", recipientClasses: Object.freeze(["public-social-experiment"]) }),
@@ -501,9 +506,31 @@ export function createLaunchConsole({
       button.classList?.toggle?.("active", active);
     });
     if (coverageLensStatusEl) {
-      coverageLensStatusEl.textContent = `COVERAGE · ${visible.label} · ${visible.rowCount}/${visible.canonicalRowCount} ROWS · ${formatInteger(visible.basisPoints)} BP · ${formatInteger(visible.tokenUnits)} ${summary.unit} · CANONICAL TOTALS UNCHANGED`;
+      coverageLensStatusEl.textContent = `COVERAGE · ${visible.label} · ${visible.rowCount}/${visible.canonicalRowCount} ROWS · ${formatInteger(visible.basisPoints)} BP · ${formatInteger(visible.tokenUnits)} registry ${summary.unit} · ISSUED ${TUMBO_CURRENT_ISSUED_LABEL} · MAX ${TUMBO_INTENDED_MAXIMUM_LABEL} · CANONICAL TOTALS UNCHANGED`;
       coverageLensStatusEl.dataset.lens = visible.lensId;
     }
+  }
+
+  function releaseAssemblyCompactMode() {
+    const body = documentRoot.body;
+    if (!opened || !body?.classList?.contains?.("assembly-mode")) return;
+    // centered-surfaces deliberately chips ordinary HUD panels. This console
+    // is an explicit full-registry route, so its assembly-mode viewport owns
+    // the expanded layout instead of the manager's compact grip state.
+    panel.removeAttribute?.("data-compact");
+    panel.classList?.remove?.("panel-space-appearing");
+    globalThis.requestAnimationFrame?.(() => {
+      if (opened && body.classList.contains("assembly-mode")) {
+        panel.removeAttribute?.("data-compact");
+        panel.classList?.remove?.("panel-space-appearing");
+      }
+    });
+  }
+
+  function syncAssemblyRouteClass() {
+    const body = documentRoot.body;
+    if (!body?.classList?.toggle) return;
+    body.classList.toggle("asset-registry-open", opened && body.classList.contains("assembly-mode"));
   }
 
   function setOpen(next, method = "api") {
@@ -515,6 +542,8 @@ export function createLaunchConsole({
       openButton.setAttribute("aria-expanded", String(opened));
       openButton.textContent = opened ? "HIDE LAUNCH CONSOLE" : "OPEN LAUNCH CONSOLE";
     }
+    syncAssemblyRouteClass();
+    releaseAssemblyCompactMode();
     if (opened && method === "open") replayButton.focus({ preventScroll: true });
   }
 
@@ -685,10 +714,10 @@ export function createLaunchConsole({
     summary = summarizeLaunchDistribution(currentProjection);
     const visible = visibleCoverage();
     if (!routeError && !visible.rows.some((row) => row.id === selectedId)) selectedId = visible.rows[0]?.id ?? null;
-    if (supplyEl) supplyEl.textContent = `${formatInteger(summary.totalSupply)} ${summary.unit}`;
+    if (supplyEl) supplyEl.textContent = `${TUMBO_CURRENT_ISSUED_LABEL} issued`;
     if (rowCountEl) rowCountEl.textContent = formatInteger(summary.rowCount);
     if (basisEl) basisEl.textContent = `${formatInteger(summary.totalBasisPoints)} / ${formatInteger(summary.expectedBasisPoints)} bp`;
-    if (unitsEl) unitsEl.textContent = `${formatInteger(summary.totalUnits)} / ${formatInteger(summary.expectedUnits)}`;
+    if (unitsEl) unitsEl.textContent = `${formatInteger(summary.totalUnits)} registry units`;
     statusEl.textContent = routeError
       ? `ASSET-TOKEN COHORT ROUTE REJECTED · ${routeError} · NO ROW FABRICATED`
       : lastRehearsal
@@ -709,12 +738,12 @@ export function createLaunchConsole({
       && summary.totalUnits === summary.expectedUnits
       && summary.totalUnits === summary.totalSupply;
     reconciliationEl.textContent = reconciled
-      ? "RECONCILIATION VERIFIED · 10,000 BP · 1,000,000,000 UNITS"
+      ? "FICTIONAL REGISTRY VERIFIED · 10,000 BP · POLICY SUPPLY SEPARATE"
       : "RECONCILIATION REQUIRES REVIEW";
     reconciliationEl.dataset.status = reconciled ? "verified" : "review";
     if (rehearsalStatusEl) {
       rehearsalStatusEl.textContent = lastRehearsal
-        ? `FULL REGISTRY REHEARSAL · ${lastRehearsal.completeClassCount}/${lastRehearsal.allocationClassCount} CLASSES · ${lastRehearsal.registryEntryCount}/${summary.rowCount} ROWS · ${formatInteger(lastRehearsal.totalBasisPoints)} BP · ${formatInteger(lastRehearsal.totalUnits)} ${summary.unit} · ${lastRehearsal.registryComplete ? "VERIFIED" : "REVIEW"}`
+        ? `FULL REGISTRY REHEARSAL · ${lastRehearsal.completeClassCount}/${lastRehearsal.allocationClassCount} CLASSES · ${lastRehearsal.registryEntryCount}/${summary.rowCount} ROWS · ${formatInteger(lastRehearsal.totalBasisPoints)} BP · ${formatInteger(lastRehearsal.totalUnits)} registry ${summary.unit} · ${lastRehearsal.registryComplete ? "VERIFIED" : "REVIEW"}`
         : simulationToggle && !simulationDistributionEnabled
           ? "LOCAL REHEARSAL DISABLED · ENABLE LOCAL TUMBO-SIM REHEARSAL FIRST · NO TRANSFER"
           : "FULL REGISTRY REHEARSAL NOT RUN · SELECT THE ACTION TO CHECK EVERY ROW";
