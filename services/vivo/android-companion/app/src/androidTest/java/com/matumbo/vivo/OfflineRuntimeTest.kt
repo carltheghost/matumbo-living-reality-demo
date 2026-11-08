@@ -4,6 +4,11 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.webkit.WebView
+import android.view.MotionEvent
+import android.os.SystemClock
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import java.io.FileOutputStream
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -43,6 +48,27 @@ class OfflineRuntimeTest {
         val encoded = js(scenario, "JSON.stringify(window.__testSnapshot)")
         return JSONObject(org.json.JSONTokener(encoded).nextValue() as String)
     }
+    private fun capture(name: String) {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val directory = File(context.getExternalFilesDir(null), "android-evidence").apply { mkdirs() }
+        val image = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        if (image != null) FileOutputStream(File(directory, "$name.png")).use { image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
+    private fun tapElement(s: ActivityScenario<MainActivity>, id: String) {
+        val encoded = js(s, "JSON.stringify((()=>{const r=document.getElementById('$id').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:innerWidth}})())")
+        val point = JSONObject(org.json.JSONTokener(encoded).nextValue() as String)
+        var x=0f; var y=0f
+        s.onActivity { a ->
+            val view=a.findViewById<WebView>(R.id.vivo_web);val position=IntArray(2);view.getLocationOnScreen(position)
+            val scale=view.width/point.getDouble("width")
+            x=(position[0]+point.getDouble("x")*scale).toFloat();y=(position[1]+point.getDouble("y")*scale).toFloat()
+        }
+        val now=SystemClock.uptimeMillis();val automation=InstrumentationRegistry.getInstrumentation().uiAutomation
+        for ((action,time) in listOf(MotionEvent.ACTION_DOWN to now,MotionEvent.ACTION_UP to now+80)) {
+            val event=MotionEvent.obtain(now,time,action,x,y,0)
+            assertTrue("Android touch injection",automation.injectInputEvent(event,true));event.recycle()
+        }
+    }
     @Test fun offlineColdStartLoadsOriginalRuntimeWithoutFilePicker() {
         ActivityScenario.launch(MainActivity::class.java).use { s ->
             enter(s)
@@ -50,6 +76,7 @@ class OfflineRuntimeTest {
             assertEquals("true", js(s, "location.pathname.endsWith('/phone/field-lab.html')"))
             assertEquals("true", js(s, "!!window.VivaPhoneEngine.active && !document.body.innerText.includes('Choose original Field Lab')"))
             assertEquals("saved", snapshot(s).getJSONObject("persistence").getString("state"))
+            capture("offline-world")
         }
     }
     @Test fun originalWorldAndEyeSurviveActivityRecreationWithEleventhAxisEdit() {
@@ -74,6 +101,24 @@ class OfflineRuntimeTest {
             assertEquals(eye, after.getString("currentEyeId"))
             assertEquals(before.getString("branchId"), after.getString("branchId"))
             assertEquals(old + .25, after.getJSONObject("snapshot").getJSONObject("spaces").getJSONObject("root").getJSONObject("entities").getJSONObject("relic").getJSONArray("q").getDouble(10), 1e-8)
+        }
+    }
+    @Test fun nativeAndroidTapRunsExistingObjectMovementControl() {
+        ActivityScenario.launch(MainActivity::class.java).use { s ->
+            enter(s)
+            val before=snapshot(s)
+            val old=before.getJSONObject("snapshot").getJSONObject("spaces").getJSONObject("root").getJSONObject("entities").getJSONObject("relic").getJSONArray("q").getDouble(3)
+            js(s, "window.VivaPhoneEngine.select('relic');document.querySelector('[data-panel=move]').click();document.getElementById('moveAxis').value='3';true")
+            waitFor(s,"Movement control visible","document.getElementById('axisPlus').getBoundingClientRect().width>0")
+            tapElement(s,"axisPlus")
+            var changed=false
+            repeat(20) {
+                val q=snapshot(s).getJSONObject("snapshot").getJSONObject("spaces").getJSONObject("root").getJSONObject("entities").getJSONObject("relic").getJSONArray("q").getDouble(3)
+                if(q>old+.01)changed=true
+                if(!changed)Thread.sleep(100)
+            }
+            assertTrue("Native touch produced an accepted fourth-axis object edit",changed)
+            capture("native-touch-movement")
         }
     }
     @Test fun noCameraPermissionOrNativeGrantsAreAddedOnStartup() {

@@ -11,11 +11,11 @@ permissions:
   contents: read
 concurrency:
   group: vivo-android-resilience-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   android-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Preserve public source used for this build
@@ -82,17 +82,11 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            adb shell svc wifi disable
-            adb shell svc data disable
-            adb shell dumpsys webviewupdate > android-evidence/webview-provider.txt
-            cd services/vivo/android-companion
-            gradle --no-daemon connectedDebugAndroidTest
+          script: bash scripts/vivo/android_emulator_checks.sh
       - name: Preserve emulator diagnostics
         if: always()
         shell: bash
         run: |
-          adb logcat -d -t 3000 > android-evidence/emulator-logcat.txt 2>&1 || true
           find services/vivo/android-companion/app/build -name '*.xml' -path '*results*' -print > android-evidence/result-files.txt || true
       - uses: actions/upload-artifact@v4
         if: always()
