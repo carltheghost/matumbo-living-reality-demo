@@ -15,7 +15,7 @@ concurrency:
 jobs:
   android-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Preserve public source used for this build
@@ -48,20 +48,52 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Bundle safety checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/vivo -p 'android_bundle_test.py' -v 2>&1 | tee android-evidence/bundle-tests.log
       - name: Build and test the existing Android companion
         shell: bash
         working-directory: services/vivo/android-companion
         run: |
           set -euo pipefail
-          gradle --no-daemon testDebugUnitTest assembleDebug | tee ../../../android-evidence/gradle.log
+          gradle --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest | tee ../../../android-evidence/gradle.log
       - name: Record APK checksum and certificate
         shell: bash
         run: |
           set -euo pipefail
           APK=services/vivo/android-companion/app/build/outputs/apk/debug/app-debug.apk
-          cp "$APK" android-evidence/maTumbo-Vivo-debug.apk
+          cp "$APK" android-evidence/maTumbo-Vivo-30-preview.apk
           sha256sum "$APK" > android-evidence/apk-sha256.txt
           "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > android-evidence/apk-certificate.txt
+          cp services/vivo/android-companion/app/build/generated/vivo/assets/vivo/android-bundle.json android-evidence/
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Actual Android offline runtime and retained-state checks
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb shell svc wifi disable
+            adb shell svc data disable
+            adb shell dumpsys webviewupdate > android-evidence/webview-provider.txt
+            cd services/vivo/android-companion
+            gradle --no-daemon connectedDebugAndroidTest
+      - name: Preserve emulator diagnostics
+        if: always()
+        shell: bash
+        run: |
+          adb logcat -d -t 3000 > android-evidence/emulator-logcat.txt 2>&1 || true
+          find services/vivo/android-companion/app/build -name '*.xml' -path '*results*' -print > android-evidence/result-files.txt || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -69,4 +101,6 @@ jobs:
           path: |
             android-evidence/
             services/vivo/android-companion/app/build/test-results/
+            services/vivo/android-companion/app/build/outputs/androidTest-results/
+            services/vivo/android-companion/app/build/reports/androidTests/
           retention-days: 7
