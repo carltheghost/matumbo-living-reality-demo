@@ -64,7 +64,7 @@ class HostTests(unittest.TestCase):
             'scope':'openid profile email resource.invoke chatgpt.tokens.use.direct','id_token':jwt.encode({'iss':ISSUER,'aud':client,'sub':'actual-test-user',
             'nonce':p['nonce'],'iat':now,'exp':now+600},KEY,algorithm='RS256',headers={'kid':'test-only'})}
         callback='/auth/callback?'+urlencode({'state':p['state'],'code':code,'client_id':client})
-        status,h,_=self.req('GET',callback);self.assertEqual(status,303);self.assertEqual(h['Location'],PHONE+'#vivo-ai-accounts')
+        status,h,_=self.req('GET',callback);self.assertEqual(status,303);self.assertEqual(h['Location'],PHONE+'?vivo-signin=complete#vivo-ai-accounts')
         status,h,body=self.req('GET',API);self.assertEqual(status,200);self.assertNotIn(b'secret-',body)
         row=json.loads(body)['connections'][0];self.assertEqual(row['status'],'authenticated')
         status,h,_=self.req('POST',API+'/verify',{'connectionId':row['id'],'model':'test-model','consent':False});self.assertEqual(status,400)

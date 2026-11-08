@@ -65,7 +65,7 @@ class Handler(BaseHTTPRequestHandler):
                 values=parse_qs(parts.query,keep_blank_values=True)
                 if any(len(v)!=1 for v in values.values()):raise AccountError('DUPLICATE_CALLBACK_PARAMETER')
                 self.server.manager.complete({k:v[0] for k,v in values.items()})
-                return self.send(303,b'',headers={'Location':PHONE+'#vivo-ai-accounts'})
+                return self.send(303,b'',headers={'Location':PHONE+'?vivo-signin=complete#vivo-ai-accounts'})
             except AccountError as e:
                 return self.send(400,('Sign-in was not accepted: '+e.code+'. Return to Vivo and start a fresh attempt.').encode(),'text/plain; charset=utf-8')
             except Exception:return self.fail('SIGN_IN_FAILED')

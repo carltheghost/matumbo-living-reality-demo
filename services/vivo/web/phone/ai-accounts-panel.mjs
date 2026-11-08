@@ -37,6 +37,7 @@ export class MemoryStore {
   save(scope,value){return this.access('readwrite',JSON.stringify(scope),value);}
 }
 export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis),store=new MemoryStore(),
+  navigate=url=>globalThis.location.assign(url),resumeSignIn=false,
   getScope=()=>{
     const e=globalThis.VivaPhoneEngine?.publishedSnapshot?.();
     if(!globalThis.VivaPhoneEngine?.active||!e?.snapshot?.worldId)throw Error('Enter the existing local Vivo world first.');
@@ -127,8 +128,11 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     const url=new URL(result.authorizationUrl);
     if(url.origin!=='https://auth.openai.com'||url.pathname!=='/api/accounts/authorize'||url.username||url.password)throw Error('Unexpected sign-in destination.');
     loginArea.replaceChildren();const link=node('a','Continue with ChatGPT');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';
-    loginArea.append(link,node('p','Sign in and approve on OpenAI’s page. This attempt expires in five minutes. Return here and refresh afterward.'));
-    state.textContent='Awaiting your provider sign-in. No account is connected yet.';
+    loginArea.append(link,node('p','Continue on OpenAI’s page. Vivo will reload your connection when you return. This attempt expires in five minutes.'));
+    state.textContent='Opening ChatGPT sign-in. No account is connected yet.';
+    // Navigate only after the explicit sign-in action and destination validation.
+    // Keep the validated link as a fallback if this browser blocks navigation.
+    try{navigate(url.href);}catch{state.textContent='Use Continue with ChatGPT to finish signing in.';}
   };
   const render=async()=>{
     if(disposed)return;
@@ -179,6 +183,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     out.textContent=JSON.stringify(memory.query({scope,start:Number(start.value),path:path.value.split(',').map(Number)}),null,2);
   })),out);
   root.prepend(section);
+  if(resumeSignIn)run(render)();
   return {section,refresh:render,openProviders:()=>{clearSelection();search.value='';renderProviders();search.focus();},dispose:()=>{disposed=true;selectionEpoch++;section.remove();}};
 }
 export function installIntelligenceControls() {
@@ -186,7 +191,18 @@ export function installIntelligenceControls() {
   const attach=()=>{
     const root=document.querySelector('#panel .sheet[data-sheet="phone"]');
     if(!root||!globalThis.VivaPhoneEngine)return;
-    if(!root.querySelector('#vivo-ai-accounts'))mounted=mountIntelligence({root});
+    if(!root.querySelector('#vivo-ai-accounts')){
+      const returnURL=new URL(globalThis.location.href);
+      const resumeSignIn=returnURL.searchParams.get('vivo-signin')==='complete';
+      mounted=mountIntelligence({root,resumeSignIn});
+      if(resumeSignIn){
+        // The marker only opens the panel; the authenticated host supplies status.
+        returnURL.searchParams.delete('vivo-signin');
+        globalThis.history.replaceState(globalThis.history.state,'',returnURL.href);
+        document.querySelector('#phonePanelButton')?.click();
+        mounted?.section.scrollIntoView({block:'start'});
+      }
+    }
     const toolbar=document.querySelector('#toolbar');
     if(toolbar&&!document.querySelector('#vivoAIButton'))toolbar.append(button('AI & memory',()=>{
       document.querySelector('#phonePanelButton')?.click();

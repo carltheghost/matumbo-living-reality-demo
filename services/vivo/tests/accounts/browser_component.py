@@ -26,7 +26,7 @@ with sync_playwright() as p:
         if(path.endsWith('/disconnect')){accounts.connections.find(x=>x.id===b.connectionId).status='disconnected';data={remoteRevocationConfirmed:true};}
         return {ok:true,text:async()=>JSON.stringify(data)};
       };
-      window.component=mountIntelligence({root:document.querySelector('#native-phone-sheet'),request,getScope:()=>scope,
+      window.component=mountIntelligence({navigate:url=>{window.signInDestination=url;},root:document.querySelector('#native-phone-sheet'),request,getScope:()=>scope,
         store:{load:async s=>structuredClone(saved.get(JSON.stringify(s))),save:async(s,p)=>saved.set(JSON.stringify(s),structuredClone(p))}});
     }''')
     assert page.evaluate('calls.length')==0

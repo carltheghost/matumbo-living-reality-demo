@@ -33,7 +33,7 @@ with sync_playwright() as p:
         if(path.endsWith('/disconnect')){accounts.connections.find(x=>x.id===b.connectionId).status='disconnected';data={remoteRevocationConfirmed:true};}
         return {ok:true,text:async()=>JSON.stringify(data)};
       };
-      window.component=mountIntelligence({root:document.querySelector('#sheet'),request,getScope:()=>scope,
+      window.component=mountIntelligence({navigate:url=>{window.signInDestination=url;},root:document.querySelector('#sheet'),request,getScope:()=>scope,
         store:{load:async s=>structuredClone(saved.get(JSON.stringify(s))),save:async(s,p)=>saved.set(JSON.stringify(s),structuredClone(p))}});
     }''')
     check('zero requests on mount; native world controls retained',page.evaluate('calls.length')==0 and page.locator('#sentinel').count()==1)
@@ -62,6 +62,7 @@ with sync_playwright() as p:
     page.wait_for_selector('#vivoLoginArea a')
     check('explicit sign-in reaches existing same-origin account endpoint',page.evaluate("calls[0].path==='/api/vivo/accounts/login' && JSON.parse(calls[0].options.body).label==='Personal 2' && calls[0].options.credentials==='same-origin'"))
     link=page.get_by_role('link',name='Continue with ChatGPT',exact=True)
+    check('explicit sign-in requests navigation to the validated official URL',page.evaluate('window.signInDestination')==link.get_attribute('href'))
     check('official sign-in link; never marked connected by link creation',link.get_attribute('href').startswith('https://auth.openai.com/api/accounts/authorize?') and link.get_attribute('rel')=='noopener noreferrer' and 'No account is connected yet' in page.locator('#vivoAccountStatus').inner_text())
     page.get_by_role('button',name='Refresh account status').click()
     check('two same-provider accounts retain their separate identities',page.get_by_role('group',name='Personal',exact=True).count()==1 and page.get_by_role('group',name='Work',exact=True).count()==1)
