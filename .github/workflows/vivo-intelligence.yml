@@ -1,0 +1,52 @@
+name: Vivo account host and constructed memory
+on:
+  pull_request:
+    paths:
+      - 'services/vivo/server/accounts/**'
+      - 'services/vivo/tests/accounts/**'
+      - 'services/vivo/web/phone/ai-accounts-panel.mjs'
+      - 'services/vivo/web/phone/constructive-memory.mjs'
+      - 'services/vivo/web/phone/index.html'
+      - 'services/vivo/web/phone/tests/**'
+      - 'services/vivo/web/vivo-sw.js'
+      - '.github/workflows/vivo-intelligence.yml'
+permissions:
+  contents: read
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test requirements
+        run: |
+          python -m pip install -r services/vivo/server/accounts/requirements.txt playwright
+          python -m playwright install --with-deps chromium
+          python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print('CHROME_PATH='+p.chromium.executable_path); p.stop()" >> "$GITHUB_ENV"
+      - name: Signed fixture and real loopback account tests
+        run: |
+          set -euo pipefail
+          mkdir -p test-evidence
+          python -m unittest discover -s services/vivo/tests/accounts -p 'test_*.py' -v 2>&1 | tee test-evidence/accounts.log
+      - name: Native phone suite and memory recurrence
+        run: |
+          set -euo pipefail
+          test -x "$CHROME_PATH"
+          node --test services/vivo/web/phone/tests/*.test.mjs | tee test-evidence/phone.tap
+          ! grep -Eq '^# skipped [1-9][0-9]*$' test-evidence/phone.tap
+      - name: Explicit component browser checks
+        run: python services/vivo/tests/accounts/browser_component.py --evidence test-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-intelligence-evidence
+          path: test-evidence/
+          retention-days: 14
