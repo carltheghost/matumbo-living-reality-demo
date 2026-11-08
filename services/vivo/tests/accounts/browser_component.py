@@ -36,7 +36,8 @@ with sync_playwright() as p:
     print('passed stage',len(checks)+1,flush=True);checks.append('two same-provider connections render separately')
     work=page.get_by_role('group',name='Work');work.get_by_role('button',name='Use for new work').click()
     page.wait_for_function('accounts.default === "b"');print('passed stage',len(checks)+1,flush=True);checks.append('default selects connection B without replacing A')
-    page.locator('#vivoAccountLabel').fill('Another account');page.get_by_role('button',name='Add another account').click()
+    page.locator('[data-provider-id=chatgpt-plan]').click()
+    page.locator('#vivoAccountLabel').fill('Another account');page.get_by_role('button',name='Sign in with ChatGPT',exact=True).click()
     page.wait_for_selector('a:has-text("Continue with ChatGPT")');assert page.get_by_role('link',name='Continue with ChatGPT').get_attribute('rel')=='noopener noreferrer'
     print('passed stage',len(checks)+1,flush=True);checks.append('explicit sign-in action shows official provider-owned URL; no navigation performed')
     work=page.get_by_role('group',name='Work');work.get_by_role('button',name='Load this account’s models').click()
