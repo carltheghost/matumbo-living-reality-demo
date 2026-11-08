@@ -49,7 +49,12 @@ with sync_playwright() as p:
     check('empty search state is useful',page.get_by_text('No providers match. Try another name.').is_visible())
     search.fill('OpenAI');page.locator('[data-provider-id=openai-api]').click()
     check('API option cannot collect credentials without an adapter','not implemented' in page.locator('#vivoProviderDetail').inner_text() and page.locator('#vivoProviderDetail input').count()==0 and page.evaluate('calls.length')==0)
-    page.get_by_role('button',name='Add another account',exact=True).click();search.fill('')
+    before_add=page.evaluate('({calls:calls.length,accounts:JSON.stringify(accounts)})')
+    page.get_by_role('button',name='Add another account',exact=True).click()
+    check('add account resets search and selection without authentication or account changes',
+          search.input_value()=='' and not page.locator('#vivoProviderDetail').is_visible()
+          and page.locator('#vivoLoginArea a').count()==0
+          and page.evaluate('({calls:calls.length,accounts:JSON.stringify(accounts)})')==before_add)
     row=page.locator('[data-provider-id=chatgpt-plan]');row.focus();row.press('Enter')
     check('provider row activates by keyboard; readable account detail',page.locator('#vivoProviderDetail').is_visible() and page.locator('#vivoAccountLabel').is_visible())
     check('provider selection alone does not initiate OAuth',page.evaluate('calls.length')==0)
