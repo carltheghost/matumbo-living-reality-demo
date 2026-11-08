@@ -19,5 +19,9 @@ test('panel uses exact native scope and keeps credentials out of browser persist
 });
 test('account refresh and provider activity remain explicit user actions',async()=>{
  const s=await file('../ai-accounts-panel.mjs');assert(s.includes("button('Refresh account status',run(render))"));
- assert(s.includes("button('Add another account',run(()=>offerLogin(null)))"));assert(!s.includes('setInterval'));
+ // Adding an account opens the picker; only the selected provider starts login.
+ assert(s.includes("button('Add another account',()=>{clearSelection();"));
+ assert(s.includes("button('Sign in with ChatGPT',run(()=>offerLogin(null)))"));
+ assert(!s.includes("button('Add another account',run(()=>offerLogin(null)))"));
+ assert(!s.includes('setInterval'));
 });
