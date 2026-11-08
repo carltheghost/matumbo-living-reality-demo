@@ -1,0 +1,45 @@
+name: Vivo legacy entry handoff
+on:
+  push:
+    branches: ['vivo/site-repair-entry-2026-11-08']
+  pull_request:
+    paths:
+      - 'src/vivo-phone-engine/boot.mjs'
+      - 'vivo-phone-sw.js'
+      - 'tests/vivo-entry-handoff.test.mjs'
+      - 'tests/browser_entry_handoff.py'
+      - '.github/workflows/vivo-entry-handoff.yml'
+permissions:
+  contents: read
+jobs:
+  entry-handoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source and cache regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          node --check src/vivo-phone-engine/boot.mjs
+          node --check vivo-phone-sw.js
+          node --test tests/vivo-entry-handoff.test.mjs | tee evidence/entry-tests.tap
+      - name: Install browser test runtime
+        run: |
+          python -m pip install playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Chromium component checks with explicit engine and URL fakes
+        run: python tests/browser_entry_handoff.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-entry-handoff-evidence
+          path: evidence/
+          retention-days: 14
