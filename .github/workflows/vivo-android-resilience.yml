@@ -1,0 +1,72 @@
+name: Vivo Android resilience
+on:
+  push:
+    branches: ['vivo/android-resilient-shell-2026-11-08']
+  pull_request:
+    paths:
+      - 'services/vivo/android-companion/**'
+      - 'scripts/vivo/android_*'
+      - '.github/workflows/vivo-android-resilience.yml'
+permissions:
+  contents: read
+concurrency:
+  group: vivo-android-resilience-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve public source used for this build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android-evidence
+          git rev-parse HEAD > android-evidence/source-commit.txt
+          git archive --format=zip HEAD services/vivo/android-companion services/vivo/web scripts/vivo AGENTS.md coordination/vivo > android-evidence/source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vivo-android-source
+          path: android-evidence/source*
+          retention-days: 7
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -path '*/bin/sdkmanager' -print | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
+          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build and test the existing Android companion
+        shell: bash
+        working-directory: services/vivo/android-companion
+        run: |
+          set -euo pipefail
+          gradle --no-daemon testDebugUnitTest assembleDebug | tee ../../../android-evidence/gradle.log
+      - name: Record APK checksum and certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=services/vivo/android-companion/app/build/outputs/apk/debug/app-debug.apk
+          cp "$APK" android-evidence/maTumbo-Vivo-debug.apk
+          sha256sum "$APK" > android-evidence/apk-sha256.txt
+          "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > android-evidence/apk-certificate.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-android-build-evidence
+          path: |
+            android-evidence/
+            services/vivo/android-companion/app/build/test-results/
+          retention-days: 7
