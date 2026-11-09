@@ -1,11 +1,11 @@
-"""Exercise real v13 -> v14 -> v16 -> v17 -> v18 -> v23 -> v24 service-worker upgrades.
+"""Exercise real v13 -> v14 -> v16 -> v17 -> v18 -> v23 -> v25 service-worker upgrades.
 
 The test serves seven deployments from one origin. Historical deployments
 are extracted from pinned repository commits, so the v13 shell is the actual
 pre-house-pool release, the v14 shell is the actual house-pool release, and
 the v16 shell is the exact historical v16 release. The v17 shell is the exact
 deployed current-main base before the phone-route repair, v18 is the exact
-deployed shell after that repair, v23 is the pinned prior main, and v24 is the current shell. It verifies
+deployed shell after that repair, v23 is the pinned prior main, and v25 is the current shell. It verifies
 each cache before poisoning it, retires every cache,
 creates and preserves a house-pool contribution, and reopens the phone route
 offline after each upgrade.
@@ -36,7 +36,7 @@ V16_CACHE = "vivo-phone-shell-2026-10-13-v16"
 V17_CACHE = "vivo-phone-shell-2026-10-13-v17"
 V18_CACHE = "vivo-phone-shell-2026-10-13-v18"
 V23_CACHE = "vivo-phone-shell-2026-10-20-v23"
-V24_CACHE = "vivo-phone-shell-2026-11-08-v24"
+V25_CACHE = "vivo-phone-shell-2026-11-09-v25"
 HISTORICAL_V23_COMMIT = "2e25e258021c6b16d2892e98a2b13d40b1e5f5d1"
 HISTORICAL_V13_COMMIT = "9f17fac9fd3b5a97ca528c5c1b3bf6abf97ac647"
 HISTORICAL_V14_COMMIT = "a8d5e021671f3c77fc4e3619c1c9e94aee35a892"
@@ -77,8 +77,9 @@ V18_TO_V23_ASSERT_PATHS = [
     TOKEN_POLICY_PATH,
 ]
 
-V23_TO_V24_ASSERT_PATHS = [*V18_TO_V23_ASSERT_PATHS, "phone/field-lab.html",
-    "phone/ai-accounts-panel.mjs", "phone/constructive-memory.mjs"]
+V23_TO_V25_ASSERT_PATHS = [*V18_TO_V23_ASSERT_PATHS, "phone/field-lab.html",
+    "phone/ai-accounts-panel.mjs", "phone/constructive-memory.mjs",
+    "phone/social-room.mjs", "phone/social-room-panel.mjs"]
 
 
 class DeploymentServer(ThreadingHTTPServer):
@@ -517,17 +518,17 @@ def run() -> dict[str, Any]:
                 assert after_v23["pool"] == before["pool"], {"before": before, "after": after_v23}
                 context.set_offline(False)
                 legacy_v23 = mark_legacy_cache(
-                    page, V23_CACHE, "/* retired v23 cache marker */", V23_TO_V24_ASSERT_PATHS,
+                    page, V23_CACHE, "/* retired v23 cache marker */", V23_TO_V25_ASSERT_PATHS,
                 )
                 set_deployment(server, web_root)
-                upgraded_v24 = wait_for_upgrade(page, V23_CACHE, V24_CACHE, V23_TO_V24_ASSERT_PATHS)
-                assert_exact_cached_assets(upgraded_v24, expected_cached_assets(web_root, V23_TO_V24_ASSERT_PATHS))
-                assert "vivoIntelligenceMount" in upgraded_v24["assets"]["phone/index.html"]
+                upgraded_v25 = wait_for_upgrade(page, V23_CACHE, V25_CACHE, V23_TO_V25_ASSERT_PATHS)
+                assert_exact_cached_assets(upgraded_v25, expected_cached_assets(web_root, V23_TO_V25_ASSERT_PATHS))
+                assert "vivoIntelligenceMount" in upgraded_v25["assets"]["phone/index.html"]
                 context.set_offline(True)
-                after_v24 = reopen_pool_offline(page, route, before)
-                assert after_v24["worldId"] == before["worldId"], {"before": before, "after": after_v24}
-                assert after_v24["branchId"] == before["branchId"], {"before": before, "after": after_v24}
-                assert after_v24["eyeId"] == before["eyeId"], {"before": before, "after": after_v24}
+                after_v25 = reopen_pool_offline(page, route, before)
+                assert after_v25["worldId"] == before["worldId"], {"before": before, "after": after_v25}
+                assert after_v25["branchId"] == before["branchId"], {"before": before, "after": after_v25}
+                assert after_v25["eyeId"] == before["eyeId"], {"before": before, "after": after_v25}
                 page.wait_for_selector("#vivoAIButton", state="attached")
                 memory = page.evaluate("""async () => {
                   const {exampleMemory} = await import('./constructive-memory.mjs');
@@ -607,22 +608,22 @@ def run() -> dict[str, Any]:
                         "eyeIdentityPreserved": after_v23["eyeId"] == before["eyeId"],
                         "cacheNames": upgraded_v23["names"],
                     },
-                    "v23ToV24": {
+                    "v23ToV25": {
                         "historicalCommit": HISTORICAL_V23_COMMIT,
-                        "oldCacheRetired": V23_CACHE not in upgraded_v24["names"],
-                        "newCachePresent": V24_CACHE in upgraded_v24["names"],
+                        "oldCacheRetired": V23_CACHE not in upgraded_v25["names"],
+                        "newCachePresent": V25_CACHE in upgraded_v25["names"],
                         "exactChangedAssets": True,
                         "legacyAssetsObserved": all("retired v23 cache marker" in value for value in legacy_v23["assets"].values()),
                         "nativeIntelligenceMountPresent": True,
                         "constructedMemoryRunsOffline": memory["value"] == 7,
-                        "housePoolReopenedOffline": after_v24["pool"] == before["pool"],
-                        "worldIdentityPreserved": after_v24["worldId"] == before["worldId"],
-                        "branchIdentityPreserved": after_v24["branchId"] == before["branchId"],
-                        "eyeIdentityPreserved": after_v24["eyeId"] == before["eyeId"],
-                        "cacheNames": upgraded_v24["names"],
+                        "housePoolReopenedOffline": after_v25["pool"] == before["pool"],
+                        "worldIdentityPreserved": after_v25["worldId"] == before["worldId"],
+                        "branchIdentityPreserved": after_v25["branchId"] == before["branchId"],
+                        "eyeIdentityPreserved": after_v25["eyeId"] == before["eyeId"],
+                        "cacheNames": upgraded_v25["names"],
                     },
-                    "persistedBalancePreservedAcrossV24": after_v24["availableTumbo"] == before["availableTumbo"],
-                    "persistedReceiptPreservedAcrossV24": set(before["receiptIds"]).issubset(after_v24["receiptIds"]),
+                    "persistedBalancePreservedAcrossV25": after_v25["availableTumbo"] == before["availableTumbo"],
+                    "persistedReceiptPreservedAcrossV25": set(before["receiptIds"]).issubset(after_v25["receiptIds"]),
                     "persistedBalancePreservedAcrossV16": after_v16["availableTumbo"] == before["availableTumbo"],
                     "persistedReceiptPreservedAcrossV16": set(before["receiptIds"]).issubset(after_v16["receiptIds"]),
                     "persistedBalancePreserved": after_v17["availableTumbo"] == before["availableTumbo"],
@@ -632,8 +633,8 @@ def run() -> dict[str, Any]:
                     "persistedBalancePreservedAcrossV23": after_v23["availableTumbo"] == before["availableTumbo"],
                     "persistedReceiptPreservedAcrossV23": set(before["receiptIds"]).issubset(after_v23["receiptIds"]),
                     "housePoolReopenedOffline": True,
-                    "cacheNames": upgraded_v24["names"],
-                    "pool": after_v24["pool"],
+                    "cacheNames": upgraded_v25["names"],
+                    "pool": after_v25["pool"],
                     "pageErrors": page_errors,
                 }
                 print(json.dumps(result, indent=2))

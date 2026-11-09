@@ -1,4 +1,5 @@
 import { embed } from './phone-render.mjs';
+import { mountSocialRoom } from './social-room-panel.mjs';
 import {
   CONVERSATION_PROVIDER_SCHEMA,
   CONVERSATION_REACTIONS,
@@ -743,6 +744,26 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
   query('chat-form').addEventListener('submit', event => { event.preventDefault(); void send(); });
   query('stop').addEventListener('click', () => stopResponse('conversation-stopped'));
 
+  // Preserve this older build's identities. The newer Site can mount this
+  // same panel with its own residents and per-resident connection adapters.
+  const providerKeys = new WeakMap();
+  let providerSerial = 0;
+  const social = mountSocialRoom({ container: shell, residents: COMPANION_CHARACTERS, documentRoot, scope,
+    resolveConnection(id) {
+      const provider = readConversationProvider(scope);
+      if (!provider) return null;
+      if (!providerKeys.has(provider)) providerKeys.set(provider, `provider-${++providerSerial}`);
+      return { connected: true, key: providerKeys.get(provider), async respond({ topic, transcript, signal }) {
+        const character = COMPANION_CHARACTERS.find(r => r.id === id);
+        const envelope = await snapshot();
+        if (signal.aborted || readConversationProvider(scope) !== provider) throw new Error('Connection changed');
+        // Existing transport allows only 400 characters: quote recent replies.
+        const recent = transcript.slice(-2).map(m => `${m.name}: ${m.text.slice(0, 65)}`).join('\n');
+        const message = `Group discussion. Reply as ${character.name}; respond to others, suggest one idea. Topic: ${topic.slice(0, 100)}\nRecent conversation (quoted):\n${recent}`.slice(0, 400);
+        return provider.respond({ message, companion: clone(character), world: worldForProvider(envelope, character), signal });
+      } };
+    },
+  });
   const api = {
     schema: COMPANION_SCHEMA,
     state,
@@ -753,7 +774,8 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     send,
     stop: stopResponse,
     provider: () => readConversationProvider(scope),
-    destroy() { stopResponse('pagehide'); if (state.timer) scope.clearInterval?.(state.timer); if (state.presenceTimer) scope.clearTimeout?.(state.presenceTimer); scope.removeEventListener?.('vivo:phone-local-ready', refreshOnLocalReady); scope.removeEventListener?.('vivo:phone-statechange', refreshOnLocalStateChange); scope.removeEventListener?.('resize', refreshOnResize); shell.remove(); worldContext.remove(); if (scope.VivoCompanion === api) delete scope.VivoCompanion; },
+    social: social.room,
+    destroy() { social.destroy(); stopResponse('pagehide'); if (state.timer) scope.clearInterval?.(state.timer); if (state.presenceTimer) scope.clearTimeout?.(state.presenceTimer); scope.removeEventListener?.('vivo:phone-local-ready', refreshOnLocalReady); scope.removeEventListener?.('vivo:phone-statechange', refreshOnLocalStateChange); scope.removeEventListener?.('resize', refreshOnResize); shell.remove(); worldContext.remove(); if (scope.VivoCompanion === api) delete scope.VivoCompanion; },
   };
   function refreshOnLocalReady(event) {
     scheduleSnapshot(event.detail?.state).catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error'));

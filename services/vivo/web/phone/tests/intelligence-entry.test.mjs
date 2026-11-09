@@ -7,8 +7,8 @@ test('native entry retains original modules and adds one explicit mount',async()
  assert.equal((h.match(/id="vivoIntelligenceMount"/g)||[]).length,1);assert(h.includes("import {installIntelligenceControls} from './ai-accounts-panel.mjs'"));
 });
 test('new module assets and native Field Lab entry are in the versioned shell',async()=>{
- const sw=await file('../../vivo-sw.js');assert(sw.includes('vivo-phone-shell-2026-11-08-v24'));
- for(const f of ['ai-accounts-panel.mjs','constructive-memory.mjs','field-lab.html'])assert(sw.includes(`'phone/${f}'`));
+ const sw=await file('../../vivo-sw.js');assert(sw.includes('vivo-phone-shell-2026-11-09-v25'));
+ for(const f of ['ai-accounts-panel.mjs','constructive-memory.mjs','field-lab.html','social-room.mjs','social-room-panel.mjs'])assert(sw.includes(`'phone/${f}'`));
 });
 test('callback and local session endpoints bypass the service worker cache',async()=>{
  const sw=await file('../../vivo-sw.js');assert(sw.includes('readyz|healthz|api|ws|auth|vivo-session'));
