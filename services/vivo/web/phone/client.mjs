@@ -1,3 +1,6 @@
+import { installEncounterHooks } from './encounter-runtime.mjs';
+if (typeof window !== 'undefined' && typeof document !== 'undefined') installEncounterHooks(window, document);
+
 /** Small request/response client; all simulation work stays in a Worker. */
 export class PhoneEngineClient extends EventTarget {
   constructor({ WorkerImpl = globalThis.Worker, workerUrl = new URL('./engine-worker.mjs', import.meta.url) } = {}) {
