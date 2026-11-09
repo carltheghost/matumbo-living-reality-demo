@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.webkit.WebView
 import android.view.MotionEvent
+import android.view.InputDevice
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -25,7 +26,7 @@ class OfflineRuntimeTest {
     private fun js(scenario: ActivityScenario<MainActivity>, source: String): String {
         val latch = CountDownLatch(1); var result = "null"
         scenario.onActivity { activity -> activity.findViewById<WebView>(R.id.vivo_web).evaluateJavascript(source) { value -> result = value; latch.countDown() } }
-        assertTrue("WebView callback timed out", latch.await(10, TimeUnit.SECONDS))
+        assertTrue("WebView callback timed out", latch.await(30, TimeUnit.SECONDS))
         return result
     }
     private fun waitFor(scenario: ActivityScenario<MainActivity>, label: String, expression: String, seconds: Long = 45) {
@@ -42,7 +43,7 @@ class OfflineRuntimeTest {
         waitFor(scenario, "Native worker ready", "window.VivaPhoneEngine?.active")
     }
     private fun snapshot(scenario: ActivityScenario<MainActivity>): JSONObject {
-        js(scenario, "window.__testSnapshot=null;window.__androidTestError=null;window.VivaPhoneEngine.snapshot().then(v=>window.__testSnapshot=v).catch(e=>window.__androidTestError=String(e));true")
+        js(scenario, "window.__testSnapshot=null;window.__androidTestError=null;window.VivaPhoneEngine.snapshot().then(v=>{const root=v.snapshot.spaces.root;window.__testSnapshot={snapshot:{worldId:v.snapshot.worldId,acceptedSequence:v.snapshot.acceptedSequence,spaces:{root:{dimension:root.dimension,entities:Object.fromEntries(Object.entries(root.entities).map(([k,e])=>[k,{q:e.q,revision:e.revision}]))}}},currentEyeId:v.currentEyeId,branchId:v.branchId,persistence:v.persistence};}).catch(e=>window.__androidTestError=String(e));true")
         waitFor(scenario, "Snapshot returned", "window.__testSnapshot || window.__androidTestError")
         assertEquals("null", js(scenario, "window.__androidTestError"))
         val encoded = js(scenario, "JSON.stringify(window.__testSnapshot)")
@@ -55,6 +56,9 @@ class OfflineRuntimeTest {
         if (image != null) FileOutputStream(File(directory, "$name.png")).use { image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
     }
     private fun tapElement(s: ActivityScenario<MainActivity>, id: String) {
+        // Place the control inside its real scrolling sheet, not just a nonzero rect.
+        js(s, "document.getElementById('$id').scrollIntoView({block:'center',inline:'center',behavior:'instant'});true")
+        waitFor(s, "Touch target is unobscured", "(()=>{const e=document.getElementById('$id'),r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return x>0&&y>0&&x<innerWidth&&y<innerHeight&&e.contains(document.elementFromPoint(x,y));})()")
         val encoded = js(s, "JSON.stringify((()=>{const r=document.getElementById('$id').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:innerWidth}})())")
         val point = JSONObject(org.json.JSONTokener(encoded).nextValue() as String)
         var x=0f; var y=0f
@@ -63,10 +67,14 @@ class OfflineRuntimeTest {
             val scale=view.width/point.getDouble("width")
             x=(position[0]+point.getDouble("x")*scale).toFloat();y=(position[1]+point.getDouble("y")*scale).toFloat()
         }
-        val now=SystemClock.uptimeMillis();val automation=InstrumentationRegistry.getInstrumentation().uiAutomation
-        for ((action,time) in listOf(MotionEvent.ACTION_DOWN to now,MotionEvent.ACTION_UP to now+80)) {
-            val event=MotionEvent.obtain(now,time,action,x,y,0)
-            assertTrue("Android touch injection",automation.injectInputEvent(event,true));event.recycle()
+        val automation=InstrumentationRegistry.getInstrumentation().uiAutomation
+        val downTime=SystemClock.uptimeMillis()
+        for (action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) {
+            if (action == MotionEvent.ACTION_UP) SystemClock.sleep(80)
+            val event=MotionEvent.obtain(downTime,SystemClock.uptimeMillis(),action,x,y,0)
+            event.source=InputDevice.SOURCE_TOUCHSCREEN
+            try { assertTrue("Android touchscreen injection",automation.injectInputEvent(event,true)) }
+            finally { event.recycle() }
         }
     }
     @Test fun offlineColdStartLoadsOriginalRuntimeWithoutFilePicker() {
@@ -110,14 +118,16 @@ class OfflineRuntimeTest {
             val old=before.getJSONObject("snapshot").getJSONObject("spaces").getJSONObject("root").getJSONObject("entities").getJSONObject("relic").getJSONArray("q").getDouble(3)
             js(s, "window.VivaPhoneEngine.select('relic');document.querySelector('[data-panel=move]').click();document.getElementById('moveAxis').value='3';true")
             waitFor(s,"Movement control visible","document.getElementById('axisPlus').getBoundingClientRect().width>0")
+            capture("native-touch-target")
             tapElement(s,"axisPlus")
-            var changed=false
-            repeat(20) {
-                val q=snapshot(s).getJSONObject("snapshot").getJSONObject("spaces").getJSONObject("root").getJSONObject("entities").getJSONObject("relic").getJSONArray("q").getDouble(3)
-                if(q>old+.01)changed=true
-                if(!changed)Thread.sleep(100)
-            }
-            assertTrue("Native touch produced an accepted fourth-axis object edit",changed)
+            // Poll accepted state already published by the real worker. Repeated full
+            // snapshot/render requests can overwhelm a software-rendered emulator.
+            waitFor(s,"Native touch published an accepted fourth-axis object edit",
+                "(window.VivaPhoneEngine.publishedSnapshot()?.snapshot?.spaces?.root?.entities?.relic?.q?.[3] ?? $old) > ${old + .01}")
+            val after=snapshot(s)
+            val entity=after.getJSONObject("snapshot").getJSONObject("spaces").getJSONObject("root").getJSONObject("entities").getJSONObject("relic")
+            assertTrue("Native touch produced an accepted fourth-axis object edit", entity.getJSONArray("q").getDouble(3)>old+.01)
+            assertTrue("Accepted edit advances object revision",entity.getInt("revision")>before.getJSONObject("snapshot").getJSONObject("spaces").getJSONObject("root").getJSONObject("entities").getJSONObject("relic").getInt("revision"))
             capture("native-touch-movement")
         }
     }

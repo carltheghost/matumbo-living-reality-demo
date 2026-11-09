@@ -3,6 +3,12 @@
 # Collect diagnostics BEFORE the action tears its emulator down. Never wait forever.
 set -uo pipefail
 mkdir -p android-evidence
+# Keep the full runtime and hardware input enabled; use a phone-sized viewport
+# rather than spending most hosted-emulator CPU on 1080px software rasterization.
+adb shell wm size 720x1280
+adb shell wm density 240
+adb shell wm size > android-evidence/emulator-display.txt
+adb shell wm density >> android-evidence/emulator-display.txt
 adb shell svc wifi disable
 adb shell svc data disable
 adb shell dumpsys webviewupdate > android-evidence/webview-provider.txt
