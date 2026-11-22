@@ -1,3 +1,4 @@
+import { parseJevAdviceReceipt } from "../domains/jev-advice-receipt.js";
 /**
  * web-ai.js — Web + AI glass console renderer.
  *
@@ -527,6 +528,49 @@ export function createWebAiConsole({
   economyStatus.dataset.kind = "info";
   form.appendChild(economyStatus);
   economySection.appendChild(form);
+  const receiptLabel = el(doc, "label", "web-ai-economy-statusline", "Import a Vivo Jev usage receipt");
+  const receiptFile = el(doc, "input");
+  receiptFile.type = "file";
+  receiptFile.accept = ".json,application/json";
+  receiptLabel.appendChild(receiptFile);
+  const receiptStatus = el(doc, "p", "web-ai-status");
+  receiptStatus.setAttribute("role", "status");
+  economySection.append(receiptLabel, receiptStatus);
+  const importedJevReceipts = new Map();
+  receiptFile.addEventListener("change", async () => {
+    const file = receiptFile.files?.[0];
+    if (!file) return;
+    receiptFile.disabled = true;
+    try {
+      if (file.size > 64 * 1024) throw new Error("Choose a receipt no larger than 64 KB.");
+      const exported = JSON.parse(await file.text());
+      const receipt = await parseJevAdviceReceipt(exported);
+      const identity = JSON.stringify([receipt.connectionId, receipt.requestId]);
+      const prior = importedJevReceipts.get(identity);
+      if (prior && prior !== exported.receiptSha256) throw new Error("This request has a conflicting receipt.");
+      if (prior) {
+        receiptStatus.textContent = "This request is already in the usage timeline.";
+        return;
+      }
+      appendEconomicEvent("provider.usage-observed", "typesafe", {
+        model: receipt.resolvedModel,
+        usage: receipt.usage,
+        receiptSha256: exported.receiptSha256,
+      });
+      importedJevReceipts.set(identity, exported.receiptSha256);
+      receiptStatus.textContent = receipt.usage
+        ? `Recorded ${receipt.usage.input_tokens} input and ${receipt.usage.output_tokens} output tokens in the timeline.`
+        : "Recorded the receipt in the timeline. Token counts were unavailable.";
+    } catch (error) {
+      receiptStatus.textContent = error instanceof SyntaxError ? "The receipt is not valid JSON." : error.message;
+    } finally {
+      receiptFile.value = "";
+      receiptFile.disabled = false;
+    }
+  });
+  economySection.appendChild(el(doc, "p", "web-ai-economy-statusline",
+    "Reads the file on this device and records usage for this page session. Posted charges come from TypeSafe billing."));
+
 
   const treasurySection = el(doc, "div", "web-ai-economy-section");
   const treasuryTitle = el(doc, "div", "web-ai-economy-title", "PLAN + TREASURY LAB");
