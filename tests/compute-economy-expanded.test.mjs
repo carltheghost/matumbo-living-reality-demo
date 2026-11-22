@@ -43,3 +43,36 @@ test("demo funding IDs are idempotent", () => {
   account.fundDemo({ fundingId: "same", amountUsd: 10 });
   assert.equal(account.snapshot().balanceUsd, 10);
 });
+
+test("Jev usage receipt preserves metering and rejects altered bytes", async () => {
+  const { createHash } = await import("node:crypto");
+  const { parseJevAdviceReceipt } = await import("../src/domains/jev-advice-receipt.js");
+  const digest = "a".repeat(64);
+  const receipt = {
+    schema: "tumbo.jev-advice-receipt/1",
+    provider: "typesafe",
+    sourceUrl: "https://api.typesafe.ai/v1/systemone",
+    requestId: "usage-test",
+    connectionId: "test-connection",
+    requestedModel: "jev-latest",
+    resolvedModel: "jev-fixture",
+    receivedAt: "2026-11-22T00:00:00Z",
+    probability: 0.7,
+    probabilitySource: "answers.decision.noul",
+    usage: { input_tokens: 330, output_tokens: 20 },
+    stateSha256: digest,
+    questionSha256: digest,
+    requestBodySha256: digest,
+    responseBodySha256: digest,
+    worldActionExecuted: false,
+  };
+  const receiptJson = JSON.stringify(receipt);
+  const exported = {
+    schema: "tumbo.jev-advice-export/1",
+    receiptJson,
+    receiptSha256: createHash("sha256").update(receiptJson).digest("hex"),
+  };
+  assert.deepEqual((await parseJevAdviceReceipt(exported)).usage, receipt.usage);
+  const changed = { ...exported, receiptJson: receiptJson.replace("330", "331") };
+  await assert.rejects(parseJevAdviceReceipt(changed), /No valid downloadable Jev advice receipt/);
+});
