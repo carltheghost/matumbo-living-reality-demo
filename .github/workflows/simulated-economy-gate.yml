@@ -28,7 +28,7 @@ defaults:
 jobs:
   focused-simulated-economy-token-panel:
     name: Focused simulated economy/token/panel checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
