@@ -23,3 +23,58 @@ export async function parseJevAdviceReceipt(exported, {cryptoApi=globalThis.cryp
   if (receipt.usage!==null && (!exactKeys(receipt.usage,['input_tokens','output_tokens']) || !Object.values(receipt.usage).every(value=>Number.isSafeInteger(value)&&value>=0))) fail();
   return receipt;
 }
+
+
+// Tab-local, bounded receipt history. This is observed usage, never a billing
+// ledger. Hash the request identity so stored history does not expose account IDs.
+export const JEV_HISTORY_KEY = "matumbo.jev.usage-history.v1";
+export const JEV_HISTORY_LIMIT = 256;
+const validUsage = usage => usage === null || (exactKeys(usage, ["input_tokens", "output_tokens"]) &&
+  Object.values(usage).every(value => Number.isSafeInteger(value) && value >= 0));
+const validHistoryRow = row => exactKeys(row, ["identity", "receiptSha256", "model", "usage"]) &&
+  digest(row.identity) && digest(row.receiptSha256) && text(row.model) && validUsage(row.usage);
+
+export function createJevUsageJournal({ storage, cryptoApi = globalThis.crypto } = {}) {
+  function load() {
+    if (!storage || typeof storage.getItem !== "function" || typeof storage.setItem !== "function") {
+      throw new Error("Tab receipt storage is unavailable.");
+    }
+    let raw;
+    try { raw = storage.getItem(JEV_HISTORY_KEY); }
+    catch { throw new Error("Tab receipt storage is unavailable."); }
+    if (raw === null) return [];
+    let rows;
+    try {
+      if (typeof raw !== "string" || raw.length > 262144) throw new Error();
+      rows = JSON.parse(raw);
+      if (!Array.isArray(rows) || rows.length > JEV_HISTORY_LIMIT ||
+          !rows.every(validHistoryRow) || new Set(rows.map(row => row.identity)).size !== rows.length) {
+        throw new Error();
+      }
+    } catch { throw new Error("Tab receipt history is invalid; no receipts were changed."); }
+    return rows;
+  }
+
+  async function importReceipt(exported) {
+    const receipt = await parseJevAdviceReceipt(exported, { cryptoApi });
+    const identity = await hash(JSON.stringify([receipt.connectionId, receipt.requestId]), cryptoApi);
+    // No await between read, duplicate check and write: competing imports within
+    // this document cannot interleave those operations.
+    const rows = load();
+    const previous = rows.find(row => row.identity === identity);
+    if (previous) {
+      if (previous.receiptSha256 !== exported.receiptSha256) throw new Error("This request has a conflicting receipt.");
+      return { status: "duplicate", row: previous };
+    }
+    if (rows.length >= JEV_HISTORY_LIMIT) throw new Error("Tab receipt history is full; no receipt was added.");
+    const row = { identity, receiptSha256: exported.receiptSha256, model: receipt.resolvedModel, usage: receipt.usage };
+    const serialized = JSON.stringify([...rows, row]);
+    try {
+      storage.setItem(JEV_HISTORY_KEY, serialized);
+      if (storage.getItem(JEV_HISTORY_KEY) !== serialized) throw new Error();
+    } catch { throw new Error("Tab receipt history could not be saved; check storage before retrying."); }
+    return { status: "recorded", row };
+  }
+
+  return Object.freeze({ importReceipt, snapshot: load });
+}
