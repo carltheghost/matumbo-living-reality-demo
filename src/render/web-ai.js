@@ -1,4 +1,4 @@
-import { parseJevAdviceReceipt } from "../domains/jev-advice-receipt.js";
+import { createJevUsageJournal } from "../domains/jev-advice-receipt.js";
 /**
  * web-ai.js — Web + AI glass console renderer.
  *
@@ -536,31 +536,56 @@ export function createWebAiConsole({
   const receiptStatus = el(doc, "p", "web-ai-status");
   receiptStatus.setAttribute("role", "status");
   economySection.append(receiptLabel, receiptStatus);
-  const importedJevReceipts = new Map();
+  const jevJournal = createJevUsageJournal({ storage: sessionStore });
+  const receiptHistory = el(doc, "div", "web-ai-economy-section");
+  receiptHistory.setAttribute("aria-label", "Saved Jev receipt history");
+  economySection.appendChild(receiptHistory);
+
+  function renderJevHistory() {
+    receiptHistory.replaceChildren();
+    receiptHistory.appendChild(el(doc, "strong", "web-ai-economy-title", "SAVED USAGE · THIS TAB"));
+    try {
+      const rows = jevJournal.snapshot();
+      const total = rows.reduce((sum, row) => sum + (row.usage
+        ? BigInt(row.usage.input_tokens) + BigInt(row.usage.output_tokens) : 0n), 0n);
+      const unknown = rows.filter(row => row.usage === null).length;
+      receiptHistory.appendChild(el(doc, "p", "web-ai-economy-statusline",
+        rows.length + " saved receipts · " + total.toLocaleString() + " reported tokens · " + unknown + " without counts"));
+      rows.slice(-5).reverse().forEach(row => {
+        receiptHistory.appendChild(el(doc, "div", "web-ai-economy-statusline",
+          row.model + " · " + (row.usage
+            ? row.usage.input_tokens.toLocaleString() + " in / " + row.usage.output_tokens.toLocaleString() + " out"
+            : "counts unavailable")));
+      });
+    } catch (error) {
+      receiptHistory.appendChild(el(doc, "p", "web-ai-status", error.message));
+    }
+  }
+
   receiptFile.addEventListener("change", async () => {
     const file = receiptFile.files?.[0];
     if (!file) return;
     receiptFile.disabled = true;
     try {
       if (file.size > 64 * 1024) throw new Error("Choose a receipt no larger than 64 KB.");
-      const exported = JSON.parse(await file.text());
-      const receipt = await parseJevAdviceReceipt(exported);
-      const identity = JSON.stringify([receipt.connectionId, receipt.requestId]);
-      const prior = importedJevReceipts.get(identity);
-      if (prior && prior !== exported.receiptSha256) throw new Error("This request has a conflicting receipt.");
-      if (prior) {
-        receiptStatus.textContent = "This request is already in the usage timeline.";
+      const imported = await jevJournal.importReceipt(JSON.parse(await file.text()));
+      renderJevHistory();
+      if (imported.status === "duplicate") {
+        receiptStatus.textContent = "This request is already in the saved usage history.";
         return;
       }
-      appendEconomicEvent("provider.usage-observed", "typesafe", {
-        model: receipt.resolvedModel,
-        usage: receipt.usage,
-        receiptSha256: exported.receiptSha256,
-      });
-      importedJevReceipts.set(identity, exported.receiptSha256);
-      receiptStatus.textContent = receipt.usage
-        ? `Recorded ${receipt.usage.input_tokens} input and ${receipt.usage.output_tokens} output tokens in the timeline.`
-        : "Recorded the receipt in the timeline. Token counts were unavailable.";
+      const row = imported.row;
+      try {
+        appendEconomicEvent("provider.usage-observed", "typesafe", {
+          model: row.model, usage: row.usage, receiptSha256: row.receiptSha256,
+        });
+      } catch {
+        receiptStatus.textContent = "Receipt saved; the page-session timeline could not be updated.";
+        return;
+      }
+      receiptStatus.textContent = row.usage
+        ? "Saved " + row.usage.input_tokens + " input and " + row.usage.output_tokens + " output tokens."
+        : "Saved the receipt. Token counts were unavailable.";
     } catch (error) {
       receiptStatus.textContent = error instanceof SyntaxError ? "The receipt is not valid JSON." : error.message;
     } finally {
@@ -568,8 +593,9 @@ export function createWebAiConsole({
       receiptFile.disabled = false;
     }
   });
+  renderJevHistory();
   economySection.appendChild(el(doc, "p", "web-ai-economy-statusline",
-    "Reads the file on this device and records usage for this page session. Posted charges come from TypeSafe billing."));
+    "Saved history survives reloads in this tab, not guaranteed after closing it. Imported receipts are not provider-authenticated and do not change demo credits, rewards or posted charges. Provider billing remains authoritative."));
 
 
   const treasurySection = el(doc, "div", "web-ai-economy-section");
