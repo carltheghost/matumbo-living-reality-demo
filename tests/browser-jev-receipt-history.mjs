@@ -56,7 +56,7 @@ const devices = [{ name: "desktop", viewport: { width: 1280, height: 900 }, mobi
   { name: "mobile", viewport: { width: 390, height: 844 }, mobile: true }];
 const selected = process.env.MATUMBO_BROWSER_DEVICE;
 assert.ok(!selected || devices.some(d => d.name === selected), "unknown browser device");
-const report = { schema: "matumbo.jev-receipt-browser-regression/4", passed: false,
+const report = { schema: "matumbo.jev-receipt-browser-regression/5", passed: false,
   preview: base.href, playwrightVersion: require("playwright/package.json").version,
   fixtures: [metered, conflict, unknown].map(f => f.envelope.receiptSha256), results: [] };
 async function read(page) {
@@ -96,11 +96,12 @@ function observed(before, after, f) {
 }
 async function runDevice(browser, device) {
   const result = { device: device.name, viewport: device.viewport, passed: false, checkpoints: [], pageErrors: [], forbiddenRequests: [], offlineFixtureRequests: [], sandboxProbes: [], harnessDiagnostics: [] };
-  const contexts = [];
+  const contexts = [], sandboxProofs = new Map();
   let page, stage = "launch context";
-  async function newPage() {
-    const context = await browser.newContext({ viewport: device.viewport, isMobile: device.mobile, hasTouch: device.mobile,
+  async function newPage(existingContext = null) {
+    const context = existingContext ?? await browser.newContext({ viewport: device.viewport, isMobile: device.mobile, hasTouch: device.mobile,
       deviceScaleFactor: 1, reducedMotion: "reduce", locale: "en-US", serviceWorkers: "block" });
+    if (!existingContext) {
     contexts.push(context);
     await context.route("**/*", route => {
       const req = route.request(), url = new URL(req.url());
@@ -130,6 +131,10 @@ async function runDevice(browser, device) {
     const reproduced = probeErrors.filter(e => e.message === sandboxError);
     result.sandboxProbes.push({errors:probeErrors, reproduced:reproduced.length});
     for (const e of probeErrors.filter(e=>e.message!==sandboxError)) result.pageErrors.push(e);
+    sandboxProofs.set(context,reproduced);
+    }
+    const reproduced = sandboxProofs.get(context);
+    assert.ok(reproduced,"every context must have an independent sandbox probe");
     const p = await context.newPage();
     p.setDefaultTimeout(20_000); p.setDefaultNavigationTimeout(45_000);
     p.on("pageerror", e => {
@@ -325,9 +330,50 @@ async function runDevice(browser, device) {
     assert.deepEqual(twice,restoredBoth); await checkpoint("repeated reload idempotence");
     await hist().locator(":scope > p").scrollIntoViewIfNeeded();
     await page.screenshot({path:resolve(out,device.name+"-restored-history.png")});
+    const original = page;
+    // Same browser profile, same origin, different top-level browsing context.
+    // Deliberately no opener: browsers may clone sessionStorage when a tab has
+    // an opener. This tests independently created tabs, not popup semantics.
+    stage = "same-context new tab isolation";
+    page = await newPage(original.context());
+    await page.goto(base.href,{waitUntil:"domcontentloaded"}); await compute();
+    assert.equal(page.context(),original.context());
+    assert.equal(await page.evaluate(()=>window.opener===null),true);
+    const siblingFresh = await checkpoint("same-context no-opener tab starts empty");
+    history(siblingFresh,[]); assert.equal(siblingFresh.journal,null);
+    balances(siblingFresh,fresh); assert.deepEqual(siblingFresh.economy.timeline,fresh.economy.timeline);
+    const siblingImported = await upload(unknown.envelope,"Saved the receipt. Token counts were unavailable.");
+    history(siblingImported,[unknown]); observed(siblingFresh,siblingImported,unknown);
+    await checkpoint("sibling tab records only its own receipt");
+    assert.deepEqual(await read(original),twice,"same-context sibling modified the original tab");
+    const siblingRestored = await reload([unknown],siblingImported.journal,siblingFresh);
+    await reject(unknown.envelope,duplicate,siblingRestored);
+    assert.deepEqual(await read(original),twice,"sibling reload modified original tab");
+    await checkpoint("sibling tab retains independent history after reload");
+
+    // Explicit fault injection only after the ordinary receipt workflow.
+    // Real sessionStorage bytes are corrupted in this disposable sibling;
+    // the app must surface a storage error and refuse a valid new import.
+    stage = "inject corrupt sibling sessionStorage fixture";
+    const corrupt = "{fixture:invalid-journal";
+    const invalidMessage = "Tab receipt history is invalid; no receipts were changed.";
+    await page.evaluate(({key,corrupt})=>sessionStorage.setItem(key,corrupt),{key:JEV_HISTORY_KEY,corrupt});
+    await page.reload({waitUntil:"domcontentloaded"}); await compute();
+    const broken = await checkpoint("corrupt journal is visible and fails closed");
+    assert.equal(broken.summary,invalidMessage); assert.equal(broken.journal,corrupt);
+    assert.equal(broken.localJournal,null); assert.deepEqual(broken.rows,[]);
+    assert.deepEqual(broken.economy.timeline,siblingFresh.economy.timeline); balances(broken,siblingFresh);
+    const fundedBroken = await fund();
+    assert.equal(fundedBroken.journal,corrupt);
+    assert.equal(fundedBroken.summary,invalidMessage);
+    await reject(metered.envelope,invalidMessage,fundedBroken);
+    assert.deepEqual(await read(original),twice,"corrupt sibling changed original tab");
+    await checkpoint("corrupt journal and nonzero balances unchanged after valid receipt rejection");
+    await page.close();
+    page = original;
+    assert.deepEqual(await read(page),twice,"closing sibling modified original tab");
     // Independent clean context has no saved history and cannot affect the original tab.
     stage = "fresh context isolation";
-    const original = page;
     page = await newPage(); await page.goto(base.href,{waitUntil:"domcontentloaded"}); await compute();
     const clean = await checkpoint("fresh context has no imported receipts");
     history(clean,[]); assert.equal(clean.journal,null); balances(clean,fresh);
