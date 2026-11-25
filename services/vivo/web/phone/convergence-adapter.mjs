@@ -19,10 +19,13 @@ export class VivoConvergenceAdapter {
   }
   attach(nativeSession, capabilities = []) {
     // The main host creates/approves this attachment; model output cannot grant it.
-    this.#registry.agentController?.assertActive(nativeSession);
+    const active = this.#registry.agentController.assertActive(nativeSession);
+    const context = Object.freeze({sourceId: active.sourceId, sessionId: active.sessionId, generation: active.generation});
+    // Pin the controller-issued identity, not the caller-owned mutable object.
+    nativeSession = Object.freeze({sessionId: context.sessionId, generation: context.generation});
     if (!Array.isArray(capabilities) || capabilities.some(x => !Object.values(EXTRAS).includes(x))) throw failure('UNAVAILABLE_CAPABILITY');
     const ref = Object.freeze({id: ++this.#serial});
-    this.#sessions.set(ref, {nativeSession, capabilities: new Set(capabilities), stopped: false, flights: new Set()});
+    this.#sessions.set(ref, {nativeSession, context, capabilities: new Set(capabilities), stopped: false, flights: new Set()});
     return ref;
   }
   #active(ref) {
@@ -31,10 +34,20 @@ export class VivoConvergenceAdapter {
     this.#registry.agentController?.assertActive(s.nativeSession);
     return s;
   }
+  #available(s, name) {
+    if (!Object.hasOwn(EXTRAS, name) || !s.capabilities.has(EXTRAS[name])) return false;
+    if (name === 'contracts.inspect') return this.#economy !== null;
+    // A connected host is not necessarily connected to every capability.
+    // Require explicit, synchronous, session-scoped availability; fail closed.
+    try {
+      return typeof this.#transport?.invoke === 'function' &&
+        typeof this.#transport.supports === 'function' &&
+        this.#transport.supports(name, s.context) === true;
+    } catch { return false; }
+  }
   list(ref) {
     const s = this.#active(ref), native = this.#registry.listFor(s.nativeSession).map(t => t.name);
-    const extras = Object.entries(EXTRAS).filter(([name, cap]) => s.capabilities.has(cap) &&
-      (name === 'contracts.inspect' ? this.#economy !== null : this.#transport !== null)).map(([name]) => name);
+    const extras = Object.keys(EXTRAS).filter(name => this.#available(s, name));
     return [...native, ...extras];
   }
   async invoke(ref, name, args = {}) {
@@ -65,12 +78,16 @@ export class VivoConvergenceAdapter {
     try {
       const work = Promise.resolve().then(() => {
         if (controller.signal.aborted) throw failure('CANCELLED_OR_DEADLINE');
-        return Object.hasOwn(EXTRAS, name)
-          ? this.#transport.invoke(name, safeArgs, {signal: controller.signal})
-          : this.#registry.invokeFor(s.nativeSession, name, safeArgs);
+        this.#active(ref);
+        if (Object.hasOwn(EXTRAS, name)) {
+          if (!this.#available(s, name)) throw failure('TOOL_NOT_GRANTED');
+          return this.#transport.invoke(name, safeArgs, {signal: controller.signal, agent: s.context});
+        }
+        return this.#registry.invokeFor(s.nativeSession, name, safeArgs);
       });
       const result = await Promise.race([work, cancelled]);
       this.#active(ref); // Ignore late/stopped-session responses; never automatically retry.
+      if (Object.hasOwn(EXTRAS, name) && !this.#available(s, name)) throw failure('TOOL_NOT_GRANTED');
       return structuredClone(result);
     } finally {
       clearTimeout(timer); controller.signal.removeEventListener('abort', abort); s.flights.delete(controller);
