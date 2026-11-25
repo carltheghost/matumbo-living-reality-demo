@@ -56,7 +56,7 @@ const devices = [{ name: "desktop", viewport: { width: 1280, height: 900 }, mobi
   { name: "mobile", viewport: { width: 390, height: 844 }, mobile: true }];
 const selected = process.env.MATUMBO_BROWSER_DEVICE;
 assert.ok(!selected || devices.some(d => d.name === selected), "unknown browser device");
-const report = { schema: "matumbo.jev-receipt-browser-regression/3", passed: false,
+const report = { schema: "matumbo.jev-receipt-browser-regression/4", passed: false,
   preview: base.href, playwrightVersion: require("playwright/package.json").version,
   fixtures: [metered, conflict, unknown].map(f => f.envelope.receiptSha256), results: [] };
 async function read(page) {
@@ -174,6 +174,23 @@ async function runDevice(browser, device) {
     // flag. A collapsed mobile face remains a failure with measured evidence.
     await panel().locator('[data-panel="'+face+'"]').waitFor({state:"visible",timeout:15_000});
     assert.equal(await panel().locator("[data-panel]:visible").count(),1);
+    const layout=await panel().evaluate((p,face)=>{
+      const body=p.querySelector(".web-ai-body"),active=p.querySelector('[data-panel="'+face+'"]'),
+        tabs=p.querySelector(".web-ai-tabs"),buttons=[...tabs.querySelectorAll("button")];
+      return {panelHeight:p.clientHeight,panelScrollHeight:p.scrollHeight,
+        bodyHeight:body.clientHeight,bodyScrollHeight:body.scrollHeight,bodyOverflow:getComputedStyle(body).overflowY,
+        activeHeight:active.clientHeight,tabsHeight:tabs.clientHeight,tabsWidth:tabs.clientWidth,tabsScrollWidth:tabs.scrollWidth,
+        tabTops:buttons.map(n=>n.offsetTop),tabHeights:buttons.map(n=>n.getBoundingClientRect().height)};
+    },face);
+    result.checkpoints.push({label:"native face layout "+name,...layout});
+    assert.ok(layout.activeHeight>=48,"face content must have a real, noncollapsed layout");
+    assert.ok(layout.bodyHeight>=layout.activeHeight,"reading body must expand to hold selected face");
+    assert.equal(layout.bodyOverflow,"visible","attached skin owns scrolling, not nested body");
+    assert.ok(layout.bodyScrollHeight<=layout.bodyHeight+2,"nested body must not clip content");
+    assert.ok(layout.tabsScrollWidth<=layout.tabsWidth+2,"face tabs must not overflow horizontally");
+    assert.ok(new Set(layout.tabTops).size===1,"three face tabs must stay on one row");
+    assert.ok(layout.tabHeights.every(height=>height>=44),"face switches must remain touch-sized");
+    if(face==="economy")assert.ok(layout.panelScrollHeight>layout.panelHeight,"long Compute face scrolls on its own object");
   }
   async function compute() {
     stage = "attach native Compute object";
@@ -188,6 +205,10 @@ async function runDevice(browser, device) {
     const input = panel().getByLabel("Import a Vivo Jev usage receipt", {exact:true});
     assert.equal(await input.count(), 1);
     await input.scrollIntoViewIfNeeded(); assert.equal(await input.isVisible(), true);
+    // The native file input must be reachable through the actual scroll
+    // surface; a positive offscreen bounding box alone is not sufficient.
+    await (device.mobile ? input.tap({trial:true}) : input.click({trial:true}));
+    assert.ok(await panel().evaluate(p=>p.scrollTop>0),"file import must be reachable by scrolling the object skin");
     // Real browser file input/change event; no direct journal calls or storage seeding.
     await input.setInputFiles({name:"jev-fixture.json", mimeType:"application/json",
       buffer:Buffer.from(typeof body === "string" ? body : JSON.stringify(body))});
