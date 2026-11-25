@@ -40,11 +40,23 @@ const panelSelector = "#web-ai-console", historySelector = '[aria-label="Saved J
 const statusSelector = '#web-ai-console [data-panel="economy"] > p[role="status"]';
 const duplicate = "This request is already in the saved usage history.";
 const conflictMessage = "This request has a conflicting receipt.";
+// Only the five unrelated startup GETs observed in the first actual CI run
+// receive synthetic unavailable responses. No external request is continued.
+const offlineFeeds = new Set([
+  "https://site.web.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard",
+  "https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
+  "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+  "https://api.elections.kalshi.com/trade-api/v2/markets",
+  "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=500&offset=0",
+]);
+const sandboxError = "Failed to read the 'serviceWorker' property from 'Navigator': Service worker is disabled because the context is sandboxed and lacks the 'allow-same-origin' flag.";
+const probeUrl = new URL("/__jev-browser-sandbox-probe", base.origin).href;
+const errorSignature = error => ({message:error.message,stack:error.stack ?? ""});
 const devices = [{ name: "desktop", viewport: { width: 1280, height: 900 }, mobile: false },
   { name: "mobile", viewport: { width: 390, height: 844 }, mobile: true }];
 const selected = process.env.MATUMBO_BROWSER_DEVICE;
 assert.ok(!selected || devices.some(d => d.name === selected), "unknown browser device");
-const report = { schema: "matumbo.jev-receipt-browser-regression/2", passed: false,
+const report = { schema: "matumbo.jev-receipt-browser-regression/3", passed: false,
   preview: base.href, playwrightVersion: require("playwright/package.json").version,
   fixtures: [metered, conflict, unknown].map(f => f.envelope.receiptSha256), results: [] };
 async function read(page) {
@@ -83,7 +95,7 @@ function observed(before, after, f) {
   balances(after, before);
 }
 async function runDevice(browser, device) {
-  const result = { device: device.name, viewport: device.viewport, passed: false, checkpoints: [], pageErrors: [], forbiddenRequests: [] };
+  const result = { device: device.name, viewport: device.viewport, passed: false, checkpoints: [], pageErrors: [], forbiddenRequests: [], offlineFixtureRequests: [], sandboxProbes: [], harnessDiagnostics: [] };
   const contexts = [];
   let page, stage = "launch context";
   async function newPage() {
@@ -92,16 +104,40 @@ async function runDevice(browser, device) {
     contexts.push(context);
     await context.route("**/*", route => {
       const req = route.request(), url = new URL(req.url());
+      if (req.method() === "GET" && offlineFeeds.has(url.href)) {
+        result.offlineFixtureRequests.push({ method: "GET", url: url.href, response: 503 });
+        return route.fulfill({status:503,headers:{"access-control-allow-origin":"*"},json:{error:"offline browser regression fixture"}});
+      }
       if (url.origin !== base.origin || !["GET","HEAD"].includes(req.method())) {
         result.forbiddenRequests.push({ method: req.method(), url: url.href }); return route.abort("blockedbyclient");
       }
+      if (url.href === probeUrl) return route.fulfill({contentType:"text/html",body:'<!doctype html><html><body><iframe title="Sandbox probe" sandbox="allow-scripts" srcdoc="<p>Empty sandbox fixture</p>"></iframe></body></html>'});
       if (url.pathname.endsWith("/__preview/revision")) return route.fulfill({ json: { revision: "jev-receipt-fixture" } });
       return route.continue();
     });
     await context.routeWebSocket("**/*", ws => { result.forbiddenRequests.push({ kind: "websocket", url: ws.url() }); ws.close(); });
+    // Playwright 1.57's serviceWorkers:block init script itself reads
+    // navigator.serviceWorker without a try/catch. Prove the exact error
+    // occurs in a script-free sandbox before classifying any app-page error.
+    // Keep blocking service workers, and fail on every unmatched error.
+    const probe = await context.newPage(), probeErrors = [];
+    probe.on("pageerror", e => probeErrors.push(errorSignature(e)));
+    try {
+      await probe.goto(probeUrl, {waitUntil:"load",timeout:15_000});
+      await probe.frameLocator("iframe").locator("p").waitFor({state:"visible",timeout:5_000});
+      await probe.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    } finally { await probe.close(); }
+    const reproduced = probeErrors.filter(e => e.message === sandboxError);
+    result.sandboxProbes.push({errors:probeErrors, reproduced:reproduced.length});
+    for (const e of probeErrors.filter(e=>e.message!==sandboxError)) result.pageErrors.push(e);
     const p = await context.newPage();
     p.setDefaultTimeout(20_000); p.setDefaultNavigationTimeout(45_000);
-    p.on("pageerror", e => result.pageErrors.push(e.message));
+    p.on("pageerror", e => {
+      const signature=errorSignature(e);
+      if(signature.message===sandboxError && reproduced.some(proof=>proof.stack===signature.stack)){
+        result.harnessDiagnostics.push({kind:"reproduced-playwright-sandbox-init",...signature});
+      } else result.pageErrors.push(signature);
+    });
     p.on("popup", popup => { result.forbiddenRequests.push({ kind: "popup", url: popup.url() }); void popup.close(); });
     return p;
   }
@@ -115,21 +151,37 @@ async function runDevice(browser, device) {
       events: state.economy.timeline.events.map(e => e.type) });
     return state;
   }
-  async function compute() {
-    await page.waitForFunction(() => {
-      const p = document.getElementById("web-ai-console"), a = window.__TUMBO_REALITY_ASSEMBLY__;
+  async function waitNative(id, panelId) {
+    await page.waitForFunction(({id,panelId}) => {
+      const p = document.getElementById(panelId), a = window.__TUMBO_REALITY_ASSEMBLY__;
       const host = p?.closest("#reality-assembly .assembly-css3d-host");
-      return a?.getSnapshot().selectedId === "web-ai" && p?.dataset.lensSurfaceAttached === "true" && !p.hidden
+      return a?.getSnapshot().selectedId === id && p?.dataset.lensSurfaceAttached === "true" && !p.hidden
         && host && host.dataset.surfaceFallback !== "true" && p.closest(".assembly-css3d-renderer")
-        && a.getFeatureObject("web-ai")?.root.children.some(child => child.isCSS3DObject && child.element === p);
-    }, null, {timeout:45_000});
+        && a.getFeatureObject(id)?.root.children.some(child => child.isCSS3DObject && child.element === p);
+    }, {id,panelId}, {timeout:45_000});
+  }
+  async function openFace(name,face) {
+    stage = "open face " + name;
+    const tab=panel().getByRole("tab",{name,exact:true});
+    if(await tab.getAttribute("aria-selected")!=="true") await activate(tab);
+    await page.waitForFunction(({face})=>{
+      const p=document.getElementById("web-ai-console");
+      const t=p?.querySelector('[data-tab="'+face+'"]'), active=p?.querySelector('[data-panel="'+face+'"]');
+      return t?.getAttribute("aria-selected")==="true" && active && !active.hidden
+        && [...p.querySelectorAll("[data-panel]")].every(n=>n===active || n.hidden);
+    },{face});
+    // Wait for real layout after CSS3D composition, not only a tab's ARIA
+    // flag. A collapsed mobile face remains a failure with measured evidence.
+    await panel().locator('[data-panel="'+face+'"]').waitFor({state:"visible",timeout:15_000});
+    assert.equal(await panel().locator("[data-panel]:visible").count(),1);
+  }
+  async function compute() {
+    stage = "attach native Compute object";
+    await waitNative("web-ai","web-ai-console");
     assert.equal(await panel().count(), 1); assert.equal(await hist().count(), 1);
     assert.equal(await panel().getAttribute("data-no-panel-drag"), "true");
     assert.equal(await page.evaluate(() => window.__TUMBO_REALITY_ASSEMBLY__.getSnapshot().objects.filter(o => o.id === "web-ai").length), 1);
-    const tab = panel().getByRole("tab", {name:"COMPUTE", exact:true});
-    await activate(tab);
-    assert.equal(await tab.getAttribute("aria-selected"), "true");
-    assert.equal(await panel().locator('[data-panel="economy"]').isVisible(), true);
+    await openFace("COMPUTE","economy");
   }
   async function upload(body, message) {
     stage = "upload: " + message;
@@ -152,31 +204,41 @@ async function runDevice(browser, device) {
     assert.deepEqual(await upload(body, message), expected, "rejected import must change no receipt or economic state");
   }
   async function select(id) {
-    if (device.mobile) {
-      await activate(page.locator("#reality-assembly [data-directory-toggle]"));
-      await page.locator("#reality-assembly [data-search]").fill(id);
-      const match = page.locator("#reality-assembly .assembly-domain-features > button:visible");
-      assert.equal(await match.count(), 1); await activate(match);
-    } else {
-      const search = page.locator("#reality-assembly [data-quick-search]");
-      await search.fill(id); await search.press("Enter");
+    stage = "directory select " + id;
+    const assembly = page.locator("#reality-assembly");
+    // Desktop quick-search focus deliberately transfers focus to the catalog.
+    // Use the visible directory result on both layouts, not an Enter press
+    // on the input that has just lost focus or an internal navigation API.
+    if (!(await assembly.getAttribute("class")).split(/\s+/).includes("assembly-directory-open")) {
+      if(device.mobile) await activate(assembly.locator("[data-directory-toggle]"));
+      else await activate(assembly.locator("[data-quick-search]"));
     }
+    const search = assembly.locator("[data-search]");
+    await search.waitFor({state:"visible"});
+    await search.fill(id);
+    const label = {"paycore":"Pecunia · PAYCORE","web-ai":"Retia & AI"}[id];
+    assert.ok(label,"explicit directory label required");
+    const match=assembly.locator(".assembly-domain-features").getByRole("button",{name:label,exact:true});
+    await match.waitFor({state:"visible"}); assert.equal(await match.count(),1);
+    await activate(match);
     await page.waitForFunction(id => window.__TUMBO_REALITY_ASSEMBLY__.getSnapshot().selectedId === id, id);
+    await waitNative(id,id==="paycore"?"paycore-console":"web-ai-console");
   }
   async function navigate(expected) {
     stage = "face and object navigation";
     const original = await panel().elementHandle();
     try {
       for (const [name,face] of [["WEB","web"],["AI HELP","ai"],["COMPUTE","economy"]]) {
-        const tab = panel().getByRole("tab",{name,exact:true});
-        await activate(tab); assert.equal(await tab.getAttribute("aria-selected"),"true");
-        assert.equal(await panel().locator("[data-panel]:visible").count(),1);
-        assert.equal(await panel().locator('[data-panel="'+face+'"]').isVisible(),true);
+        await openFace(name,face);
         assert.deepEqual(await read(page),expected);
+        await checkpoint("face "+name+" preserves state");
       }
       await select("paycore");
-      await page.waitForFunction(() => document.getElementById("web-ai-console").dataset.lensSurfaceAttached !== "true");
-      assert.equal(await panel().evaluate(n => n.hidden),true);
+      await page.waitForFunction(() => {
+        const p=document.getElementById("web-ai-console");
+        return p && p.hidden && p.dataset.lensSurfaceAttached !== "true";
+      });
+      result.checkpoints.push({label:"native PAYCORE attached; Compute detached"});
       await select("web-ai"); await compute();
       assert.equal(await page.evaluate(n => n === document.getElementById("web-ai-console"),original),true);
       assert.deepEqual(await read(page),expected);
@@ -225,13 +287,17 @@ async function runDevice(browser, device) {
     const funded = await fund();
     const first = await upload(metered.envelope,"Saved 330 input and 20 output tokens.");
     history(first,[metered]); observed(funded,first,metered);
-    await rejections(first); await navigate(first); await checkpoint("metered receipt and rejection/navigation invariants");
+    await checkpoint("metered receipt observed without balance change");
+    await rejections(first); await checkpoint("metered duplicate/conflict/tamper/JSON rejection");
+    await navigate(first); await checkpoint("metered receipt and rejection/navigation invariants");
     const restored = await reload([metered],first.journal,fresh);
     await rejections(restored); await checkpoint("metered reload without replay");
     const fundedAgain = await fund(); history(fundedAgain,[metered]);
     const both = await upload(unknown.envelope,"Saved the receipt. Token counts were unavailable.");
     history(both,[metered,unknown]); observed(fundedAgain,both,unknown);
-    await rejections(both,true); await navigate(both); await checkpoint("unmetered receipt preserves nonzero balances");
+    await checkpoint("unmetered receipt observed without balance change");
+    await rejections(both,true); await checkpoint("both receipts reject duplicate/conflict/tamper/JSON");
+    await navigate(both); await checkpoint("unmetered receipt preserves nonzero balances");
     const restoredBoth = await reload([metered,unknown],both.journal,fresh);
     await rejections(restoredBoth,true); await checkpoint("both receipts survive reload without replay");
     const twice = await reload([metered,unknown],both.journal,fresh);
@@ -249,6 +315,24 @@ async function runDevice(browser, device) {
     result.passed = true;
   } catch (e) {
     result.failedAt=stage; result.error=e.stack ?? String(e);
+    if(page) result.layoutAtFailure=await page.evaluate(()=>{
+      const p=document.getElementById("web-ai-console"), a=document.getElementById("reality-assembly");
+      function geometry(n){
+        if(!n)return null;const r=n.getBoundingClientRect(),c=getComputedStyle(n);
+        return {hidden:n.hidden,ariaSelected:n.getAttribute("aria-selected"),rect:{x:r.x,y:r.y,width:r.width,height:r.height},
+          clientHeight:n.clientHeight,scrollHeight:n.scrollHeight,scrollTop:n.scrollTop,
+          display:c.display,visibility:c.visibility,overflowY:c.overflowY,flex:c.flex,minHeight:c.minHeight,
+          height:c.height,transform:c.transform};
+      }
+      return {viewport:{width:innerWidth,height:innerHeight},selectedId:window.__TUMBO_REALITY_ASSEMBLY__?.getSnapshot()?.selectedId,
+        assemblyClass:a?.className,readingProjection:a?.dataset.readingProjection,
+        panel:geometry(p),head:geometry(p?.querySelector(".web-ai-head")),body:geometry(p?.querySelector(".web-ai-body")),
+        tabs:geometry(p?.querySelector(".web-ai-tabs")),boundary:geometry(p?.querySelector(".web-ai-boundary")),
+        faces:[...(p?.querySelectorAll("[data-panel]")??[])].map(n=>({face:n.dataset.panel,...geometry(n)})),
+        tabStates:[...(p?.querySelectorAll("[data-tab]")??[])].map(n=>({tab:n.dataset.tab,...geometry(n)})),
+        directory:geometry(a?.querySelector(".assembly-directory")),searchValue:a?.querySelector("[data-search]")?.value,
+        visibleResults:[...(a?.querySelectorAll(".assembly-domain-features > button:not([hidden])")??[])].map(n=>n.textContent)};
+    }).catch(error=>({error:String(error)}));
     await page?.screenshot({path:resolve(out,device.name+"-failure.png")}).catch(()=>{});
   } finally { for (const c of contexts.reverse()) await c.close(); }
   if (result.pageErrors.length || result.forbiddenRequests.length) {
