@@ -24,8 +24,14 @@ await adapter.stop(session);
 The host must explicitly grant the extra capabilities; they do not expand the
 native registry's grants. `neural.lab` is a separate experimental opt-in and is
 not enabled by the example above. A transport implements
-`invoke(name, arguments, {signal})`. It is a trusted host adapter, not a sandbox
-for arbitrary executable plug-ins or a remote authentication system.
+`supports(name, agent)` (synchronous, strictly `true` for supported operations)
+and `invoke(name, arguments, {signal, agent})`. The frozen `agent` context is
+derived from the existing native controller: `sourceId`, `sessionId`, and
+`generation`. Model arguments are not identity or permission evidence. The
+host must implement authorization against that context. An invoke-only legacy
+transport now fails closed until it declares support. It is a trusted host
+adapter, not a sandbox for arbitrary executable plug-ins or a remote
+authentication system.
 
 ## Tools and boundaries
 
@@ -33,8 +39,13 @@ for arbitrary executable plug-ins or a remote authentication system.
 - `contracts.inspect` calls the existing owner's `verify()` and `contracts()`.
   It returns a detached, simulation-labelled, read-only view. No contract or
   balance mutation is exposed by this extra capability.
-- `memory.search`, `memory.read`, and `neural.predict` appear only when a host
-  transport exists and the corresponding additional capability is granted.
+- `memory.search`, `memory.read`, and `neural.predict` appear only when the
+  host explicitly supports that operation for the active native session and
+  its additional capability is granted. Availability is rechecked immediately
+  before dispatch and before returning a result. Revocation cannot roll back
+  work already accepted by the host. Native session identity is pinned when
+  the attachment is created, so mutation of the caller's reference cannot
+  retarget reads or stop another agent.
 - A deadline aborts the request and fences late results. It does not reverse
   an operation already accepted by another authority. No automatic retry.
 - Stop aborts pending extra requests and delegates source-specific cleanup to
@@ -68,6 +79,15 @@ A separate local Node/Python process proof connected the native registry,
 read-only native contract inspection, recovered exact notes, and experimental
 checkpoint inference. Private notes/checkpoints and that local proof host are
 NOT committed by this change.
+
+## November 25 refinement evidence
+
+`node --test services/vivo/web/phone/tests/convergence-port-scope.test.mjs`
+was run against the exact original adapter blob and the revised adapter using
+controller/registry test doubles: original 1/8 passed; revised 8/8 passed.
+The original native integration fixture was adapted for the explicit support
+contract, but its full suite, browser and hosted release were not run in this
+refinement environment. No provider calls, credits or live grants were used.
 
 ## Remaining integration
 
