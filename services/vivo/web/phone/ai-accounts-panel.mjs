@@ -166,6 +166,38 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   const path=node('input');path.id='vivoMemoryPath';path.value='0,1,2,3';path.setAttribute('aria-label','Bank sequence');
   const out=node('pre','No memory compiled or loaded.');out.id='vivoMemoryResult';out.style.whiteSpace='pre-wrap';out.style.overflowWrap='anywhere';out.setAttribute('aria-live','polite');
   let memory=null;const memrun=fn=>async()=>{try{await fn();}catch(e){out.textContent=message(e);}};
+  const memoryAccess=()=>globalThis.VivaPhoneAgentAdmin?.memoryAccess;
+  const agentPicker=node('select');agentPicker.id='vivoMemoryAgent';agentPicker.setAttribute('aria-label','Active native agent session');
+  const accessStatus=node('p','Agent recall is not shared.');accessStatus.setAttribute('aria-live','polite');
+  function refreshMemoryAgents(){
+    const selected=agentPicker.value,admin=globalThis.VivaPhoneAgentAdmin,access=memoryAccess();
+    const status=access?.status(),agents=(admin?.agents?.()||[]).filter(a=>a.status==='active');
+    agentPicker.replaceChildren();
+    const placeholder=node('option','Choose an active agent');placeholder.value='';agentPicker.append(placeholder);
+    const granted=new Set((status?.granted||[]).map(a=>a.sessionId));
+    for(const agent of agents){
+      const option=node('option',agent.label+' · generation '+agent.generation+(granted.has(agent.sessionId)?' · granted':''));option.value=agent.sessionId;agentPicker.append(option);
+    }
+    if(agents.some(a=>a.sessionId===selected))agentPicker.value=selected;
+    accessStatus.textContent=!access?'Native memory access unavailable.':!status.mounted?'Compile or restore this world’s memory first.':
+      'Memory revision '+status.revision+' · '+status.granted.length+' active read-only grant(s).';
+    grantMemory.disabled=!status?.mounted||!agents.length;
+    revokeMemory.disabled=!status?.granted.length;
+    revokeEveryMemory.disabled=!status?.granted.length;
+  }
+  const grantMemory=button('Grant selected agent read-only recall',memrun(()=>{
+    if(!agentPicker.value)throw Error('Choose an active agent first.');
+    memoryAccess()?.grant(agentPicker.value);refreshMemoryAgents();
+  }));
+  const revokeMemory=button('Revoke selected agent recall',memrun(()=>{
+    if(!agentPicker.value)throw Error('Choose an active agent first.');
+    memoryAccess()?.revoke(agentPicker.value);refreshMemoryAgents();
+  }));
+  const revokeEveryMemory=button('Revoke all agent recall',memrun(()=>{memoryAccess()?.revokeAll();refreshMemoryAgents();}));
+  const publishMemory=candidate=>{
+    if(disposed)throw Error('Memory panel closed.');
+    memoryAccess()?.publish(candidate);memory=candidate;refreshMemoryAgents();
+  };
   const ensureScope=()=>{const scope=getScope();if(memory&&JSON.stringify(memory.summary().scope)!==JSON.stringify(scope))memory=null;return scope;};
   section.append(records,button('Load synthetic example',memrun(()=>{
     const scope=ensureScope();records.value=JSON.stringify(exampleMemory(scope).checkpoint().records,null,2);out.textContent='Synthetic example loaded into editor, not saved.';
@@ -173,18 +205,20 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     const scope=ensureScope(),candidate=new ConstructiveMemory({scope,records:JSON.parse(records.value),revision:Date.now()});
     await store.save(scope,candidate.checkpoint());
     if(JSON.stringify(getScope())!==JSON.stringify(scope))throw Error('World changed; saved model remains scoped to its original world.');
-    memory=candidate;out.textContent=JSON.stringify(candidate.summary(),null,2);
+    publishMemory(candidate);out.textContent=JSON.stringify(candidate.summary(),null,2);
   })),button('Restore this world’s memory',memrun(async()=>{
     const scope=ensureScope(),p=await store.load(scope);if(!p)throw Error('No saved memory for this world/branch.');
     const candidate=ConstructiveMemory.restore(p);if(JSON.stringify(candidate.summary().scope)!==JSON.stringify(scope))throw Error('Stored memory scope does not match this world.');if(JSON.stringify(getScope())!==JSON.stringify(scope))throw Error('World changed while loading.');
-    memory=candidate;records.value=JSON.stringify(p.records,null,2);out.textContent=JSON.stringify(candidate.summary(),null,2);
+    publishMemory(candidate);records.value=JSON.stringify(p.records,null,2);out.textContent=JSON.stringify(candidate.summary(),null,2);
   })),start,path,button('Recall through the network',memrun(()=>{
     const scope=ensureScope();if(!memory)throw Error('Compile or restore this world’s memory first.');
     out.textContent=JSON.stringify(memory.query({scope,start:Number(start.value),path:path.value.split(',').map(Number)}),null,2);
-  })),out);
+  })),out,node('h4','Agent access to this memory'),node('p','Grants are per active local agent session. Recall is read-only and does not authorize actions. Compiling, restoring or changing worlds clears grants.'),
+    agentPicker,button('Refresh active agents',memrun(refreshMemoryAgents)),grantMemory,revokeMemory,revokeEveryMemory,accessStatus);
+  refreshMemoryAgents();
   root.prepend(section);
   if(resumeSignIn)run(render)();
-  return {section,refresh:render,openProviders:()=>{clearSelection();search.value='';renderProviders();search.focus();},dispose:()=>{disposed=true;selectionEpoch++;section.remove();}};
+  return {section,refresh:render,openProviders:()=>{clearSelection();search.value='';renderProviders();search.focus();},dispose:()=>{disposed=true;selectionEpoch++;memoryAccess()?.clear();section.remove();}};
 }
 export function installIntelligenceControls() {
   let mounted,observer;

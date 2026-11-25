@@ -2,6 +2,7 @@ import { PhoneEngineClient } from './client.mjs';
 import { projectForRenderer, detectPhoneCapabilities } from './engine.mjs';
 import { AndroidPhoneBridge } from './bridge.mjs';
 import { AgentToolRegistry } from './agent-tools.mjs';
+import {createConstructiveMemoryAgentBridge} from './constructive-memory-agent.mjs';
 import { HandsFreeProjection } from './projection.mjs';
 import { PhoneTwoHandCamera } from './two-hand-camera.mjs';
 import { formatPersistenceStatus } from './persistence-status.mjs';
@@ -1538,21 +1539,30 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.
   // re-enable stay on the separate user-admin surface below. Both objects
   // live in the same page, so this is role separation within the documented
   // local trust model, not browser/Android OS permission security.
+  const memoryBridge=createConstructiveMemoryAgentBridge({registry,getScope:()=>{
+    const host=window.VivaPhoneEngine,e=host?.publishedSnapshot?.();
+    if(!host?.active||!e?.snapshot?.worldId)return null;
+    return {worldId:e.snapshot.worldId,projectId:e.branchId||'local'};
+  }});
+  for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])window.addEventListener(event,memoryBridge.syncScope);
   window.VivaAgentTools = Object.freeze({
     list: () => registry.list(),
-    listFor: session => registry.listFor(session),
-    invoke: (name, args, context) => registry.invoke(name, args, context),
-    invokeFor: (session, name, args) => registry.invokeFor(session, name, args),
+    listFor: memoryBridge.tools.listFor,
+    invoke: (name, args, context) => name==='neural.predict'
+      ? memoryBridge.tools.invokeFor(context?.session||context?.sessionId,name,args)
+      : registry.invoke(name,args,context),
+    invokeFor: memoryBridge.tools.invokeFor,
   });
   window.VivaPhoneAgentAdmin = Object.freeze({
     register: spec => registry.registerAgent(spec),
-    stop: (session, reason) => registry.stopAgent(session, reason),
+    stop: (session, reason) => {memoryBridge.admin.revoke(session);return registry.stopAgent(session,reason);},
     reenable: sourceOrSession => registry.reenableAgent(sourceOrSession),
     beginContact: (session, values) => registry.beginContact(session, values),
     updateContact: (session, contactId, values) => registry.updateContact(session, contactId, values),
     endContact: (session, contactId, reason) => registry.endContact(session, contactId, reason),
     agents: () => registry.agents(),
-    revokeAll: () => registry.revokeAll(),
+    memoryAccess: memoryBridge.admin,
+    revokeAll: () => {memoryBridge.admin.revokeAll();return registry.revokeAll();},
     audit: () => structuredClone(registry.audit),
   });
 window.VivaPhoneEngine = Object.freeze({
