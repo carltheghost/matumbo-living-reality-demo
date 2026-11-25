@@ -15,7 +15,7 @@ async function fixture({transport=null,timeoutMs=200}={}) {
   await registry.setLocalCapabilities(['world.read']);
   const native=registry.registerAgent({sourceId:'reviewer',capabilities:['world.read']});
   const economy=economyOwner ??= createSimulatedEconomy({storage:null});
-  const adapter=new VivoConvergenceAdapter({registry,economy,transport,timeoutMs});
+  const adapter=new VivoConvergenceAdapter({registry,economy,transport:transport&&{supports:()=>true,...transport},timeoutMs});
   return {engine,controller,registry,native,economy,adapter};
 }
 
