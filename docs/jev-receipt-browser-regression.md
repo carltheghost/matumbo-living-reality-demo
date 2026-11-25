@@ -1,0 +1,8 @@
+# Jev receipt browser regression (isolated CI)
+This follow-up to PR #147 uses deterministic synthetic receipt envelopes built with Node SHA-256 and validated by the production parser. The real browser file input is used; no provider credential, live billing or world action is involved.
+ 
+Run npm install --no-save --package-lock=false playwright@1.57.0, then npx playwright install chromium. Serve the repository via python3 -m http.server 8123 --bind 127.0.0.1 and run npm run test:browser:jev-receipts. MATUMBO_PREVIEW_URL can select a loopback checkout, and MATUMBO_BROWSER_DEVICE can select desktop or mobile. The default runs both.
+ 
+Coverage includes actual CSS3D Compute attachment, nonzero demo accounting, metered and missing-count receipts, duplicate and correctly rehashed conflicts, tampered digest, malformed JSON, face and object navigation, same-tab reload without replay, and an isolated clean browser context. All rejected uploads must preserve full history and economic snapshots. Page errors, forbidden network attempts and launch failures fail the test. Saved usage is not billing; demo accounting resets on reload while receipt history persists in sessionStorage. A fresh context must not inherit the journal.
+ 
+The dedicated workflow runs desktop and mobile independently with fail-fast disabled. It uploads JSON evidence and screenshots even on failures. It does not deploy. Emulated mobile is not a physical-device test. The older simulated-economy gate remains unchanged.
