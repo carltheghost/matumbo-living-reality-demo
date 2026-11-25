@@ -37,7 +37,7 @@ assert.notEqual(metered.row.identity, unknown.row.identity);
 const tampered = { ...metered.envelope, receiptJson: metered.envelope.receiptJson.replace('"input_tokens":330', '"input_tokens":999') };
 await assert.rejects(parseJevAdviceReceipt(tampered), /No valid downloadable/);
 const panelSelector = "#web-ai-console", historySelector = '[aria-label="Saved Jev receipt history"]';
-const statusSelector = '#web-ai-console [data-panel="economy"] > p[role="status"]';
+const statusSelector = '#web-ai-console [aria-label="Imported Jev usage — not billing"] > p[role="status"]';
 const duplicate = "This request is already in the saved usage history.";
 const conflictMessage = "This request has a conflicting receipt.";
 // Only the five unrelated startup GETs observed in the first actual CI run
@@ -56,7 +56,7 @@ const devices = [{ name: "desktop", viewport: { width: 1280, height: 900 }, mobi
   { name: "mobile", viewport: { width: 390, height: 844 }, mobile: true }];
 const selected = process.env.MATUMBO_BROWSER_DEVICE;
 assert.ok(!selected || devices.some(d => d.name === selected), "unknown browser device");
-const report = { schema: "matumbo.jev-receipt-browser-regression/5", passed: false,
+const report = { schema: "matumbo.jev-receipt-browser-regression/6", passed: false,
   preview: base.href, playwrightVersion: require("playwright/package.json").version,
   fixtures: [metered, conflict, unknown].map(f => f.envelope.receiptSha256), results: [] };
 async function read(page) {
@@ -195,7 +195,26 @@ async function runDevice(browser, device) {
     assert.ok(layout.tabsScrollWidth<=layout.tabsWidth+2,"face tabs must not overflow horizontally");
     assert.ok(new Set(layout.tabTops).size===1,"three face tabs must stay on one row");
     assert.ok(layout.tabHeights.every(height=>height>=44),"face switches must remain touch-sized");
-    if(face==="economy")assert.ok(layout.panelScrollHeight>layout.panelHeight,"long Compute face scrolls on its own object");
+    if(face==="economy"){
+      assert.ok(layout.panelScrollHeight>layout.panelHeight,"long Compute face scrolls on its own object");
+      const imported = panel().getByRole("region",{name:"Imported Jev usage — not billing",exact:true});
+      assert.equal(await imported.count(),1);
+      assert.equal(await imported.locator(historySelector).count(),1);
+      const placement = await imported.evaluate(region=>{
+        const face=region.closest('[data-panel="economy"]');
+        const metrics=face.querySelector(".web-ai-economy-grid");
+        const wallet=face.querySelector('[aria-label="Demo compute credits to add"]');
+        const lab=face.querySelector('[aria-label="Provider reported cost in USD"]');
+        const input=region.querySelector('input[type="file"]');
+        const note=document.getElementById(input.getAttribute("aria-describedby"));
+        const follows=node=>Boolean(node && region.compareDocumentPosition(node)&Node.DOCUMENT_POSITION_FOLLOWING);
+        return {beforeMetrics:follows(metrics),beforeWallet:follows(wallet),beforeLab:follows(lab),
+          sameNativeObject:region.closest("#web-ai-console")?.dataset.lensSurfaceAttached==="true",
+          associatedBoundary:region.contains(note)&&note.textContent.includes("not provider-authenticated")&&note.textContent.includes("do not change demo credits")};
+      });
+      assert.deepEqual(placement,{beforeMetrics:true,beforeWallet:true,beforeLab:true,sameNativeObject:true,associatedBoundary:true});
+      result.checkpoints.push({label:"import and saved usage precede demo accounting controls",...placement});
+    }
   }
   async function compute() {
     stage = "attach native Compute object";
@@ -213,7 +232,10 @@ async function runDevice(browser, device) {
     // The native file input must be reachable through the actual scroll
     // surface; a positive offscreen bounding box alone is not sufficient.
     await (device.mobile ? input.tap({trial:true}) : input.click({trial:true}));
-    assert.ok(await panel().evaluate(p=>p.scrollTop>0),"file import must be reachable by scrolling the object skin");
+    // The receipt entry is now near the top and may already be visible.
+    // The trial action above still verifies actual pointer/touch reachability;
+    // require that the control belongs to the one native scroll surface.
+    assert.equal(await input.evaluate(n=>n.closest("#web-ai-console")?.dataset.lensSurfaceAttached),"true");
     // Real browser file input/change event; no direct journal calls or storage seeding.
     await input.setInputFiles({name:"jev-fixture.json", mimeType:"application/json",
       buffer:Buffer.from(typeof body === "string" ? body : JSON.stringify(body))});
