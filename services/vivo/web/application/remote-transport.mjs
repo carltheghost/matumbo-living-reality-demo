@@ -226,6 +226,51 @@ export class RemoteTransport {
       return body.result;
     }finally{clearTimeout(timer);}
   }
+  async _verifyRestoreReceipt(receipt){
+    const keys=['schema','capsuleDigest','baseRevision','committedAt','addedMemoryIds','added','duplicates',
+      'totalAtCommit','newReportsPrivateAtCommit','receiptSha256'];
+    const count=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
+    if(!reasoningKeys(receipt,keys)||receipt.schema!=='vivo.memory-capsule-commit/1'||
+      !reasoningDigest(receipt.capsuleDigest)||!reasoningDigest(receipt.baseRevision)||!reasoningDigest(receipt.receiptSha256)||
+      !count(receipt.committedAt,0,Number.MAX_SAFE_INTEGER)||receipt.newReportsPrivateAtCommit!==true||
+      !count(receipt.added,1,64)||!count(receipt.duplicates,0,64)||receipt.added+receipt.duplicates>64||
+      !count(receipt.totalAtCommit,receipt.added+receipt.duplicates,128)||
+      !Array.isArray(receipt.addedMemoryIds)||receipt.addedMemoryIds.length!==receipt.added||
+      new Set(receipt.addedMemoryIds).size!==receipt.added||
+      !receipt.addedMemoryIds.every(id=>typeof id==='string'&&/^council:[0-9a-f]{64}$/.test(id)))
+      throw Error('MEMORY_RESTORE_RECEIPT_INVALID');
+    const {receiptSha256,...core}=receipt;
+    const hash=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(core)));
+    if(Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('')!==receiptSha256)
+      throw Error('MEMORY_RESTORE_RECEIPT_INVALID');
+    return receipt;
+  }
+  async reconcileMemoryRestore(review,fetchImpl=globalThis.fetch){
+    if(this.role!=='owner')throw Error('MEMORY_OWNER_REQUIRED');
+    const key={capsuleDigest:review?.capsuleDigest,baseRevision:review?.baseRevision},socket=this.socket;
+    if(!reasoningDigest(key.capsuleDigest)||!reasoningDigest(key.baseRevision))throw Error('MEMORY_CAPSULE_REVIEW_REQUIRED');
+    const result=await this._memoryRequest('/api/neural-memory/capsule','receipt',key,fetchImpl);
+    if(result?.schema!=='vivo.memory-capsule-commit-status/1'||result.capsuleDigest!==key.capsuleDigest||
+      result.baseRevision!==key.baseRevision||!['committed','not-observed'].includes(result.status))
+      throw Error('MEMORY_RESTORE_RECEIPT_INVALID');
+    if(result.status==='committed'){
+      const receipt=await this._verifyRestoreReceipt(result.receipt);
+      if(receipt.capsuleDigest!==key.capsuleDigest||receipt.baseRevision!==key.baseRevision)
+        throw Error('MEMORY_RESTORE_RECEIPT_INVALID');
+    }else if(result.receipt!==null)throw Error('MEMORY_RESTORE_RECEIPT_INVALID');
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    return result;
+  }
+  async recentMemoryRestores(fetchImpl=globalThis.fetch){
+    if(this.role!=='owner')throw Error('MEMORY_OWNER_REQUIRED');
+    const socket=this.socket;
+    const result=await this._memoryRequest('/api/neural-memory/capsule','recent',{limit:16},fetchImpl);
+    if(result?.schema!=='vivo.memory-capsule-commit-history/1'||!Array.isArray(result.receipts)||result.receipts.length>16)
+      throw Error('MEMORY_RESTORE_RECEIPT_INVALID');
+    for(const receipt of result.receipts)await this._verifyRestoreReceipt(receipt);
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    return result.receipts;
+  }
   async reviewMemoryCapsule(capsule,fetchImpl=globalThis.fetch){
     if(this.role!=='owner')throw Error('MEMORY_OWNER_REQUIRED');
     const snapshot=structuredClone(capsule);

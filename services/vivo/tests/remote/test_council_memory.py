@@ -352,3 +352,61 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.rpc("preview",{"capsule":{"oversize":"x"*CAPSULE_MAX_REQUEST}},
                                         expected=413,capsule=True),"REQUEST_TOO_LARGE")
         self.assertEqual(self.vault.db.execute("SELECT count(*) FROM evidence").fetchone()[0],40)
+
+
+    async def test_restore_receipt_survives_lost_response_restart_and_later_grants(self):
+        raw=json.dumps([self.mission,self.arithmetic],separators=(",",":"),ensure_ascii=False)
+        capsule={"schema":"matumbo.neural-memory-capsule/1","journalJson":raw,
+                 "journalSha256":hashlib.sha256(raw.encode()).hexdigest()}
+        review=await self.rpc("preview",{"capsule":capsule},capsule=True)
+        key={k:review[k] for k in ("capsuleDigest","baseRevision")}
+        initial=await self.rpc("receipt",key,capsule=True)
+        self.assertEqual(initial["status"],"not-observed")
+        self.assertIsNone(initial["receipt"])
+        self.assertEqual(await self.rpc("recent",{"limit":16},capsule=True),
+                         {"schema":"vivo.memory-capsule-commit-history/1","receipts":[]})
+        # Simulate losing the reply after the server committed: discard the
+        # successful restore result and reconcile only via the read endpoint.
+        await self.rpc("restore",{"capsule":capsule,"review":key},capsule=True)
+        committed=await self.rpc("receipt",key,capsule=True)
+        receipt=committed["receipt"]
+        self.assertEqual(committed["status"],"committed")
+        self.assertEqual(receipt["added"],2)
+        self.assertEqual(receipt["totalAtCommit"],2)
+        self.assertEqual(receipt["addedMemoryIds"],["council:"+e["reportSha256"] for e in [self.mission,self.arithmetic]])
+        self.assertTrue(receipt["newReportsPrivateAtCommit"])
+        original={k:v for k,v in receipt.items() if k!="receiptSha256"}
+        self.assertEqual(receipt["receiptSha256"],hashlib.sha256(json.dumps(original,separators=(",",":")).encode()).hexdigest())
+        self.assertEqual(await self.rpc("receipt",key,token=self.one["token"],expected=403,capsule=True),"FORBIDDEN")
+        self.assertEqual(await self.rpc("recent",{"limit":16},token=self.one["token"],expected=403,capsule=True),"FORBIDDEN")
+        self.assertEqual(await self.rpc("recent",{"limit":17},expected=400,capsule=True),"REQUEST_INVALID")
+        await self.rpc("grant",{"memoryId":receipt["addedMemoryIds"][0],"invitationId":self.one["id"],"granted":True})
+        # Historical receipt is stable; current grant status is separate.
+        self.assertEqual(await self.rpc("receipt",key,capsule=True),committed)
+        again=await self.rpc("preview",{"capsule":capsule},capsule=True)
+        second={k:again[k] for k in ("capsuleDigest","baseRevision")}
+        self.assertEqual((await self.rpc("restore",{"capsule":capsule,"review":second},capsule=True))["status"],"unchanged")
+        self.assertEqual((await self.rpc("receipt",second,capsule=True))["status"],"not-observed")
+        self.assertEqual((await self.rpc("recent",{"limit":16},capsule=True))["receipts"],[receipt])
+        await self.client.close();self.vault.close();self.invites.close()
+        self.vault=EvidenceVault(self.path/"evidence.sqlite");self.invites=InvitationStore(self.path/"invites.sqlite")
+        await self.start()
+        self.assertEqual(await self.rpc("receipt",key,capsule=True),committed)
+        self.assertEqual((await self.rpc("recent",{"limit":1},capsule=True))["receipts"],[receipt])
+        self.vault.db.execute("UPDATE capsule_restore_receipts SET receipt_digest=?",("0"*64,))
+        self.assertEqual(await self.rpc("receipt",key,expected=409,capsule=True),"STORED_RESTORE_RECEIPT_INVALID")
+
+    async def test_restore_receipt_write_failure_rolls_back_evidence_and_receipt(self):
+        raw=json.dumps([self.mission,self.arithmetic],separators=(",",":"),ensure_ascii=False)
+        capsule={"schema":"matumbo.neural-memory-capsule/1","journalJson":raw,
+                 "journalSha256":hashlib.sha256(raw.encode()).hexdigest()}
+        review=await self.rpc("preview",{"capsule":capsule},capsule=True)
+        key={k:review[k] for k in ("capsuleDigest","baseRevision")}
+        self.vault.db.execute("""CREATE TRIGGER fail_receipt BEFORE INSERT ON capsule_restore_receipts
+            BEGIN SELECT RAISE(ABORT,'fixture receipt failure'); END""")
+        self.assertEqual(await self.rpc("restore",{"capsule":capsule,"review":key},expected=503,capsule=True),"MEMORY_STORAGE_UNAVAILABLE")
+        self.assertEqual(self.vault.db.execute("SELECT count(*) FROM evidence").fetchone()[0],0)
+        self.assertEqual((await self.rpc("receipt",key,capsule=True))["status"],"not-observed")
+        self.vault.db.execute("DROP TRIGGER fail_receipt")
+        await self.rpc("restore",{"capsule":capsule,"review":key},capsule=True)
+        self.assertEqual((await self.rpc("receipt",key,capsule=True))["status"],"committed")

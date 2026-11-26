@@ -271,3 +271,29 @@ test('remote capsule review and restore use the dedicated owner-only path and ex
   assert.equal(calls.length,2);
   await shutdown(transport,socket);
 });
+
+
+test('restore reconciliation is read-only, receipt-bound, and owner-only',async()=>{
+  const {transport,socket}=await admitted();
+  const key={capsuleDigest:'a'.repeat(64),baseRevision:'b'.repeat(64)};
+  const core={schema:'vivo.memory-capsule-commit/1',...key,committedAt:123,addedMemoryIds:['council:'+'c'.repeat(64)],
+    added:1,duplicates:1,totalAtCommit:2,newReportsPrivateAtCommit:true};
+  const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(core)));
+  const receipt={...core,receiptSha256:Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('')};
+  const result={schema:'vivo.memory-capsule-commit-status/1',...key,status:'committed',receipt};
+  const calls=[];
+  const respond=value=>async(url,init)=>{
+    assert.equal(url,'http://vivo.test/api/neural-memory/capsule');calls.push(JSON.parse(init.body));
+    return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:value})};
+  };
+  assert.deepEqual(await transport.reconcileMemoryRestore(key,respond(result)),result);
+  assert.deepEqual(await transport.recentMemoryRestores(respond({schema:'vivo.memory-capsule-commit-history/1',receipts:[receipt]})),[receipt]);
+  await assert.rejects(transport.reconcileMemoryRestore(key,respond({...result,receipt:{...receipt,totalAtCommit:99}})),/MEMORY_RESTORE_RECEIPT_INVALID/);
+  assert.equal((await transport.reconcileMemoryRestore(key,respond({...result,status:'not-observed',receipt:null}))).status,'not-observed');
+  assert.deepEqual(calls.map(x=>x.op),['receipt','recent','receipt','receipt']);
+  transport.role='editor';
+  await assert.rejects(transport.reconcileMemoryRestore(key,respond(result)),/MEMORY_OWNER_REQUIRED/);
+  await assert.rejects(transport.recentMemoryRestores(respond(result)),/MEMORY_OWNER_REQUIRED/);
+  assert.equal(calls.length,4);
+  await shutdown(transport,socket);
+});
