@@ -1,7 +1,7 @@
 import {Renderer,embed} from '/render.js';
 import {Camera} from '/camera.js';
 import {GripHost} from '/services/vivo/web/authority/grip-host.mjs';
-import {RemoteTransport} from './remote-transport.mjs';
+import {RemoteTransport, verifyMemoryBackupSet, MEMORY_BACKUP_SET_MAX_BYTES} from './remote-transport.mjs';
 import {ApplicationInputs} from './interactions.mjs';
 import {eventTime,screenTarget,viewBasis,projectAccepted,timestampedCameraClass} from './adapters.mjs';
 import {installCameraConstraintFallback,normalizeCameraFacing} from './camera-compat.mjs';
@@ -180,11 +180,36 @@ const backupStart=element('button',{type:'button',textContent:'Download first ba
 const backupNext=element('button',{type:'button',textContent:'Download next backup part',disabled:true});
 const backupStatus=element('p',{textContent:'No backup started.'});
 backupStatus.setAttribute('aria-label','Vault backup status');backupStatus.setAttribute('aria-live','polite');
-vaultBackup.append(backupStart,backupNext,backupStatus);
-let backupEpoch=0,backupBusy=false,backupCursor=null;
-function updateBackupControls(){backupStart.disabled=backupBusy;backupNext.disabled=backupBusy||!backupCursor;}
+const backupComplete=element('button',{type:'button',textContent:'Download complete backup file'});
+const backupVerifyFile=element('input',{type:'file',accept:'.json,application/json'});
+backupVerifyFile.setAttribute('aria-label','Complete backup file to verify');
+const backupPartSelect=element('select',{disabled:true});backupPartSelect.setAttribute('aria-label','Verified recovery part');
+const backupExtract=element('button',{type:'button',textContent:'Extract verified capsule',disabled:true});
+const backupVerifyStatus=element('p',{textContent:'No complete backup selected.'});
+backupVerifyStatus.setAttribute('aria-label','Backup verification status');backupVerifyStatus.setAttribute('aria-live','polite');
+vaultBackup.append(backupStart,backupNext,backupComplete,backupStatus,
+  element('p',{className:'muted',textContent:'A complete backup bundles all parts with an ordered digest manifest. Verify a downloaded file locally, then extract each capsule for the existing reviewed restore flow. A complete backup is not a one-step full server restore.'}),
+  backupVerifyFile,backupPartSelect,backupExtract,backupVerifyStatus);
+let backupEpoch=0,backupBusy=false,backupCursor=null,verifiedBackup=null;
+function updateBackupControls(){
+  backupStart.disabled=backupBusy;backupNext.disabled=backupBusy||!backupCursor;backupComplete.disabled=backupBusy;
+  backupVerifyFile.disabled=backupBusy;backupPartSelect.disabled=backupBusy||!verifiedBackup;
+  backupExtract.disabled=backupBusy||!verifiedBackup||backupPartSelect.value==='';
+}
+function clearVerifiedBackup(){
+  verifiedBackup=null;
+  backupPartSelect.replaceChildren(element('option',{value:'',textContent:'Select a verified part'}));
+  backupPartSelect.value='';backupVerifyFile.value='';
+}
+function requestBackupFile(text,filename){
+  const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));
+  const link=element('a',{href:url,download:filename,hidden:true});
+  try{document.body.append(link);link.click();}
+  finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+}
 function resetVaultBackup(){
-  backupEpoch++;backupBusy=false;backupCursor=null;vaultBackup.open=false;
+  backupEpoch++;backupBusy=false;backupCursor=null;vaultBackup.open=false;clearVerifiedBackup();
+  backupVerifyStatus.textContent='No complete backup selected.';
   backupStatus.textContent='No backup started.';updateBackupControls();
 }
 async function downloadVaultPart(first){
@@ -214,6 +239,45 @@ async function downloadVaultPart(first){
 }
 backupStart.onclick=()=>void downloadVaultPart(true);
 backupNext.onclick=()=>void downloadVaultPart(false);
+backupComplete.onclick=async()=>{
+  if(backupBusy||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++backupEpoch;
+  const current=()=>transport===client&&!client.closed&&epoch===backupEpoch&&role==='owner';
+  backupBusy=true;updateBackupControls();
+  backupStatus.textContent='Collecting one revision of the vault…';
+  try{
+    const complete=await client.prepareCompleteMemoryBackup();if(!current())return;
+    requestBackupFile(complete.text,complete.filename);
+    backupStatus.textContent='Complete backup download requested: '+complete.total+' reports · '+complete.parts+' capsule parts. Verify the saved file locally.';
+  }catch(error){if(current())backupStatus.textContent=(error.code||error.message)+' · No complete backup exported. Start again.';}
+  finally{if(current()){backupBusy=false;updateBackupControls();}}
+};
+backupVerifyFile.onchange=async()=>{
+  if(backupBusy||role!=='owner'||!transport||transport.closed)return;
+  const file=backupVerifyFile.files?.[0];if(!file)return;
+  const client=transport,epoch=++backupEpoch;
+  const current=()=>transport===client&&!client.closed&&epoch===backupEpoch&&role==='owner';
+  backupBusy=true;clearVerifiedBackup();updateBackupControls();
+  backupVerifyStatus.textContent='Verifying locally; nothing is uploaded.';
+  try{
+    if(file.size>MEMORY_BACKUP_SET_MAX_BYTES)throw Error('Complete backup exceeds the file limit.');
+    const parsed=JSON.parse(await file.text());if(!current())return;
+    const verified=await verifyMemoryBackupSet(parsed);if(!current())return;
+    verifiedBackup=verified;
+    verified.parts.forEach((part,index)=>backupPartSelect.append(element('option',{value:String(index),
+      textContent:part.count===0?'Empty capsule':'Reports '+(part.offset+1)+'–'+(part.offset+part.count)})));
+    backupVerifyStatus.textContent='Verified complete backup: '+verified.total+' reports · '+verified.parts.length+' capsule parts. No missing or duplicate runs.';
+  }catch(error){if(current())backupVerifyStatus.textContent=(error.code||error.message)+' · No capsule available to extract.';}
+  finally{if(current()){backupBusy=false;updateBackupControls();}}
+};
+backupPartSelect.onchange=updateBackupControls;
+backupExtract.onclick=()=>{
+  if(backupBusy||role!=='owner'||!transport||transport.closed||!verifiedBackup||backupPartSelect.value==='')return;
+  const part=verifiedBackup.parts[Number(backupPartSelect.value)];if(!part)return;
+  requestBackupFile(JSON.stringify(part.capsule,null,2)+'\n',
+    'neural-memory-'+part.journalSha256.slice(0,12)+'.json');
+  backupVerifyStatus.textContent='Verified capsule download requested. Restore this part through the reviewed capsule flow.';
+};
 memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory,vaultRecovery,vaultBackup);
 const agentContext=element('details');
 agentContext.append(element('summary',{textContent:'Prepare agent evidence context'}),
