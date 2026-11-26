@@ -34,7 +34,7 @@ jobs:
         run: |
           node --test services/vivo/web/phone/tests/station-integration.test.mjs
           cd services/vivo/agent-station
-          python3 -m unittest test_station test_memory_port test_continuity test_strategy -v
+          python3 -m unittest test_station test_memory_port test_continuity test_strategy test_launch_existing -v
       - name: Verify canonical simulated-economy bytes are staged for the phone route
         run: python3 scripts/vivo/stage_economy_dependencies.py --check
       - name: Verify staged economy assets are covered by shell, hash, and phone CI checks

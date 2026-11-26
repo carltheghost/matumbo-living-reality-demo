@@ -54,7 +54,7 @@ jobs:
       - run: node --test services/vivo/web/phone/tests/*.test.mjs
       - name: Verify the exact Station broker and strategy runtime
         working-directory: services/vivo/agent-station
-        run: python3 -m unittest test_station test_memory_port test_continuity test_strategy -v
+        run: python3 -m unittest test_station test_memory_port test_continuity test_strategy test_launch_existing -v
       - name: Check browser module syntax
         run: |
           find services/vivo/web/phone -name '*.mjs' -print0 | xargs -0 -n1 node --check
