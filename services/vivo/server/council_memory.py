@@ -111,6 +111,71 @@ def optimum():
     return feasible[0]
 
 
+MISSION_JOB_ID = re.compile(r"^[A-Z][A-Z0-9]{0,7}$")
+MISSION_MAX_JOBS = 12
+MISSION_MAX_UNIT = 1_000_000
+
+
+def normalize_agent_mission(mission):
+    """Exact bounded integer resource allocation; no executable instructions."""
+    need(exact(mission, {"budget", "jobs", "required", "conflicts"}), "MISSION_INVALID")
+    budget, jobs, required, conflicts = (mission[k] for k in ("budget", "jobs", "required", "conflicts"))
+    need(integer(budget, 0, MISSION_MAX_JOBS * MISSION_MAX_UNIT)
+         and isinstance(jobs, list) and 1 <= len(jobs) <= MISSION_MAX_JOBS, "MISSION_INVALID")
+    normalized, ids = [], set()
+    for job in jobs:
+        need(exact(job, {"id", "cost", "value"}) and matches(MISSION_JOB_ID, job["id"])
+             and integer(job["cost"], 0, MISSION_MAX_UNIT) and integer(job["value"], 0, MISSION_MAX_UNIT)
+             and job["id"] not in ids, "MISSION_INVALID")
+        ids.add(job["id"])
+        normalized.append({"id": job["id"], "cost": job["cost"], "value": job["value"]})
+    need(isinstance(required, list) and len(required) <= len(ids)
+         and all(isinstance(item, str) and item in ids for item in required)
+         and len(set(required)) == len(required), "MISSION_INVALID")
+    need(isinstance(conflicts, list) and len(conflicts) <= len(ids)*(len(ids)-1)//2, "MISSION_INVALID")
+    pairs = set()
+    for pair in conflicts:
+        need(isinstance(pair, list) and len(pair) == 2
+             and all(isinstance(item, str) and item in ids for item in pair)
+             and pair[0] != pair[1], "MISSION_INVALID")
+        key = tuple(sorted(pair))
+        need(key not in pairs, "MISSION_INVALID")
+        pairs.add(key)
+    return {"budget": budget, "jobs": sorted(normalized, key=lambda job: job["id"]),
+            "required": sorted(required), "conflicts": [list(pair) for pair in sorted(pairs)]}
+
+
+def mission_certificate(mission):
+    """Enumerate combinations independently of the browser's bitmask solver."""
+    jobs = mission["jobs"]
+    required = set(mission["required"])
+    rows = []
+    for size in range(len(jobs)+1):
+        for subset in combinations(jobs, size):
+            ids = {job["id"] for job in subset}
+            cost = sum(job["cost"] for job in subset)
+            value = sum(job["value"] for job in subset)
+            feasible = (cost <= mission["budget"] and required.issubset(ids)
+                        and not any(a in ids and b in ids for a,b in mission["conflicts"]))
+            rows.append([",".join(job["id"] for job in subset), cost, value, feasible])
+    rows.sort(key=lambda row: row[0])
+    feasible = sorted((row for row in rows if row[3]), key=lambda row: (-row[2], row[1], row[0]))
+    def projected(row):
+        return {"candidate": row[0], "cost": row[1], "value": row[2], "feasible": True} if row else None
+    best = feasible[0] if feasible else None
+    second = feasible[1] if len(feasible) > 1 else None
+    return projected(best), {
+        "method": "exhaustive-bounded-subsets/1",
+        "subsetsChecked": len(rows), "feasibleSubsets": len(feasible),
+        "equallyValuableOptima": sum(row[2] == best[2] for row in feasible) if best else 0,
+        "runnerUp": projected(second),
+        "optimalityGap": best[2] - second[2] if second else None,
+        "enumerationSha256": hashlib.sha256(canonical(rows).encode("utf-8")).hexdigest(),
+        "ranking": "value-desc-cost-asc-id-asc",
+        "includesEmptyChoice": True,
+    }
+
+
 def validate_envelope(envelope):
     """Reproduce the bounded JS /1 and /2 report contract independently.
 
@@ -709,6 +774,39 @@ class EvidenceVault:
         # a provider signature or new permission to execute the proposal.
         return {**decision, "decisionSha256": hashlib.sha256(canonical(decision).encode("utf-8")).hexdigest()}
 
+    def plan_agent_mission(self, principal, args):
+        need(exact(args, {"mission", "selection"}), "MISSION_INVALID")
+        mission = normalize_agent_mission(args["mission"])
+        selection = args["selection"]
+        need(exact(selection, {"mode", "providers", "limit"}), "MISSION_INVALID")
+        mode, providers, limit = (selection[k] for k in ("mode", "providers", "limit"))
+        need(mode in ("fixture", "live") and isinstance(providers, list) and len(providers) <= len(PROVIDERS)
+             and all(isinstance(p, str) and p in PROVIDERS for p in providers)
+             and len(set(providers)) == len(providers) and integer(limit, 1, 8), "MISSION_INVALID")
+        scope = {"mode": mode, "providers": sorted(providers), "limit": limit}
+        known = {"budget": 7, "jobs": [{"id": name, "cost": cost, "value": value}
+                 for name, (cost, value) in JOBS.items()], "required": [], "conflicts": []}
+        best, proof = mission_certificate(mission)
+        # Historical observations apply ONLY to an identical known mission.
+        # No private archive query at all for a new problem.
+        evidence = None
+        if mission == known:
+            evidence = self.agent_reason(principal, {"task": "route-constraint-v1", **scope})
+            need(best == evidence["proposal"])
+        decision = {
+            "schema": "vivo.agent-mission-plan/1",
+            "mission": mission,
+            "missionSha256": hashlib.sha256(canonical(mission).encode("utf-8")).hexdigest(),
+            "selection": scope, "proposal": best,
+            "status": "optimal" if best is not None else "infeasible",
+            "proof": proof,
+            "evidence": {"status": "exact-task-recall" if evidence is not None else "mission-not-in-memory-contract",
+                         "receipt": evidence},
+            "authority": "evidence-only", "providerAuthenticated": False,
+            "providerCallsInitiated": 0, "postedChargesUsd": None, "worldActionExecuted": False,
+        }
+        return {**decision, "decisionSha256": hashlib.sha256(canonical(decision).encode("utf-8")).hexdigest()}
+
     def set_grant(self, principal, memory_id, invitation_id, granted, invitations):
         need(principal.role == "owner", "FORBIDDEN", 403)
         need(matches(INVITE_ID, invitation_id) and type(granted) is bool, "REQUEST_INVALID")
@@ -745,6 +843,8 @@ class EvidenceVault:
             return self.agent_context(principal, args)
         if op == "reason":
             return self.agent_reason(principal, args)
+        if op == "plan":
+            return self.plan_agent_mission(principal, args)
         if op == "get":
             need(exact(args, {"memoryId"}), "REQUEST_INVALID")
             return self.get(principal, args["memoryId"])

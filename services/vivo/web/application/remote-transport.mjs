@@ -177,6 +177,92 @@ export async function verifyMemoryBackupSet(bundle,{cryptoApi=globalThis.crypto}
     parts:Object.freeze(parts),includesGrants:false,includesRestoreReceipts:false});
 }
 
+// Mission planning is a read-only bounded solver. Unlike the fixed legacy
+// certificate, it accepts an explicit resource-allocation definition.
+const MISSION_MAX_JOBS=12, MISSION_MAX_UNIT=1000000;
+const missionCheck=condition=>{if(!condition)throw Error('MEMORY_MISSION_INVALID');};
+const missionInteger=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
+const asciiCompare=(a,b)=>a<b?-1:a>b?1:0;
+export function normalizeAgentMission(mission){
+  missionCheck(reasoningKeys(mission,['budget','jobs','required','conflicts'])&&
+    missionInteger(mission.budget,0,MISSION_MAX_JOBS*MISSION_MAX_UNIT)&&Array.isArray(mission.jobs)&&
+    mission.jobs.length>=1&&mission.jobs.length<=MISSION_MAX_JOBS);
+  const ids=new Set(),jobs=[];
+  for(const job of mission.jobs){
+    missionCheck(reasoningKeys(job,['id','cost','value'])&&typeof job.id==='string'&&/^[A-Z][A-Z0-9]{0,7}$/.test(job.id)&&
+      !ids.has(job.id)&&missionInteger(job.cost,0,MISSION_MAX_UNIT)&&missionInteger(job.value,0,MISSION_MAX_UNIT));
+    ids.add(job.id);jobs.push({id:job.id,cost:job.cost,value:job.value});
+  }
+  const required=mission.required,conflicts=mission.conflicts;
+  missionCheck(Array.isArray(required)&&required.length<=ids.size&&required.every(id=>ids.has(id))&&
+    new Set(required).size===required.length&&Array.isArray(conflicts)&&conflicts.length<=ids.size*(ids.size-1)/2);
+  const pairs=new Set();
+  for(const pair of conflicts){
+    missionCheck(Array.isArray(pair)&&pair.length===2&&pair.every(id=>ids.has(id))&&pair[0]!==pair[1]);
+    const key=[...pair].sort(asciiCompare).join(',');
+    missionCheck(!pairs.has(key));pairs.add(key);
+  }
+  return {budget:mission.budget,jobs:jobs.sort((a,b)=>asciiCompare(a.id,b.id)),
+    required:[...required].sort(asciiCompare),conflicts:[...pairs].sort(asciiCompare).map(key=>key.split(','))};
+}
+function normalizeMissionSelection(scope){
+  missionCheck(reasoningKeys(scope,['mode','providers','limit'])&&['fixture','live'].includes(scope.mode)&&
+    Array.isArray(scope.providers)&&scope.providers.length<=7&&scope.providers.every(p=>REASONING_PROVIDERS.has(p))&&
+    new Set(scope.providers).size===scope.providers.length&&missionInteger(scope.limit,1,8));
+  return {mode:scope.mode,providers:[...scope.providers].sort(asciiCompare),limit:scope.limit};
+}
+const missionHash=async(text,cryptoApi)=>{
+  missionCheck(Boolean(cryptoApi?.subtle));
+  const bytes=await cryptoApi.subtle.digest('SHA-256',new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
+};
+async function recomputeMission(mission,cryptoApi){
+  // Independent bitmask enumeration, including the empty subset.
+  const rows=[];
+  for(let mask=0;mask<(1<<mission.jobs.length);mask++){
+    const jobs=mission.jobs.filter((_,i)=>mask&(1<<i)),ids=new Set(jobs.map(j=>j.id));
+    const cost=jobs.reduce((sum,j)=>sum+j.cost,0),value=jobs.reduce((sum,j)=>sum+j.value,0);
+    const feasible=cost<=mission.budget&&mission.required.every(id=>ids.has(id))&&
+      mission.conflicts.every(([a,b])=>!ids.has(a)||!ids.has(b));
+    rows.push([jobs.map(j=>j.id).join(','),cost,value,feasible]);
+  }
+  rows.sort((a,b)=>asciiCompare(a[0],b[0]));
+  const feasible=rows.filter(row=>row[3]).sort((a,b)=>b[2]-a[2]||a[1]-b[1]||asciiCompare(a[0],b[0]));
+  const [best,second]=feasible;
+  const projected=row=>row?{candidate:row[0],cost:row[1],value:row[2],feasible:true}:null;
+  return {proposal:projected(best),proof:{method:'exhaustive-bounded-subsets/1',
+    subsetsChecked:rows.length,feasibleSubsets:feasible.length,
+    equallyValuableOptima:best?feasible.filter(row=>row[2]===best[2]).length:0,
+    runnerUp:projected(second),optimalityGap:second?best[2]-second[2]:null,
+    enumerationSha256:await missionHash(JSON.stringify(rows),cryptoApi),
+    ranking:'value-desc-cost-asc-id-asc',includesEmptyChoice:true}};
+}
+export async function verifyAgentMissionPlan(packet,request,{cryptoApi=globalThis.crypto}={}){
+  missionCheck(reasoningKeys(request,['mission','selection']));
+  const mission=normalizeAgentMission(request.mission),scope=normalizeMissionSelection(request.selection);
+  missionCheck(reasoningKeys(packet,['schema','mission','missionSha256','selection','proposal','status','proof','evidence',
+    'authority','providerAuthenticated','providerCallsInitiated','postedChargesUsd','worldActionExecuted','decisionSha256'])&&
+    packet.schema==='vivo.agent-mission-plan/1'&&packet.authority==='evidence-only'&&packet.providerAuthenticated===false&&
+    packet.providerCallsInitiated===0&&packet.postedChargesUsd===null&&packet.worldActionExecuted===false&&
+    reasoningDigest(packet.decisionSha256)&&JSON.stringify(packet.mission)===JSON.stringify(mission)&&
+    JSON.stringify(packet.selection)===JSON.stringify(scope)&&
+    packet.missionSha256===await missionHash(JSON.stringify(mission),cryptoApi));
+  const {decisionSha256,...core}=packet;
+  missionCheck(await missionHash(JSON.stringify(core),cryptoApi)===decisionSha256);
+  const expected=await recomputeMission(mission,cryptoApi);
+  // Compare the server's independently computed entire certificate to ours.
+  missionCheck(JSON.stringify(packet.proposal)===JSON.stringify(expected.proposal)&&
+    JSON.stringify(packet.proof)===JSON.stringify(expected.proof)&&
+    packet.status===(expected.proposal?'optimal':'infeasible')&&reasoningKeys(packet.evidence,['status','receipt']));
+  const known={budget:7,jobs:REASONING_JOBS,required:[],conflicts:[]};
+  if(JSON.stringify(mission)===JSON.stringify(known)){
+    missionCheck(packet.evidence.status==='exact-task-recall');
+    await verifyAgentReasoningReceipt(packet.evidence.receipt,{task:'route-constraint-v1',...scope},{cryptoApi});
+    missionCheck(exactPlan(packet.evidence.receipt.proposal,expected.proposal));
+  }else missionCheck(packet.evidence.status==='mission-not-in-memory-contract'&&packet.evidence.receipt===null);
+  return packet;
+}
+
 export class RemoteTransport {
   constructor({url,token,WebSocket:Socket=globalThis.WebSocket,onState=()=>{},onError=()=>{},onClose=()=>{},timeoutMs=7000}={}) {
     if(typeof url!=='string'||!url.length||typeof token!=='string'||token.length<20||typeof Socket!=='function')
@@ -513,6 +599,14 @@ export class RemoteTransport {
       throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');
     return Object.freeze({filename:'council-'+report.mode+'-'+digest.slice(0,12)+'.json',
       text:JSON.stringify(envelope,null,2)+'\n',digest});
+  }
+  async planAgentMission(request,fetchImpl=globalThis.fetch){
+    missionCheck(reasoningKeys(request,['mission','selection']));
+    const scope={mission:normalizeAgentMission(request.mission),selection:normalizeMissionSelection(request.selection)},socket=this.socket;
+    const packet=await this.memoryRequest('plan',scope,fetchImpl);
+    await verifyAgentMissionPlan(packet,scope);
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    return packet;
   }
   async reasonAgentMission(selection,fetchImpl=globalThis.fetch){
     const scope=structuredClone(selection),socket=this.socket;

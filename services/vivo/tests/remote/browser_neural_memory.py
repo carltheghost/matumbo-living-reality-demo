@@ -217,6 +217,26 @@ async def main():
                 await reasoning.locator("summary").click()
                 reasoning_text=await reasoning.inner_text()
                 check("reasoning retains exact evidence digest and dissent",digest in reasoning_text and "kimi · over-budget · A,C" in reasoning_text)
+                await editor_sheet.get_by_text("Plan a custom agent mission",exact=True).click()
+                planner=editor_sheet.get_by_label("Verified custom mission result")
+                await editor_sheet.get_by_role("button",name="Solve and verify mission").click()
+                await status(editor_status,"Mission verified · 1 authorized reports")
+                await planner.locator("summary").click()
+                plan_text=await planner.inner_text()
+                check("exact custom definition reuses only authorized original task evidence",
+                      "Verified plan: C,D" in plan_text and "16 subsets checked" in plan_text and digest in plan_text)
+                mission_input=editor_sheet.get_by_label("Agent mission definition")
+                changed=json.loads(await mission_input.input_value())
+                changed["required"]=["A"]
+                changed["conflicts"]=[["A","B"]]
+                await mission_input.fill(json.dumps(changed))
+                check("editing mission invalidates displayed certificate",not (await planner.inner_text()).strip())
+                await editor_sheet.get_by_role("button",name="Solve and verify mission").click()
+                await status(editor_status,"Mission verified · 0 authorized reports")
+                plan_text=await planner.inner_text()
+                check("custom constraints change optimum without transferring unrelated memory",
+                      "Verified plan: A,D · cost 5 / 7 · value 9" in plan_text and
+                      "Historical Council proposals were not recalled." in plan_text and digest not in plan_text)
                 await editor_sheet.get_by_label("Agent evidence provenance").select_option("live")
                 await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
                 await status(editor_status,"No matching authorized evidence.")
