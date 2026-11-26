@@ -239,18 +239,22 @@ const missionHash=async(text,cryptoApi)=>{
   const bytes=await cryptoApi.subtle.digest('SHA-256',new TextEncoder().encode(text));
   return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 };
-async function recomputeMission(mission,cryptoApi){
+function enumerateMissionRows(mission,respectBudget=true){
   // Independent bitmask enumeration, including the empty subset.
   const dependencies=mission.dependencies??[],rows=[];
   for(let mask=0;mask<(1<<mission.jobs.length);mask++){
     const jobs=mission.jobs.filter((_,i)=>mask&(1<<i)),ids=new Set(jobs.map(j=>j.id));
     const cost=jobs.reduce((sum,j)=>sum+j.cost,0),value=jobs.reduce((sum,j)=>sum+j.value,0);
-    const feasible=cost<=mission.budget&&mission.required.every(id=>ids.has(id))&&
+    const feasible=(!respectBudget||cost<=mission.budget)&&mission.required.every(id=>ids.has(id))&&
       mission.conflicts.every(([a,b])=>!ids.has(a)||!ids.has(b))&&
       dependencies.every(([target,dep])=>!ids.has(target)||ids.has(dep));
     rows.push([jobs.map(j=>j.id).join(','),cost,value,feasible]);
   }
   rows.sort((a,b)=>asciiCompare(a[0],b[0]));
+  return rows;
+}
+async function recomputeMission(mission,cryptoApi){
+  const dependencies=mission.dependencies??[],rows=enumerateMissionRows(mission);
   const feasible=rows.filter(row=>row[3]).sort((a,b)=>b[2]-a[2]||a[1]-b[1]||asciiCompare(a[0],b[0]));
   const [best,second]=feasible;
   const projected=row=>row?{candidate:row[0],cost:row[1],value:row[2],feasible:true}:null;
@@ -304,6 +308,55 @@ export async function verifyAgentMissionPlan(packet,request,{cryptoApi=globalThi
     await verifyAgentReasoningReceipt(packet.evidence.receipt,{task:'route-constraint-v1',...scope},{cryptoApi});
     missionCheck(exactPlan(packet.evidence.receipt.proposal,expected.proposal));
   }else missionCheck(packet.evidence.status==='mission-not-in-memory-contract'&&packet.evidence.receipt===null);
+  return packet;
+}
+
+function normalizeMissionComparison(request){
+  missionCheck(reasoningKeys(request,['mission','budgets','targetValue']));
+  const mission=normalizeAgentMission(request.mission),{budgets,targetValue}=request,max=MISSION_MAX_JOBS*MISSION_MAX_UNIT;
+  missionCheck(Array.isArray(budgets)&&budgets.length>=1&&budgets.length<=8&&
+    budgets.every(n=>missionInteger(n,0,max))&&new Set(budgets).size===budgets.length&&
+    (targetValue===null||missionInteger(targetValue,0,max)));
+  return {mission,budgets:[...budgets].sort((a,b)=>a-b),targetValue};
+}
+export async function verifyMissionBudgetComparison(packet,request,{cryptoApi=globalThis.crypto}={}){
+  const {mission,budgets,targetValue}=normalizeMissionComparison(request);
+  // Compute the best plan for each distinct cost first, then remove dominated
+  // costs. This differs from the server's sorted sweep of viable subsets.
+  const rows=enumerateMissionRows(mission,false),viable=rows.filter(row=>row[3]),byCost=new Map();
+  for(const row of viable){
+    const old=byCost.get(row[1]);
+    if(!old||row[2]>old[2]||(row[2]===old[2]&&asciiCompare(row[0],old[0])<0))byCost.set(row[1],row);
+  }
+  const frontier=[];
+  let best=-1;
+  for(const cost of [...byCost.keys()].sort((a,b)=>a-b)){
+    const row=byCost.get(cost);
+    if(row[2]>best){frontier.push(row);best=row[2];}
+  }
+  const project=row=>row?{candidate:row[0],cost:row[1],value:row[2],feasible:true}:null;
+  // Verify each scenario by ranking the entire viable set under that budget,
+  // rather than relying on the frontier projection used by the server.
+  const scenario=budget=>{
+    const eligible=viable.filter(row=>row[1]<=budget).sort((a,b)=>b[2]-a[2]||a[1]-b[1]||asciiCompare(a[0],b[0]));
+    return {budget,proposal:project(eligible[0]),feasibleSubsets:eligible.length};
+  };
+  let target=null;
+  if(targetValue!==null){
+    const reached=viable.filter(row=>row[2]>=targetValue).sort((a,b)=>a[1]-b[1]||b[2]-a[2]||asciiCompare(a[0],b[0]))[0];
+    target={requestedValue:targetValue,status:reached?'attainable':'unattainable',minimumBudget:reached?reached[1]:null,proposal:project(reached)};
+  }
+  const core={schema:'vivo.agent-budget-comparison/1',mission,missionSha256:await missionHash(JSON.stringify(mission),cryptoApi),
+    budgets,targetValue,baseline:scenario(mission.budget),scenarios:budgets.map(scenario),
+    nextImprovement:project(frontier.find(row=>row[1]>mission.budget)),
+    minimumFeasibleBudget:frontier.length?frontier[0][1]:null,maximumAttainableValue:frontier.length?frontier.at(-1)[2]:null,
+    target,proof:{method:'exhaustive-resource-frontier/1',subsetsChecked:rows.length,structurallyFeasibleSubsets:viable.length,
+      frontierPoints:frontier.length,enumerationSha256:await missionHash(JSON.stringify(rows),cryptoApi),
+      frontierSha256:await missionHash(JSON.stringify(frontier),cryptoApi),ranking:'value-desc-cost-asc-id-asc'},
+    evidence:{status:'hypothetical-resource-comparison',recordsUsed:0},authority:'evidence-only',providerAuthenticated:false,
+    providerCallsInitiated:0,postedChargesUsd:null,worldActionExecuted:false};
+  const expected={...core,decisionSha256:await missionHash(JSON.stringify(core),cryptoApi)};
+  missionCheck(JSON.stringify(packet)===JSON.stringify(expected));
   return packet;
 }
 
@@ -643,6 +696,13 @@ export class RemoteTransport {
       throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');
     return Object.freeze({filename:'council-'+report.mode+'-'+digest.slice(0,12)+'.json',
       text:JSON.stringify(envelope,null,2)+'\n',digest});
+  }
+  async compareMissionBudgets(request,fetchImpl=globalThis.fetch){
+    const scope=normalizeMissionComparison(request),socket=this.socket;
+    const packet=await this.memoryRequest('compare-budgets',scope,fetchImpl);
+    await verifyMissionBudgetComparison(packet,scope);
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    return packet;
   }
   async planAgentMission(request,fetchImpl=globalThis.fetch){
     missionCheck(reasoningKeys(request,['mission','selection']));

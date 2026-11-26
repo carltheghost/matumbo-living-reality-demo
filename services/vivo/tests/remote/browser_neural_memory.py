@@ -244,6 +244,26 @@ async def main():
                 check("dependency planner verifies prerequisites and ordered layers on mobile",
                       "Verified plan: A,C,D · cost 10 / 10 · value 18" in layered and
                       all(label in layered for label in ("Layer 1: A","Layer 2: D","Layer 3: C")) and digest not in layered)
+                await editor_sheet.get_by_text("Compare mission resource budgets",exact=True).click()
+                comparison=editor_sheet.get_by_label("Verified budget comparison result")
+                await editor_sheet.get_by_label("Mission budgets to compare").fill("5,7,10")
+                await editor_sheet.get_by_label("Mission target value").fill("18")
+                await editor_sheet.get_by_role("button",name="Compare and verify budgets").click()
+                await status(editor_status,"Budget comparison verified · 3 scenarios")
+                comparison_text=await comparison.inner_text()
+                check("verified resource comparison finds minimum target budget and next improvement",
+                      "Target 18 requires minimum budget 10: A,C,D · cost 10 · value 18" in comparison_text and
+                      "Next improvement above baseline: A,B,C,D · cost 14 · value 25" in comparison_text and
+                      "No memory reports recalled" in comparison_text and digest not in comparison_text)
+                check("resource comparison shows independent best plans across three budgets",
+                      await comparison.locator("tbody tr").count()==3 and
+                      all(value in comparison_text for value in ("A,D","A,B","A,C,D")))
+                await editor_sheet.get_by_label("Mission target value").fill("26")
+                check("changing comparison target clears the prior certificate",not (await comparison.inner_text()).strip())
+                await editor_sheet.get_by_role("button",name="Compare and verify budgets").click()
+                await status(editor_status,"Budget comparison verified · 3 scenarios")
+                check("unattainable target reported without inventing a plan",
+                      "Target 26 is unattainable under these constraints." in await comparison.inner_text())
                 dependency_mission=json.loads(await mission_input.input_value())
                 dependency_mission["required"]=["C"];dependency_mission["budget"]=9
                 await mission_input.fill(json.dumps(dependency_mission))

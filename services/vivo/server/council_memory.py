@@ -175,7 +175,7 @@ def normalize_agent_mission(mission):
     return result
 
 
-def mission_certificate(mission):
+def mission_rows(mission, *, respect_budget=True):
     """Enumerate combinations independently of the browser's bitmask solver."""
     jobs = mission["jobs"]
     required = set(mission["required"])
@@ -186,11 +186,19 @@ def mission_certificate(mission):
             ids = {job["id"] for job in subset}
             cost = sum(job["cost"] for job in subset)
             value = sum(job["value"] for job in subset)
-            feasible = (cost <= mission["budget"] and required.issubset(ids)
+            feasible = ((not respect_budget or cost <= mission["budget"]) and required.issubset(ids)
                         and not any(a in ids and b in ids for a,b in mission["conflicts"])
                         and all(target not in ids or dep in ids for target,dep in dependencies))
             rows.append([",".join(job["id"] for job in subset), cost, value, feasible])
     rows.sort(key=lambda row: row[0])
+    return rows
+
+
+def mission_certificate(mission):
+    jobs = mission["jobs"]
+    required = set(mission["required"])
+    dependencies = mission.get("dependencies", [])
+    rows = mission_rows(mission)
     feasible = sorted((row for row in rows if row[3]), key=lambda row: (-row[2], row[1], row[0]))
     def projected(row):
         return {"candidate": row[0], "cost": row[1], "value": row[2], "feasible": True} if row else None
@@ -226,6 +234,68 @@ def mission_certificate(mission):
                       "dependencyLayers": mission_layers(chosen, dependencies),
                       "executionAuthority": "advisory-only"})
     return projected(best), proof
+
+
+def mission_budget_comparison(args):
+    """A single structural enumeration answers all resource scenarios.
+
+    No historical reports are queried: the costs/values are caller-supplied
+    scenario assumptions, not observations, prices or execution authorization.
+    """
+    need(exact(args, {"mission", "budgets", "targetValue"}), "MISSION_COMPARISON_INVALID")
+    mission = normalize_agent_mission(args["mission"])
+    budgets, target_value = args["budgets"], args["targetValue"]
+    maximum = MISSION_MAX_JOBS * MISSION_MAX_UNIT
+    need(isinstance(budgets, list) and 1 <= len(budgets) <= 8
+         and all(integer(budget, 0, maximum) for budget in budgets)
+         and len(set(budgets)) == len(budgets)
+         and (target_value is None or integer(target_value, 0, maximum)),
+         "MISSION_COMPARISON_INVALID")
+    budgets = sorted(budgets)
+    rows = mission_rows(mission, respect_budget=False)
+    viable = sorted((row for row in rows if row[3]), key=lambda row: (row[1], -row[2], row[0]))
+    # Group ordering chooses the highest value and smallest ID at a given cost.
+    # Strict improvements are exactly the non-dominated cost/value breakpoints.
+    frontier, best_value = [], -1
+    for row in viable:
+        if row[2] > best_value:
+            frontier.append(row)
+            best_value = row[2]
+
+    def proposal(row):
+        return {"candidate": row[0], "cost": row[1], "value": row[2], "feasible": True} if row else None
+
+    def scenario(budget):
+        point = next((row for row in reversed(frontier) if row[1] <= budget), None)
+        return {"budget": budget, "proposal": proposal(point),
+                "feasibleSubsets": sum(row[1] <= budget for row in viable)}
+
+    baseline = scenario(mission["budget"])
+    next_step = next((row for row in frontier if row[1] > mission["budget"]), None)
+    target = None
+    if target_value is not None:
+        reached = next((row for row in frontier if row[2] >= target_value), None)
+        target = {"requestedValue": target_value, "status": "attainable" if reached else "unattainable",
+                  "minimumBudget": reached[1] if reached else None, "proposal": proposal(reached)}
+    result = {
+        "schema": "vivo.agent-budget-comparison/1",
+        "mission": mission, "missionSha256": hashlib.sha256(canonical(mission).encode("utf-8")).hexdigest(),
+        "budgets": budgets, "targetValue": target_value,
+        "baseline": baseline, "scenarios": [scenario(budget) for budget in budgets],
+        "nextImprovement": proposal(next_step),
+        "minimumFeasibleBudget": frontier[0][1] if frontier else None,
+        "maximumAttainableValue": frontier[-1][2] if frontier else None,
+        "target": target,
+        "proof": {"method": "exhaustive-resource-frontier/1", "subsetsChecked": len(rows),
+                  "structurallyFeasibleSubsets": len(viable), "frontierPoints": len(frontier),
+                  "enumerationSha256": hashlib.sha256(canonical(rows).encode("utf-8")).hexdigest(),
+                  "frontierSha256": hashlib.sha256(canonical(frontier).encode("utf-8")).hexdigest(),
+                  "ranking": "value-desc-cost-asc-id-asc"},
+        "evidence": {"status": "hypothetical-resource-comparison", "recordsUsed": 0},
+        "authority": "evidence-only", "providerAuthenticated": False, "providerCallsInitiated": 0,
+        "postedChargesUsd": None, "worldActionExecuted": False,
+    }
+    return {**result, "decisionSha256": hashlib.sha256(canonical(result).encode("utf-8")).hexdigest()}
 
 
 def validate_envelope(envelope):
@@ -897,6 +967,8 @@ class EvidenceVault:
             return self.agent_reason(principal, args)
         if op == "plan":
             return self.plan_agent_mission(principal, args)
+        if op == "compare-budgets":
+            return mission_budget_comparison(args)
         if op == "get":
             need(exact(args, {"memoryId"}), "REQUEST_INVALID")
             return self.get(principal, args["memoryId"])

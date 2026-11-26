@@ -383,9 +383,22 @@ dependencyExample.onclick=()=>{
   missionInput.dispatchEvent(new Event('input'));
 };
 const plannerResult=element('section');plannerResult.setAttribute('aria-label','Verified custom mission result');
-plannerArea.append(dependencyExample,missionInput,missionPlan,plannerResult);
+const comparisonArea=element('details');
+comparisonArea.append(element('summary',{textContent:'Compare mission resource budgets'}),
+  element('p',{className:'muted',textContent:'Compare 1–8 budgets for the same job values, constraints and dependencies. Optional target value finds the minimum feasible budget. Assumptions only; no live prices or historical evidence recall.'}));
+const comparisonBudgets=element('input',{type:'text',value:'5,7,10',maxLength:96});
+comparisonBudgets.setAttribute('aria-label','Mission budgets to compare');
+const comparisonTarget=element('input',{type:'text',value:'',maxLength:8,placeholder:'Optional target value'});
+comparisonTarget.setAttribute('aria-label','Mission target value');
+const comparisonRun=element('button',{type:'button',textContent:'Compare and verify budgets'});
+const comparisonResult=element('section');comparisonResult.setAttribute('aria-label','Verified budget comparison result');
+comparisonArea.append(comparisonBudgets,comparisonTarget,comparisonRun,comparisonResult);
+plannerArea.append(dependencyExample,missionInput,missionPlan,plannerResult,comparisonArea);
 agentContext.append(plannerArea);
-function clearReasoning(){reasoningResult.replaceChildren();plannerResult.replaceChildren();}
+function clearReasoning(){reasoningResult.replaceChildren();plannerResult.replaceChildren();comparisonResult.replaceChildren();}
+for(const control of [comparisonBudgets,comparisonTarget])control.addEventListener('input',()=>{
+  memoryEpoch++;comparisonResult.replaceChildren();memoryStatus.textContent='Comparison assumptions changed. Verify again.';
+});
 missionInput.addEventListener('input',()=>{
   memoryEpoch++;clearReasoning();memoryStatus.textContent='Mission changed. Solve this exact definition again.';
 });
@@ -403,6 +416,7 @@ function clearMemoryView(){
   memoryFile.value='';resetVaultCapsule();resetVaultBackup();memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
   taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;reasonEvidence.disabled=false;
   missionInput.value=JSON.stringify(defaultMission,null,2);plannerArea.open=false;
+  comparisonBudgets.value='5,7,10';comparisonTarget.value='';comparisonArea.open=false;
   memoryStatus.textContent='Connect to recall evidence.';
 }
 const memoryAction=fn=>async()=>{
@@ -528,6 +542,38 @@ missionPlan.onclick=memoryAction(async(client,current)=>{
     }
   }else plannerResult.append(element('p',{textContent:'Custom task has no matching evidence contract. Historical Council proposals were not recalled.'}));
   memoryStatus.textContent='Mission verified · '+(receipt?receipt.evidence.recordsUsed:0)+' authorized reports';
+});
+comparisonRun.onclick=memoryAction(async(client,current)=>{
+  let mission;try{mission=JSON.parse(missionInput.value);}catch{throw Error('Mission must be valid JSON.');}
+  const tokens=comparisonBudgets.value.split(',').map(value=>value.trim()),target=comparisonTarget.value.trim();
+  if(!tokens.every(value=>/^\d{1,8}$/.test(value))||(target&&!/^\d{1,8}$/.test(target)))
+    throw Error('Enter comma-separated whole-number budgets and an optional whole-number target.');
+  memoryResults.replaceChildren();resetSharing();memoryCursor=null;memoryMore.hidden=true;
+  const result=await client.compareMissionBudgets({mission,budgets:tokens.map(Number),targetValue:target?Number(target):null});
+  if(!current())return;
+  const describe=p=>p?(p.candidate||'Empty choice')+' · cost '+p.cost+' · value '+p.value:'No feasible plan';
+  comparisonResult.append(element('h4',{textContent:'Independently verified budget trade-offs'}),
+    element('p',{textContent:'Baseline budget '+result.baseline.budget+': '+describe(result.baseline.proposal)}));
+  const table=element('table'),heading=element('tr');
+  for(const name of ['Budget','Best plan','Cost','Value','Feasible plans'])heading.append(element('th',{textContent:name}));
+  const header=element('thead'),body=element('tbody');header.append(heading);table.append(header,body);
+  for(const row of result.scenarios){
+    const tr=element('tr'),p=row.proposal;
+    for(const value of [row.budget,p?(p.candidate||'Empty choice'):'Infeasible',p?.cost??'—',p?.value??'—',row.feasibleSubsets])
+      tr.append(element('td',{textContent:String(value)}));
+    body.append(tr);
+  }
+  comparisonResult.append(table,element('p',{textContent:result.nextImprovement?
+    'Next improvement above baseline: '+describe(result.nextImprovement):'No higher-value breakpoint above baseline.'}),
+    element('p',{textContent:result.minimumFeasibleBudget===null?'No structurally feasible combination.':
+      'Minimum feasible budget: '+result.minimumFeasibleBudget+' · maximum attainable value: '+result.maximumAttainableValue}));
+  if(result.target)comparisonResult.append(element('p',{textContent:result.target.status==='attainable'?
+    'Target '+result.target.requestedValue+' requires minimum budget '+result.target.minimumBudget+': '+describe(result.target.proposal):
+    'Target '+result.target.requestedValue+' is unattainable under these constraints.'}));
+  comparisonResult.append(element('p',{textContent:result.proof.subsetsChecked+' subsets checked · '+result.proof.frontierPoints+' non-dominated cost/value points'}),
+    element('p',{textContent:'Decision SHA-256: '+result.decisionSha256}),
+    element('p',{className:'muted',textContent:'Hypothetical estimates only. No memory reports recalled, provider calls, billing or world action.'}));
+  memoryStatus.textContent='Budget comparison verified · '+result.scenarios.length+' scenarios';
 });
 archiveMemory.onclick=memoryAction(async(client,current)=>{
   const file=memoryFile.files?.[0];if(!file||file.size>65536)throw Error('Choose a Council JSON report no larger than 64 KB.');
