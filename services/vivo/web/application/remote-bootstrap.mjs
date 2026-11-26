@@ -372,13 +372,18 @@ const reasoningResult=element('section');reasoningResult.setAttribute('aria-labe
 agentContext.append(taskScope,modeScope,providerScope,prepareEvidence,reasonEvidence,reasoningResult);
 const plannerArea=element('details');
 plannerArea.append(element('summary',{textContent:'Plan a custom agent mission'}),
-  element('p',{className:'muted',textContent:'Edit the bounded mission: 1–12 jobs with integer costs and values, a budget, required job IDs and mutually exclusive ID pairs. Maximize value, then minimize cost, then sort IDs. Empty choice is allowed unless jobs are required. No automatic execution.'}));
+  element('p',{className:'muted',textContent:'Edit 1–12 jobs, costs, values, budget, required IDs and conflicts. Optional dependencies are directed pairs [job, prerequisite]. A chosen job includes every prerequisite; cycles are rejected. Maximize value, then minimize cost. Layers show precedence, not a timed schedule or execution permission.'}));
 const defaultMission={budget:7,jobs:[{id:'A',cost:3,value:5},{id:'B',cost:4,value:7},{id:'C',cost:5,value:9},{id:'D',cost:2,value:4}],required:[],conflicts:[]};
 const missionInput=element('textarea',{rows:10,maxLength:8192,value:JSON.stringify(defaultMission,null,2)});
 missionInput.setAttribute('aria-label','Agent mission definition');
 const missionPlan=element('button',{type:'button',textContent:'Solve and verify mission'});
+const dependencyExample=element('button',{type:'button',textContent:'Load dependency example'});
+dependencyExample.onclick=()=>{
+  missionInput.value=JSON.stringify({...defaultMission,budget:10,dependencies:[['C','D'],['D','A']]},null,2);
+  missionInput.dispatchEvent(new Event('input'));
+};
 const plannerResult=element('section');plannerResult.setAttribute('aria-label','Verified custom mission result');
-plannerArea.append(missionInput,missionPlan,plannerResult);
+plannerArea.append(dependencyExample,missionInput,missionPlan,plannerResult);
 agentContext.append(plannerArea);
 function clearReasoning(){reasoningResult.replaceChildren();plannerResult.replaceChildren();}
 missionInput.addEventListener('input',()=>{
@@ -499,6 +504,19 @@ missionPlan.onclick=memoryAction(async(client,current)=>{
     element('p',{textContent:'Enumeration SHA-256: '+proof.enumerationSha256}),
     element('p',{textContent:'Decision SHA-256: '+result.decisionSha256}),
     element('p',{className:'muted',textContent:'Advisory only. No provider call, billing or world action.'}));
+  if(result.schema==='vivo.agent-mission-plan/2'){
+    plannerResult.append(element('h4',{textContent:'Verified prerequisites'}),
+      element('p',{textContent:'Required closure: '+(proof.requiredClosure.join(', ')||'None')+' · minimum cost '+proof.requiredMinimumCost}));
+    if(proof.infeasibilityReasons.length){
+      for(const reason of proof.infeasibilityReasons)plannerResult.append(element('p',{textContent:
+        reason==='required-closure-over-budget'?'Mandatory prerequisites exceed the available budget.':
+        'Mandatory prerequisites conflict: '+proof.requiredConflicts.map(pair=>pair.join(' / ')).join(', ')}));
+    }else{
+      plannerResult.append(element('p',{textContent:proof.dependencyLayers.length?'Advisory precedence layers:':'No jobs selected.'}));
+      proof.dependencyLayers.forEach((layer,index)=>plannerResult.append(element('p',{textContent:'Layer '+(index+1)+': '+layer.join(', ')})));
+    }
+    plannerResult.append(element('p',{className:'muted',textContent:'Same-layer jobs have no dependency on each other. Capacity, timing, and execution approvals remain separate.'}));
+  }
   if(receipt){
     const e=receipt.evidence;
     plannerResult.append(element('p',{textContent:'Exact historical task · '+e.recordsUsed+' authorized evidence reports. Local proof is independent.'}));

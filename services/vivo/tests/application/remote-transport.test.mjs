@@ -442,3 +442,47 @@ test('custom mission proof checks ties, constraint coverage, and independent has
   assert.throws(()=>normalizeAgentMission({...mission,jobs:[...mission.jobs,mission.jobs[0]]}),/MEMORY_MISSION_INVALID/);
   await shutdown(transport,socket);
 });
+
+
+test('dependency mission verifies precedence and closure; empty dependencies preserve legacy identity',async()=>{
+  const {transport,socket}=await admitted();
+  const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+  const base={budget:3,jobs:[{id:'A',cost:1,value:1},{id:'B',cost:2,value:5}],required:[],conflicts:[]};
+  assert.deepEqual(normalizeAgentMission({...base,dependencies:[]}),base);
+  const mission={...base,dependencies:[['B','A']]},selection={mode:'fixture',providers:[],limit:4};
+  const proof={method:'exhaustive-dependent-subsets/1',subsetsChecked:4,feasibleSubsets:3,equallyValuableOptima:1,
+    runnerUp:{candidate:'A',cost:1,value:1,feasible:true},optimalityGap:5,
+    enumerationSha256:await hash(JSON.stringify([['',0,0,true],['A',1,1,true],['A,B',3,6,true],['B',2,5,false]])),
+    ranking:'value-desc-cost-asc-id-asc',includesEmptyChoice:true,requiredClosure:[],requiredMinimumCost:0,
+    requiredConflicts:[],infeasibilityReasons:[],dependencyLayers:[['A'],['B']],executionAuthority:'advisory-only'};
+  const core={schema:'vivo.agent-mission-plan/2',mission,missionSha256:await hash(JSON.stringify(mission)),selection,
+    proposal:{candidate:'A,B',cost:3,value:6,feasible:true},status:'optimal',proof,
+    evidence:{status:'mission-not-in-memory-contract',receipt:null},authority:'evidence-only',
+    providerAuthenticated:false,providerCallsInitiated:0,postedChargesUsd:null,worldActionExecuted:false};
+  const sign=async value=>({...value,decisionSha256:await hash(JSON.stringify(value))});
+  const request={mission,selection},packet=await sign(core);
+  assert.deepEqual(await transport.planAgentMission(request,async(url,init)=>{
+    assert.equal(url,'http://vivo.test/api/neural-memory');assert.deepEqual(JSON.parse(init.body),{op:'plan',args:request});
+    return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:packet})};
+  }),packet);
+  for(const invalid of [
+    {...core,schema:'vivo.agent-mission-plan/1'},
+    {...core,proof:{...proof,dependencyLayers:[['B'],['A']]}},
+    {...core,proof:{...proof,dependencyLayers:[['A','B']]}},
+    {...core,proof:{...proof,requiredMinimumCost:1}},
+    {...core,proof:{...proof,executionAuthority:'dispatch'}},
+    {...core,proof:{...proof,feasibleSubsets:4}},
+  ])await assert.rejects(verifyAgentMissionPlan(await sign(invalid),request),/MEMORY_MISSION_INVALID/);
+  assert.throws(()=>normalizeAgentMission({...mission,dependencies:[['B','A'],['A','B']]}),/MISSION_DEPENDENCY_CYCLE/);
+  assert.throws(()=>normalizeAgentMission({...mission,dependencies:[['B','A'],['B','A']]}),/MEMORY_MISSION_INVALID/);
+  const blockedMission={...mission,budget:2,required:['B']};
+  const blockedProof={...proof,feasibleSubsets:0,equallyValuableOptima:0,runnerUp:null,optimalityGap:null,
+    enumerationSha256:await hash(JSON.stringify([['',0,0,false],['A',1,1,false],['A,B',3,6,false],['B',2,5,false]])),
+    requiredClosure:['A','B'],requiredMinimumCost:3,infeasibilityReasons:['required-closure-over-budget'],dependencyLayers:[]};
+  const blocked={...core,mission:blockedMission,missionSha256:await hash(JSON.stringify(blockedMission)),
+    proposal:null,status:'infeasible',proof:blockedProof};
+  await verifyAgentMissionPlan(await sign(blocked),{mission:blockedMission,selection});
+  await assert.rejects(verifyAgentMissionPlan(await sign({...blocked,proof:{...blockedProof,infeasibilityReasons:[]}}),
+    {mission:blockedMission,selection}),/MEMORY_MISSION_INVALID/);
+  await shutdown(transport,socket);
+});

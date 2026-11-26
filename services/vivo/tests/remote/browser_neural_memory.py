@@ -237,6 +237,27 @@ async def main():
                 check("custom constraints change optimum without transferring unrelated memory",
                       "Verified plan: A,D · cost 5 / 7 · value 9" in plan_text and
                       "Historical Council proposals were not recalled." in plan_text and digest not in plan_text)
+                await editor_sheet.get_by_role("button",name="Load dependency example").click()
+                await editor_sheet.get_by_role("button",name="Solve and verify mission").click()
+                await status(editor_status,"Mission verified · 0 authorized reports")
+                layered=await planner.inner_text()
+                check("dependency planner verifies prerequisites and ordered layers on mobile",
+                      "Verified plan: A,C,D · cost 10 / 10 · value 18" in layered and
+                      all(label in layered for label in ("Layer 1: A","Layer 2: D","Layer 3: C")) and digest not in layered)
+                dependency_mission=json.loads(await mission_input.input_value())
+                dependency_mission["required"]=["C"];dependency_mission["budget"]=9
+                await mission_input.fill(json.dumps(dependency_mission))
+                await editor_sheet.get_by_role("button",name="Solve and verify mission").click()
+                await status(editor_status,"Mission verified · 0 authorized reports")
+                blocked=await planner.inner_text()
+                check("dependency closure explains infeasible required work",
+                      "Required closure: A, C, D · minimum cost 10" in blocked and
+                      "Mandatory prerequisites exceed the available budget." in blocked)
+                dependency_mission["dependencies"].append(["A","C"])
+                await mission_input.fill(json.dumps(dependency_mission))
+                await editor_sheet.get_by_role("button",name="Solve and verify mission").click()
+                await status(editor_status,"MISSION_DEPENDENCY_CYCLE")
+                check("cyclic mission is rejected with no displayed certificate",not (await planner.inner_text()).strip())
                 await editor_sheet.get_by_label("Agent evidence provenance").select_option("live")
                 await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
                 await status(editor_status,"No matching authorized evidence.")
