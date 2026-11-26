@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RemoteTransport,verifyAgentMissionPlan,normalizeAgentMission,verifyMemoryBackupSet,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
+import {RemoteTransport,verifyMissionBudgetComparison,verifyAgentMissionPlan,normalizeAgentMission,verifyMemoryBackupSet,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
 
 class FakeSocket {
   static instances=[];
@@ -484,5 +484,43 @@ test('dependency mission verifies precedence and closure; empty dependencies pre
   await verifyAgentMissionPlan(await sign(blocked),{mission:blockedMission,selection});
   await assert.rejects(verifyAgentMissionPlan(await sign({...blocked,proof:{...blockedProof,infeasibilityReasons:[]}}),
     {mission:blockedMission,selection}),/MEMORY_MISSION_INVALID/);
+  await shutdown(transport,socket);
+});
+
+
+test('resource comparison independently verifies all budgets, frontier and minimum target cost',async()=>{
+  const {transport,socket}=await admitted();
+  const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+  const mission={budget:1,jobs:[{id:'A',cost:1,value:1},{id:'B',cost:2,value:5}],required:[],conflicts:[],dependencies:[['B','A']]};
+  const request={mission,budgets:[0,1,3],targetValue:6};
+  const empty={candidate:'',cost:0,value:0,feasible:true},a={candidate:'A',cost:1,value:1,feasible:true},ab={candidate:'A,B',cost:3,value:6,feasible:true};
+  const rows=[['',0,0,true],['A',1,1,true],['A,B',3,6,true],['B',2,5,false]];
+  const core={schema:'vivo.agent-budget-comparison/1',mission,missionSha256:await hash(JSON.stringify(mission)),
+    budgets:[0,1,3],targetValue:6,baseline:{budget:1,proposal:a,feasibleSubsets:2},
+    scenarios:[{budget:0,proposal:empty,feasibleSubsets:1},{budget:1,proposal:a,feasibleSubsets:2},{budget:3,proposal:ab,feasibleSubsets:3}],
+    nextImprovement:ab,minimumFeasibleBudget:0,maximumAttainableValue:6,
+    target:{requestedValue:6,status:'attainable',minimumBudget:3,proposal:ab},
+    proof:{method:'exhaustive-resource-frontier/1',subsetsChecked:4,structurallyFeasibleSubsets:3,frontierPoints:3,
+      enumerationSha256:await hash(JSON.stringify(rows)),frontierSha256:await hash(JSON.stringify(rows.slice(0,3))),ranking:'value-desc-cost-asc-id-asc'},
+    evidence:{status:'hypothetical-resource-comparison',recordsUsed:0},authority:'evidence-only',providerAuthenticated:false,
+    providerCallsInitiated:0,postedChargesUsd:null,worldActionExecuted:false};
+  const sign=async c=>({...c,decisionSha256:await hash(JSON.stringify(c))});
+  const packet=await sign(core);
+  assert.deepEqual(await transport.compareMissionBudgets({...request,budgets:[3,0,1]},async(url,init)=>{
+    assert.equal(url,'http://vivo.test/api/neural-memory');
+    assert.deepEqual(JSON.parse(init.body),{op:'compare-budgets',args:request});
+    return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:packet})};
+  }),packet);
+  for(const bad of [
+    {...core,target:{...core.target,minimumBudget:2}},
+    {...core,nextImprovement:a},
+    {...core,scenarios:[...core.scenarios].reverse()},
+    {...core,baseline:{...core.baseline,feasibleSubsets:3}},
+    {...core,proof:{...core.proof,frontierPoints:4}},
+    {...core,proof:{...core.proof,frontierSha256:'0'.repeat(64)}},
+    {...core,evidence:{...core.evidence,recordsUsed:1}},
+    {...core,worldActionExecuted:true}
+  ])await assert.rejects(verifyMissionBudgetComparison(await sign(bad),request),/MEMORY_MISSION_INVALID/);
+  await assert.rejects(transport.compareMissionBudgets({...request,budgets:[1,1]},async()=>{throw Error('no request allowed');}),/MEMORY_MISSION_INVALID/);
   await shutdown(transport,socket);
 });

@@ -667,3 +667,62 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(maximum["proof"]["dependencyLayers"],[[f"J{i:02}"] for i in range(12)])
         self.assertEqual(maximum["proposal"]["value"],12)
         self.assertEqual(self.vault.db.execute("SELECT count(*) FROM evidence").fetchone()[0],0)
+
+
+    async def test_budget_comparison_dependency_frontier_target_and_no_memory_reads(self):
+        jobs=[{"id":"A","cost":3,"value":5},{"id":"B","cost":4,"value":7},
+              {"id":"C","cost":5,"value":9},{"id":"D","cost":2,"value":4}]
+        mission={"budget":6,"jobs":jobs,"required":[],"conflicts":[],"dependencies":[["C","D"],["D","A"]]}
+        args={"mission":mission,"budgets":[10,0,5,9],"targetValue":18}
+        result=await self.rpc("compare-budgets",args,token=self.one["token"])
+        self.assertEqual(result["baseline"],{"budget":6,"proposal":{"candidate":"A,D","cost":5,"value":9,"feasible":True},"feasibleSubsets":4})
+        self.assertEqual([row["budget"] for row in result["scenarios"]],[0,5,9,10])
+        self.assertEqual([row["proposal"]["value"] for row in result["scenarios"]],[0,9,16,18])
+        self.assertEqual(result["nextImprovement"],{"candidate":"A,B","cost":7,"value":12,"feasible":True})
+        self.assertEqual(result["target"]["minimumBudget"],10)
+        self.assertEqual(result["target"]["proposal"]["candidate"],"A,C,D")
+        self.assertEqual(result["maximumAttainableValue"],25)
+        self.assertEqual(result["minimumFeasibleBudget"],0)
+        self.assertEqual(result["proof"]["subsetsChecked"],16)
+        self.assertEqual(result["proof"]["structurallyFeasibleSubsets"],8)
+        self.assertEqual(result["proof"]["frontierPoints"],8)
+        self.assertEqual(result["evidence"],{"status":"hypothetical-resource-comparison","recordsUsed":0})
+        await self.rpc("archive",{"envelope":self.mission})
+        self.assertEqual(await self.rpc("compare-budgets",args),result)
+        self.assertEqual(await self.rpc("compare-budgets",args,token=self.one["token"]),result)
+        self.assertNotIn(self.mission["reportSha256"],json.dumps(result))
+        # Each scenario must agree with a separately solved single-budget mission.
+        for scenario in result["scenarios"]:
+            plan=await self.rpc("plan",{"mission":{**mission,"budget":scenario["budget"]},
+                "selection":{"mode":"fixture","providers":[],"limit":4}})
+            self.assertEqual(plan["proposal"],scenario["proposal"])
+            self.assertEqual(plan["proof"]["feasibleSubsets"],scenario["feasibleSubsets"])
+        blocked={**mission,"required":["C"],"conflicts":[["A","C"]]}
+        none=await self.rpc("compare-budgets",{"mission":blocked,"budgets":[0,12],"targetValue":0})
+        self.assertIsNone(none["minimumFeasibleBudget"])
+        self.assertIsNone(none["maximumAttainableValue"])
+        self.assertEqual(none["target"]["status"],"unattainable")
+        self.assertEqual(none["proof"]["frontierPoints"],0)
+        self.assertTrue(all(row["proposal"] is None for row in none["scenarios"]))
+
+    async def test_budget_comparison_zero_cost_ties_limits_and_invalid_scenarios(self):
+        mission={"budget":0,"jobs":[{"id":"A","cost":0,"value":1},{"id":"B","cost":0,"value":1},
+                 {"id":"C","cost":2,"value":4}],"required":[],"conflicts":[["A","B"]]}
+        args={"mission":mission,"budgets":[0,1,2],"targetValue":5}
+        result=await self.rpc("compare-budgets",args)
+        self.assertEqual(result["baseline"]["proposal"]["candidate"],"A")
+        self.assertEqual(result["nextImprovement"]["candidate"],"A,C")
+        self.assertEqual(result["target"]["minimumBudget"],2)
+        self.assertEqual(result["proof"]["frontierPoints"],2)
+        self.assertEqual(result["proof"]["structurallyFeasibleSubsets"],6)
+        self.assertEqual((await self.rpc("compare-budgets",{**args,"targetValue":6}))["target"]["status"],"unattainable")
+        for changes in ({"budgets":[]},{"budgets":[0,0]},{"budgets":[True]},{"budgets":[-1]},
+                        {"budgets":list(range(9))},{"targetValue":1.5},{"targetValue":True}):
+            self.assertEqual(await self.rpc("compare-budgets",{**args,**changes},expected=400),"MISSION_COMPARISON_INVALID")
+        self.assertEqual(await self.rpc("compare-budgets",args,token=None,expected=401),"AUTH_REQUIRED")
+        maximum={"budget":6,"jobs":[{"id":f"J{i:02}","cost":1,"value":1} for i in range(12)],"required":[],"conflicts":[]}
+        checked=await self.rpc("compare-budgets",{"mission":maximum,"budgets":[0,6,12],"targetValue":12})
+        self.assertEqual(checked["proof"]["subsetsChecked"],4096)
+        self.assertEqual(checked["proof"]["structurallyFeasibleSubsets"],4096)
+        self.assertEqual(checked["proof"]["frontierPoints"],13)
+        self.assertEqual(checked["target"]["minimumBudget"],12)
