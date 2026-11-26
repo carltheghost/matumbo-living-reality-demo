@@ -42,6 +42,15 @@ def exercise(page, route, label):
     assert result["baseline"]["assignable"]==2 and result["alternative"]["assignable"]==1 and result["lostCapacity"]==1,result
     assert result["authorizesAction"] is False and result["predictsCompletion"] is False,result
     assert next(r for r in result["alternative"]["rows"] if r["taskId"]==ids["finish"])["status"]=="TASK_PREREQUISITES_INCOMPLETE",result
+    panel.get_by_role("button",name="Compare multi-stage mission strategies").click()
+    idle()
+    strategy_text=panel.locator("#vivoMissionScenario").inner_text()
+    assert "Dependency depth: 2" in strategy_text and "Current availability · 3/3 hypothetically scheduled · 2 rounds" in strategy_text,strategy_text
+    assert "Hypothetical availability · 3/3 hypothetically scheduled · 3 rounds" in strategy_text,strategy_text
+    strategy=page.evaluate("taskIds=>window.VivaPhoneAgentAdmin.taskAccess.compareStrategy({taskIds,unavailableSourceIds:['planner-a','planner-b']})",list(ids.values()))
+    assert strategy["baseline"]["roundCount"]==2 and strategy["alternative"]["roundCount"]==3 and strategy["roundDifference"]==1,strategy
+    assert strategy["authorizesAction"] is False and strategy["predictsCompletion"] is False,strategy
+    assert strategy["baseline"]["waves"][-1]["assignments"][0]["taskId"]==ids["finish"],strategy
     unchanged=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
     assert unchanged["tasks"]==initial["tasks"] and unchanged["attachments"]==[],unchanged
     stale=page.evaluate("""async()=>{
@@ -90,7 +99,7 @@ def exercise(page, route, label):
     assert restored["branchId"]==third["branchId"] and restored["plans"]==completed["plans"],restored
     assert restored["tasks"]==completed["tasks"] and restored["attachments"]==[],restored
     assert sorted(restored["receipts"])==["plan:finish","plan:left","plan:right"],restored
-    return {"created":3,"completed":3,"parallelPrerequisites":2,"staleReviewRejected":True,"reload":True,"autoGrant":False,"scenarioComparison":True,"hypotheticalOutageCapacity":1,"scenarioReadOnly":True}
+    return {"created":3,"completed":3,"parallelPrerequisites":2,"staleReviewRejected":True,"reload":True,"autoGrant":False,"scenarioComparison":True,"hypotheticalOutageCapacity":1,"scenarioReadOnly":True,"multiStageStrategy":True,"outageExtraRounds":1,"strategyReadOnly":True}
 
 
 def main(base):
