@@ -452,3 +452,53 @@ test('world switch and stale attachment epoch invalidate association access',asy
   f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();
   await assert.rejects(f.bridge.tools.invokeFor('b',associationTool,associationQuery),{code:'TASK_NOT_ATTACHED'});assert.equal(f.calls(),3);
 });
+
+const forecastTool='neural.missionForecast';
+async function forecastFixture(){
+  const {f,first,hidden,target}=await recallFixture(),sources=[];
+  for(let i=0;i<3;i++){
+    const t=await f.bridge.admin.create('a','Historical sequence '+i);
+    await run(f,'forecast-cue-'+i);
+    await f.bridge.tools.invokeFor('a','vivo.world.edit',{...edit('forecast-next-'+i),entityId:'other'});
+    await complete(f,'a',(await progress(f)).task);sources.push(t.taskId);
+  }
+  const grant=ids=>f.bridge.admin.grantMissionRecall('b',{taskId:target.taskId,epoch:target.epoch,sourceTaskIds:ids});
+  return {f,first,hidden,target,sources,grant};
+}
+test('forecast is explicit, task-scoped, and abstains before sufficient distinct evidence',async()=>{
+  const {f,first,hidden,target,sources,grant}=await forecastFixture();
+  assert(!f.bridge.tools.listFor('b').some(t=>t.name===forecastTool));
+  await assert.rejects(f.bridge.tools.invokeFor('b',forecastTool,recallQuery),{code:'MISSION_RECALL_NOT_GRANTED'});
+  await grant([sources[0]]);assert(f.bridge.tools.listFor('b').some(t=>t.name===forecastTool));
+  const sparse=await f.bridge.tools.invokeFor('b',forecastTool,recallQuery);
+  assert.equal(sparse.status,'abstain');assert.equal(sparse.reason,'INSUFFICIENT_DISTINCT_TASKS');
+  await grant(sources);
+  const r=await f.bridge.tools.invokeFor('b',forecastTool,recallQuery);
+  assert.equal(r.status,'suggested');assert.equal(r.suggestion.entityId,'other');assert.equal(r.suggestion.supportingTasks,3);
+  assert.equal(r.targetTaskId,target.taskId);assert.equal(r.attachmentEpoch,target.epoch);
+  assert.equal(r.retrospective.evaluated,0);assert.equal(r.retrospective.observedAccuracy,null);
+  assert.deepEqual(r.candidates[0].witnesses.map(w=>w.taskId).sort(),sources.slice().sort());
+  assert(!JSON.stringify(r).includes(first.taskId));assert(!JSON.stringify(r).includes(hidden.taskId));assert(!JSON.stringify(r).includes('private-op'));
+  assert.equal(r.authorizesAction,false);assert.equal(r.calibratedProbability,false);assert.equal(f.calls(),8);
+});
+test('grant replacement limits forecast evidence and exact arguments cannot select private tasks',async()=>{
+  const {f,first,sources,grant}=await forecastFixture();await grant(sources);
+  await grant([first.taskId]);const r=await f.bridge.tools.invokeFor('b',forecastTool,recallQuery);
+  assert.equal(r.counts.matchingTasks,1);assert.equal(r.counts.terminal,1);assert.equal(r.suggestion,null);
+  await assert.rejects(f.bridge.tools.invokeFor('b',forecastTool,{...recallQuery,sourceTaskIds:sources}),{code:'MISSION_FORECAST_ARGUMENTS_INVALID'});
+  assert.equal(f.calls(),8);
+});
+test('revocation during forecast fences pending result and no native action runs',async()=>{
+  const {f,sources,grant}=await forecastFixture();await grant(sources);
+  const release=f.store.hold(),pending=f.bridge.tools.invokeFor('b',forecastTool,recallQuery);await release.entered;
+  f.bridge.admin.revokeMissionRecall('b');release();await assert.rejects(pending,{code:'MISSION_RECALL_GRANT_STALE'});
+  assert(!f.bridge.tools.listFor('b').some(t=>t.name===forecastTool));assert.equal(f.calls(),8);
+});
+test('stale attachment and reload do not restore forecast grants',async()=>{
+  const {f,target,sources,grant}=await forecastFixture();await grant(sources);
+  await f.build().admin.resume('b',target.taskId);
+  await assert.rejects(f.bridge.tools.invokeFor('b',forecastTool,recallQuery),{code:'TASK_ATTACHMENT_STALE'});
+  f.bridge=f.build();await f.bridge.admin.resume('b',target.taskId);
+  await assert.rejects(f.bridge.tools.invokeFor('b',forecastTool,recallQuery),{code:'MISSION_RECALL_NOT_GRANTED'});
+  assert.equal(f.calls(),8);
+});

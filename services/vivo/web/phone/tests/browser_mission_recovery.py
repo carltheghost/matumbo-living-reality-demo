@@ -135,6 +135,37 @@ def exercise(page, route, label):
     assert traced["authorizesAction"] is False and [h["relation"] for h in traced["hops"]]==["observed-in","prerequisite-of","observed-object"],traced
     assert [t["bank"] for t in traced["circuitTrace"]]==[0,2,1],traced
     assert traced["hops"][-1]["evidence"]["operationId"]=="recovery:linked",traced
+    # A sparse history must abstain, even if a historical association exists.
+    prediction=page.evaluate("agent=>window.VivaAgentTools.invokeFor(agent,'neural.missionForecast',{spaceId:'root',entityId:'relic'})",setup["c"])
+    assert prediction["status"]=="abstain" and prediction["suggestion"] is None,prediction
+    assert prediction["counts"]["matchingTasks"]==1,prediction
+    sources=[]
+    for i in range(3):
+        historical=page.evaluate("agent=>window.VivaPhoneAgentAdmin.taskAccess.create(agent,'Forecast example')",setup["b"])
+        cue=page.evaluate(edit,{"agent":setup["b"],"operationId":"forecast:cue:"+str(i),"amount":0,"entityId":"relic"})
+        nxt=page.evaluate(edit,{"agent":setup["b"],"operationId":"forecast:next:"+str(i),"amount":0,"entityId":"workpiece"})
+        assert cue["result"]["status"]=="accepted" and nxt["result"]["status"]=="accepted",(cue,nxt)
+        page.evaluate("""async ({agent,task})=>window.VivaPhoneAgentAdmin.taskAccess.complete(agent,{taskId:task.id,epoch:task.epoch})""",
+                      {"agent":setup["b"],"task":nxt["progress"]["task"]})
+        sources.append(historical["taskId"])
+    panel.get_by_role("button",name="Refresh saved tasks").click()
+    idle()
+    panel.get_by_role("combobox",name="Saved task in this world and branch").select_option(future["taskId"])
+    panel.locator("#vivoMemoryAgent").select_option(setup["c"]["sessionId"])
+    panel.get_by_role("listbox",name="Completed mission evidence sources").select_option(sources)
+    panel.get_by_role("button",name="Grant selected mission evidence").click()
+    idle()
+    panel.get_by_role("textbox",name="Recall space ID").fill("root")
+    panel.get_by_role("textbox",name="Recall entity ID").fill("relic")
+    panel.get_by_role("button",name="Forecast next object").click()
+    idle()
+    forecast_text=panel.locator("#vivoMissionRecall").inner_text()
+    assert "Suggest inspecting root / workpiece" in forecast_text and "3 distinct tasks" in forecast_text,forecast_text
+    prediction=page.evaluate("agent=>window.VivaAgentTools.invokeFor(agent,'neural.missionForecast',{spaceId:'root',entityId:'relic'})",setup["c"])
+    assert prediction["status"]=="suggested" and prediction["suggestion"]["supportingTasks"]==3,prediction
+    assert prediction["counts"]["matchingTasks"]==3 and prediction["retrospective"]["evaluated"]==0,prediction
+    assert prediction["retrospective"]["observedAccuracy"] is None and not prediction["calibratedProbability"] and not prediction["authorizesAction"],prediction
+    assert sorted(w["taskId"] for w in prediction["candidates"][0]["witnesses"])==sorted(sources),prediction
     completed=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
     assert len(completed["missionRecallGrants"])==1,completed
     enter_local(page,route,world_id)
@@ -148,10 +179,11 @@ def exercise(page, route, label):
     assert restored["experience"]==completed["experience"] and restored["grants"]==[],restored
     assert restored["branchId"]==second["branchId"] and sorted(restored["receipts"])==["recovery:after","recovery:before","recovery:linked"],restored
     return {"rootDiagnosed":True,"reopened":True,"replacementRecommended":True,"originalReceiptPreserved":True,
-            "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":3,
+            "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":9,
             "collectiveExperiencePreserved":True,"originalSourceCredited":True,"scopedAgentExperience":True,
             "exactNeuralRecall":True,"grantNotRestored":True,"crossMissionReuse":True,
-            "multiHopAssociation":True,"unsharedPathRejected":True,"causalClaim":False}
+            "multiHopAssociation":True,"unsharedPathRejected":True,"causalClaim":False,
+            "historicalForecast":True,"sparseEvidenceAbstained":True,"calibratedProbability":False}
 
 
 def main(base):
