@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RemoteTransport,verifyMissionBudgetComparison,verifyAgentMissionPlan,normalizeAgentMission,verifyMemoryBackupSet,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
+import {RemoteTransport,verifyMissionScenarioComparison,verifyMissionBudgetComparison,verifyAgentMissionPlan,normalizeAgentMission,verifyMemoryBackupSet,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
 
 class FakeSocket {
   static instances=[];
@@ -522,5 +522,38 @@ test('resource comparison independently verifies all budgets, frontier and minim
     {...core,worldActionExecuted:true}
   ])await assert.rejects(verifyMissionBudgetComparison(await sign(bad),request),/MEMORY_MISSION_INVALID/);
   await assert.rejects(transport.compareMissionBudgets({...request,budgets:[1,1]},async()=>{throw Error('no request allowed');}),/MEMORY_MISSION_INVALID/);
+  await shutdown(transport,socket);
+});
+
+
+test('joint scenario comparison verifies nominal maximin and minimax regret independently',async()=>{
+  const {transport,socket}=await admitted();
+  const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+  const mission={budget:1,jobs:[{id:'A',cost:1,value:10},{id:'B',cost:1,value:6},{id:'C',cost:1,value:8}],required:[],conflicts:[]};
+  const scenarios=[{id:'NOM',values:{A:10,B:6,C:8}},{id:'STRESS',values:{A:0,B:6,C:5}}],nominalId='NOM',request={mission,scenarios,nominalId};
+  const project=(candidate,cost,nom,stress,regret)=>({candidate,cost,values:[{scenarioId:'NOM',value:nom},{scenarioId:'STRESS',value:stress}],nominalValue:nom,worstValue:Math.min(nom,stress),maximumRegret:regret});
+  const a=project('A',1,10,0,6),b=project('B',1,6,6,4),c=project('C',1,8,5,2);
+  const rows=[['',0,[0,0],0,10],['A',1,[10,0],0,6],['B',1,[6,6],6,4],['C',1,[8,5],5,2]];
+  const core={schema:'vivo.agent-scenario-comparison/1',mission,missionSha256:await hash(JSON.stringify(mission)),scenarios,nominalId,status:'feasible',
+    scenarioOptima:[{scenarioId:'NOM',proposal:a},{scenarioId:'STRESS',proposal:b}],nominalChoice:a,maximinChoice:b,minimaxRegretChoice:c,
+    proof:{method:'exhaustive-joint-scenarios/1',subsetsChecked:8,feasibleSubsets:4,evaluationSha256:await hash(JSON.stringify(rows)),
+      assumptions:'fixed-costs-explicit-joint-value-scenarios-no-probabilities',nominalRanking:'nominal-desc-cost-asc-id-asc',
+      maximinRanking:'worst-desc-nominal-desc-cost-asc-id-asc',regretRanking:'regret-asc-worst-desc-nominal-desc-cost-asc-id-asc'},
+    evidence:{status:'hypothetical-scenario-comparison',recordsUsed:0},authority:'evidence-only',
+    providerAuthenticated:false,providerCallsInitiated:0,postedChargesUsd:null,worldActionExecuted:false};
+  const sign=async value=>({...value,decisionSha256:await hash(JSON.stringify(value))});
+  const packet=await sign(core);
+  assert.deepEqual(await transport.compareMissionScenarios({...request,scenarios:[...scenarios].reverse()},async(url,init)=>{
+    assert.equal(url,'http://vivo.test/api/neural-memory');
+    assert.deepEqual(JSON.parse(init.body),{op:'compare-scenarios',args:request});
+    return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:packet})};
+  }),packet);
+  for(const bad of [{...core,maximinChoice:a},{...core,minimaxRegretChoice:b},
+    {...core,nominalChoice:{...a,maximumRegret:0}},{...core,scenarioOptima:[...core.scenarioOptima].reverse()},
+    {...core,proof:{...core.proof,evaluationSha256:'0'.repeat(64)}},
+    {...core,evidence:{...core.evidence,recordsUsed:1}},{...core,providerCallsInitiated:1}])
+    await assert.rejects(verifyMissionScenarioComparison(await sign(bad),request),/MEMORY_MISSION_INVALID/);
+  await assert.rejects(transport.compareMissionScenarios({...request,scenarios:[{id:'NOM',values:{A:9,B:6,C:8}},scenarios[1]]},
+    async()=>{throw Error('no network expected');}),/MISSION_SCENARIO_NOMINAL_MISMATCH/);
   await shutdown(transport,socket);
 });

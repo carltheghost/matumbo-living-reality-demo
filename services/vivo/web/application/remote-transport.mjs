@@ -360,6 +360,60 @@ export async function verifyMissionBudgetComparison(packet,request,{cryptoApi=gl
   return packet;
 }
 
+function normalizeMissionScenarios(request){
+  missionCheck(reasoningKeys(request,['mission','scenarios','nominalId']));
+  const mission=normalizeAgentMission(request.mission),{scenarios,nominalId}=request,ids=mission.jobs.map(job=>job.id);
+  const validId=value=>typeof value==='string'&&/^[A-Z][A-Z0-9]{0,7}$/.test(value);
+  missionCheck(Array.isArray(scenarios)&&scenarios.length>=2&&scenarios.length<=8&&validId(nominalId));
+  const seen=new Set(),normalized=[];
+  for(const item of scenarios){
+    missionCheck(reasoningKeys(item,['id','values'])&&validId(item.id)&&!seen.has(item.id)&&reasoningKeys(item.values,ids)&&
+      ids.every(id=>missionInteger(item.values[id],0,MISSION_MAX_UNIT)));
+    seen.add(item.id);
+    normalized.push({id:item.id,values:Object.fromEntries(ids.map(id=>[id,item.values[id]]))});
+  }
+  normalized.sort((a,b)=>asciiCompare(a.id,b.id));
+  missionCheck(seen.has(nominalId));
+  const nominal=normalized.find(item=>item.id===nominalId);
+  if(!mission.jobs.every(job=>nominal.values[job.id]===job.value))throw Error('MISSION_SCENARIO_NOMINAL_MISMATCH');
+  return {mission,scenarios:normalized,nominalId};
+}
+export async function verifyMissionScenarioComparison(packet,request,{cryptoApi=globalThis.crypto}={}){
+  const {mission,scenarios,nominalId}=normalizeMissionScenarios(request),nominal=scenarios.findIndex(item=>item.id===nominalId);
+  // Independently enumerate feasible bitmasks and rank fixed choices.
+  const rows=enumerateMissionRows(mission),feasible=rows.filter(row=>row[3]).map(([candidate,cost])=>{
+    const ids=candidate?candidate.split(','):[];
+    return {candidate,cost,values:scenarios.map(item=>ids.reduce((sum,id)=>sum+item.values[id],0))};
+  });
+  const ceilings=scenarios.map((_,i)=>feasible.reduce((best,row)=>Math.max(best,row.values[i]),0));
+  for(const row of feasible){
+    row.worstValue=Math.min(...row.values);
+    row.maximumRegret=Math.max(...row.values.map((value,i)=>ceilings[i]-value));
+  }
+  const evaluated=feasible.map(row=>[row.candidate,row.cost,row.values,row.worstValue,row.maximumRegret]);
+  const byCost=(a,b)=>a.cost-b.cost||asciiCompare(a.candidate,b.candidate);
+  const nominalRank=(a,b)=>b.values[nominal]-a.values[nominal]||byCost(a,b);
+  const robustRank=(a,b)=>b.worstValue-a.worstValue||nominalRank(a,b);
+  const regretRank=(a,b)=>a.maximumRegret-b.maximumRegret||robustRank(a,b);
+  const best=rank=>[...feasible].sort(rank)[0];
+  const project=row=>row?{candidate:row.candidate,cost:row.cost,
+    values:scenarios.map((item,i)=>({scenarioId:item.id,value:row.values[i]})),
+    nominalValue:row.values[nominal],worstValue:row.worstValue,maximumRegret:row.maximumRegret}:null;
+  const core={schema:'vivo.agent-scenario-comparison/1',mission,
+    missionSha256:await missionHash(JSON.stringify(mission),cryptoApi),scenarios,nominalId,status:feasible.length?'feasible':'infeasible',
+    scenarioOptima:scenarios.map((item,i)=>({scenarioId:item.id,proposal:project(best((a,b)=>b.values[i]-a.values[i]||byCost(a,b)))})),
+    nominalChoice:project(best(nominalRank)),maximinChoice:project(best(robustRank)),minimaxRegretChoice:project(best(regretRank)),
+    proof:{method:'exhaustive-joint-scenarios/1',subsetsChecked:rows.length,feasibleSubsets:feasible.length,
+      evaluationSha256:await missionHash(JSON.stringify(evaluated),cryptoApi),
+      assumptions:'fixed-costs-explicit-joint-value-scenarios-no-probabilities',
+      nominalRanking:'nominal-desc-cost-asc-id-asc',maximinRanking:'worst-desc-nominal-desc-cost-asc-id-asc',
+      regretRanking:'regret-asc-worst-desc-nominal-desc-cost-asc-id-asc'},
+    evidence:{status:'hypothetical-scenario-comparison',recordsUsed:0},authority:'evidence-only',
+    providerAuthenticated:false,providerCallsInitiated:0,postedChargesUsd:null,worldActionExecuted:false};
+  missionCheck(JSON.stringify(packet)===JSON.stringify({...core,decisionSha256:await missionHash(JSON.stringify(core),cryptoApi)}));
+  return packet;
+}
+
 export class RemoteTransport {
   constructor({url,token,WebSocket:Socket=globalThis.WebSocket,onState=()=>{},onError=()=>{},onClose=()=>{},timeoutMs=7000}={}) {
     if(typeof url!=='string'||!url.length||typeof token!=='string'||token.length<20||typeof Socket!=='function')
@@ -696,6 +750,13 @@ export class RemoteTransport {
       throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');
     return Object.freeze({filename:'council-'+report.mode+'-'+digest.slice(0,12)+'.json',
       text:JSON.stringify(envelope,null,2)+'\n',digest});
+  }
+  async compareMissionScenarios(request,fetchImpl=globalThis.fetch){
+    const scope=normalizeMissionScenarios(request),socket=this.socket;
+    const packet=await this.memoryRequest('compare-scenarios',scope,fetchImpl);
+    await verifyMissionScenarioComparison(packet,scope);
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    return packet;
   }
   async compareMissionBudgets(request,fetchImpl=globalThis.fetch){
     const scope=normalizeMissionComparison(request),socket=this.socket;
