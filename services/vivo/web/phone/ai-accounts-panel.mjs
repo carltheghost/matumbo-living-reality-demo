@@ -1,4 +1,5 @@
 import {ConstructiveMemory,exampleMemory} from './constructive-memory.mjs';
+import {missionView} from './mission-graph.mjs';
 /** Native Vivo controls extension. No second world, password inputs, or auto-login. */
 const API='/api/vivo/accounts';
 const message=e=>typeof e?.message==='string'?e.message:'Operation failed';
@@ -218,6 +219,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   // Task history is owner-controlled and remains on the existing native agent face.
   const taskTitle=node('input');taskTitle.maxLength=100;taskTitle.placeholder='Task title';taskTitle.setAttribute('aria-label','New task title');
   const taskPicker=node('select');taskPicker.setAttribute('aria-label','Saved task in this world and branch');
+  const prerequisitePicker=node('select');prerequisitePicker.multiple=true;prerequisitePicker.size=3;prerequisitePicker.setAttribute('aria-label','Prerequisite tasks for new task');
   const taskStatus=node('p','Refresh to inspect saved tasks for the open world.');taskStatus.setAttribute('aria-live','polite');
   const taskDetail=node('pre','No task selected.');taskDetail.style.whiteSpace='pre-wrap';taskDetail.style.overflowWrap='anywhere';
   let journal=null,taskBusy=false,taskScope=null,taskScopeEpoch=0;
@@ -228,31 +230,32 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   function drawTask(){
     const task=journal?.tasks.find(t=>t.id===taskPicker.value);
     if(!task){taskDetail.textContent='No task selected.';return;}
-    const attached=journal.attachments.some(a=>a.taskId===task.id);
+    const attached=journal.attachments.some(a=>a.taskId===task.id),mission=missionView(journal,task);
     const count=state=>task.steps.filter(s=>s.state===state).length;
-    taskDetail.textContent=task.title+' · '+task.sourceId+' · '+(task.closed?'closed':attached?'attached':'detached')+'\n'
+    taskDetail.textContent=task.title+' · '+task.sourceId+' · '+(task.completed?'completed':task.closed?'closed incomplete':attached?'attached':'detached')+' · '+mission.state+'\n'
       +'Confirmed '+count('confirmed')+' · unresolved '+count('pending')+' · conflicts '+count('conflict')+' · not dispatched '+count('not-dispatched')+'\n'
       +task.steps.map(s=>s.state+' · '+(s.sourceId||task.sourceId)+' · '+s.entityId+' · '+s.operationId+(s.state==='confirmed'?' · revision '+s.revision:'')).join('\n')
-      +(task.handoffs||[]).map(h=>'\nHandoff · '+h.from+' → '+h.to+' · epoch '+h.epoch).join('');
+      +(task.handoffs||[]).map(h=>'\nHandoff · '+h.from+' → '+h.to+' · epoch '+h.epoch).join('')
+      +mission.dependencies.map(d=>'\nPrerequisite · '+d.title+' · '+d.status+' · '+d.receipts.length+' confirmed receipt(s)').join('');
   }
   function invalidateTaskScope(){
     const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;
-    taskPicker.replaceChildren();taskDetail.textContent='No task selected.';taskStatus.textContent='World changed. Refresh to inspect the current world’s journal.';
+    taskPicker.replaceChildren();prerequisitePicker.replaceChildren();taskDetail.textContent='No task selected.';taskStatus.textContent='World changed. Refresh to inspect the current world’s journal.';
   }
   async function refreshTasks(preferred){
     invalidateTaskScope();const expected=taskScopeNow();if(!expected)throw Error('Open a local world first.');
     const epoch=taskScopeEpoch,result=await taskAdmin().inspect();invalidateTaskScope();
     if(disposed||epoch!==taskScopeEpoch||expected!==taskScopeNow())return;
-    const old=preferred||taskPicker.value;journal=result;taskScope=expected;taskPicker.replaceChildren();
+    const old=preferred||taskPicker.value,selectedPrerequisites=new Set(Array.from(prerequisitePicker.selectedOptions||[],o=>o.value));journal=result;taskScope=expected;taskPicker.replaceChildren();prerequisitePicker.replaceChildren();
     const placeholder=node('option','Choose a saved task');placeholder.value='';taskPicker.append(placeholder);
-    for(const t of journal.tasks){const option=node('option',t.title+' · '+t.sourceId+(t.closed?' · closed':''));option.value=t.id;taskPicker.append(option);}
+    for(const t of journal.tasks){const label=t.title+' · '+t.sourceId+' · '+missionView(journal,t).state;const option=node('option',label);option.value=t.id;taskPicker.append(option);const prerequisite=node('option',label);prerequisite.value=t.id;prerequisite.selected=selectedPrerequisites.has(t.id);prerequisitePicker.append(prerequisite);}
     if(journal.tasks.some(t=>t.id===old))taskPicker.value=old;
     taskStatus.textContent=journal.warning||journal.tasks.length+' saved task(s) in this world/branch. Grants never resume automatically.';drawTask();
   }
   const taskRun=fn=>async()=>{if(taskBusy||disposed)return;invalidateTaskScope();const epoch=taskScopeEpoch;taskBusy=true;try{refreshMemoryAgents();await fn();}catch(e){if(!disposed){invalidateTaskScope();if(epoch===taskScopeEpoch)taskStatus.textContent=message(e);}}finally{taskBusy=false;}};
   taskPicker.addEventListener('change',drawTask);
   const refreshTaskButton=button('Refresh saved tasks',taskRun(()=>refreshTasks()));
-  const createTaskButton=button('Create and attach task',taskRun(async()=>{const result=await taskAdmin().create(selectedAgent(),taskTitle.value);taskTitle.value='';await refreshTasks(result.taskId);}));
+  const createTaskButton=button('Create and attach task',taskRun(async()=>{const deps=Array.from(prerequisitePicker.selectedOptions||[],o=>o.value);const result=await taskAdmin().create(selectedAgent(),taskTitle.value,deps);taskTitle.value='';for(const option of Array.from(prerequisitePicker.selectedOptions||[]))option.selected=false;await refreshTasks(result.taskId);}));
   const resumeTaskButton=button('Resume selected task explicitly',taskRun(async()=>{const id=selectedTask();await taskAdmin().resume(selectedAgent(),id);await refreshTasks(id);}));
   const handoffTaskButton=button('Handoff selected task to chosen agent',taskRun(async()=>{
     const id=selectedTask(),task=journal?.tasks.find(t=>t.id===id);
@@ -261,9 +264,13 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   }));
   const reconcileTaskButton=button('Reconcile native receipts',taskRun(async()=>{await taskAdmin().reconcile();await refreshTasks();}));
   const pauseTaskButton=button('Detach selected agent from task',taskRun(async()=>{taskAdmin().pause(selectedAgent());await refreshTasks();}));
+  const completeTaskButton=button('Complete selected task with confirmed receipts',taskRun(async()=>{
+    const id=selectedTask(),task=journal?.tasks.find(t=>t.id===id);if(!task)throw Error('Refresh and review the saved task first.');
+    await taskAdmin().complete(selectedAgent(),{taskId:id,epoch:task.epoch});await refreshTasks(id);
+  }));
   const closeTaskButton=button('Close attached task journal',taskRun(async()=>{await taskAdmin().finish(selectedAgent());await refreshTasks();}));
-  section.append(node('h4','Persistent agent task journal'),node('p','Use the active agent selector above. Only attached native world edits are journaled. Review receipts before handoff. An explicit handoff replaces the chosen agent’s task attachment without changing native grants. Unresolved object edits block other attached tasks. Detaching does not revoke native action permissions. No automatic replay or cloud sync.'),
-    taskTitle,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,handoffTaskButton,reconcileTaskButton,pauseTaskButton,closeTaskButton,taskStatus,taskDetail);
+  section.append(node('h4','Persistent agent task journal'),node('p','Use the active agent selector above. Only attached native world edits are journaled. Review receipts before handoff. An explicit handoff replaces the chosen agent’s task attachment without changing native grants. Unresolved object edits block other attached tasks. Detaching does not revoke native action permissions. No automatic replay or cloud sync. Prerequisites must be explicitly completed with confirmed native receipts. Closing a task without completion does not unblock its dependents.'),
+    taskTitle,node('p','Optional prerequisites for a new task (select saved tasks first).'),prerequisitePicker,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,handoffTaskButton,reconcileTaskButton,pauseTaskButton,completeTaskButton,closeTaskButton,taskStatus,taskDetail);
   for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])worldEvents?.addEventListener?.(event,invalidateTaskScope);
   invalidateTaskScope();
   refreshMemoryAgents();
