@@ -91,15 +91,20 @@ const vaultReview=element('button',{type:'button',textContent:'Review capsule on
 const vaultRestore=element('button',{type:'button',textContent:'Restore reviewed capsule to vault',disabled:true});
 const vaultCapsuleStatus=element('p',{textContent:'Choose a capsule. Nothing is uploaded on file selection.'});
 vaultCapsuleStatus.setAttribute('aria-live','polite');vaultCapsuleStatus.setAttribute('aria-label','Vault capsule status');
-vaultRecovery.append(vaultCapsuleFile,vaultReview,vaultRestore,vaultCapsuleStatus);
-let vaultEpoch=0,vaultBusy=false,vaultStaged=null;
+const vaultCheck=element('button',{type:'button',textContent:'Check last restore receipt',disabled:true});
+const vaultRecent=element('button',{type:'button',textContent:'Recent restore receipts'});
+const vaultReceipts=element('div');vaultReceipts.setAttribute('aria-label','Vault restore receipts');
+vaultRecovery.append(vaultCapsuleFile,vaultReview,vaultRestore,vaultCheck,vaultRecent,vaultCapsuleStatus,vaultReceipts);
+let vaultEpoch=0,vaultBusy=false,vaultStaged=null,vaultLastReview=null;
 function updateVaultControls(){
   vaultCapsuleFile.disabled=vaultBusy;
   vaultReview.disabled=vaultBusy||!vaultCapsuleFile.files?.length;
   vaultRestore.disabled=vaultBusy||!vaultStaged;
+  vaultCheck.disabled=vaultBusy||!vaultLastReview;
+  vaultRecent.disabled=vaultBusy;
 }
 function resetVaultCapsule(){
-  vaultEpoch++;vaultBusy=false;vaultStaged=null;vaultCapsuleFile.value='';vaultRecovery.open=false;
+  vaultEpoch++;vaultBusy=false;vaultStaged=null;vaultLastReview=null;vaultReceipts.replaceChildren();vaultCapsuleFile.value='';vaultRecovery.open=false;
   vaultCapsuleStatus.textContent='Choose a capsule. Nothing is uploaded on file selection.';updateVaultControls();
 }
 vaultCapsuleFile.onchange=()=>{
@@ -123,13 +128,49 @@ vaultRestore.onclick=async()=>{
   if(vaultBusy||!vaultStaged||role!=='owner'||!transport||transport.closed)return;
   const client=transport,epoch=++vaultEpoch,staged=vaultStaged;
   const current=()=>transport===client&&!client.closed&&epoch===vaultEpoch&&role==='owner';
-  vaultBusy=true;vaultStaged=null;updateVaultControls();
+  vaultBusy=true;vaultStaged=null;vaultLastReview=staged.review.added?staged.review:null;updateVaultControls();
   try{
     const result=await client.restoreMemoryCapsule(staged.capsule,staged.review);if(!current())return;
     vaultCapsuleFile.value='';
     vaultCapsuleStatus.textContent='Restored '+result.added+' new reports · '+result.duplicates+' duplicates skipped · '+result.total+' in private vault.';
     await recallMemory();
-  }catch(error){if(current())vaultCapsuleStatus.textContent=(error.code||error.message)+' · Recall the vault and review again before another restore.';}
+  }catch(error){if(current())vaultCapsuleStatus.textContent=(error.code||error.message)+' · Restore outcome unconfirmed. Check the receipt and recall the vault before another restore.';}
+  finally{if(current()){vaultBusy=false;updateVaultControls();}}
+};
+function showVaultReceipt(receipt){
+  const item=element('details');
+  item.append(element('summary',{textContent:'Committed '+receipt.added+' new reports · '+receipt.duplicates+' duplicates skipped'}),
+    element('p',{textContent:'Capsule SHA-256: '+receipt.capsuleDigest}),
+    element('p',{textContent:'Receipt SHA-256: '+receipt.receiptSha256}),
+    element('p',{textContent:'Total at commit: '+receipt.totalAtCommit+' · added reports were private at commit. Current grants may differ.'}));
+  for(const id of receipt.addedMemoryIds)item.append(element('p',{textContent:id}));
+  vaultReceipts.append(item);
+}
+vaultCheck.onclick=async()=>{
+  if(vaultBusy||!vaultLastReview||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++vaultEpoch,review=vaultLastReview;
+  const current=()=>transport===client&&!client.closed&&epoch===vaultEpoch&&role==='owner';
+  vaultBusy=true;updateVaultControls();vaultReceipts.replaceChildren();
+  try{
+    const result=await client.reconcileMemoryRestore(review);if(!current())return;
+    if(result.status==='committed'){
+      showVaultReceipt(result.receipt);
+      vaultCapsuleStatus.textContent='Commit confirmed: '+result.receipt.added+' new reports were restored.';
+      await recallMemory();
+    }else vaultCapsuleStatus.textContent='No changed-restore receipt observed. This is not proof of rollback. Recall the vault before reviewing again.';
+  }catch(error){if(current())vaultCapsuleStatus.textContent=error.code||error.message;}
+  finally{if(current()){vaultBusy=false;updateVaultControls();}}
+};
+vaultRecent.onclick=async()=>{
+  if(vaultBusy||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++vaultEpoch;
+  const current=()=>transport===client&&!client.closed&&epoch===vaultEpoch&&role==='owner';
+  vaultBusy=true;updateVaultControls();vaultReceipts.replaceChildren();
+  try{
+    const receipts=await client.recentMemoryRestores();if(!current())return;
+    receipts.forEach(showVaultReceipt);
+    vaultCapsuleStatus.textContent=receipts.length+' recent changed-restore receipts · historical, not current permissions.';
+  }catch(error){if(current())vaultCapsuleStatus.textContent=error.code||error.message;}
   finally{if(current()){vaultBusy=false;updateVaultControls();}}
 };
 memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory,vaultRecovery);

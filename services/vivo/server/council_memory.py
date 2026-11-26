@@ -244,6 +244,13 @@ class EvidenceVault:
               memory_id TEXT NOT NULL REFERENCES evidence(memory_id),
               invitation_id TEXT NOT NULL,
               PRIMARY KEY(memory_id, invitation_id));
+            CREATE TABLE IF NOT EXISTS capsule_restore_receipts(
+              seq INTEGER PRIMARY KEY,
+              capsule_digest TEXT NOT NULL,
+              base_revision TEXT NOT NULL,
+              receipt TEXT NOT NULL,
+              receipt_digest TEXT NOT NULL,
+              UNIQUE(capsule_digest, base_revision));
         """)
 
     @contextmanager
@@ -316,10 +323,62 @@ class EvidenceVault:
              and total_bytes + sum(item[2] for item in added) <= MAX_BYTES, "MEMORY_CAPACITY", 409)
         return revision, len(rows), added, duplicates
 
+    def decode_restore_receipt(self, row):
+        """Revalidate a historical commit receipt without implying current grants."""
+        _, capsule_digest, base_revision, raw, digest = row
+        try:
+            need(isinstance(raw, str) and len(raw) <= 16384 and matches(DIGEST, digest)
+                 and hmac.compare_digest(hashlib.sha256(raw.encode("utf-8")).hexdigest(), digest))
+            receipt = strict_json(raw)
+            need(exact(receipt, {"schema", "capsuleDigest", "baseRevision", "committedAt",
+                                "addedMemoryIds", "added", "duplicates", "totalAtCommit",
+                                "newReportsPrivateAtCommit"}) and canonical(receipt) == raw)
+            need(receipt["schema"] == "vivo.memory-capsule-commit/1"
+                 and receipt["capsuleDigest"] == capsule_digest and matches(DIGEST, capsule_digest)
+                 and receipt["baseRevision"] == base_revision and matches(DIGEST, base_revision)
+                 and integer(receipt["committedAt"]) and receipt["newReportsPrivateAtCommit"] is True)
+            ids = receipt["addedMemoryIds"]
+            need(isinstance(ids, list) and 1 <= len(ids) <= CAPSULE_MAX_REPORTS
+                 and all(matches(MEMORY_ID, item) for item in ids) and len(set(ids)) == len(ids))
+            need(integer(receipt["added"], 1, CAPSULE_MAX_REPORTS) and receipt["added"] == len(ids)
+                 and integer(receipt["duplicates"], 0, CAPSULE_MAX_REPORTS)
+                 and receipt["added"] + receipt["duplicates"] <= CAPSULE_MAX_REPORTS
+                 and integer(receipt["totalAtCommit"], receipt["added"] + receipt["duplicates"], MAX_REPORTS))
+            for memory_id in ids:
+                evidence = self.db.execute("SELECT * FROM evidence WHERE memory_id=?", (memory_id,)).fetchone()
+                need(evidence is not None)
+                self.decode(evidence)
+            return {**receipt, "receiptSha256": digest}
+        except (MemoryError, ValueError, TypeError, UnicodeError, RecursionError):
+            raise MemoryError("STORED_RESTORE_RECEIPT_INVALID", 409) from None
+
+    def restore_receipt(self, args):
+        need(exact(args, {"capsuleDigest", "baseRevision"})
+             and matches(DIGEST, args["capsuleDigest"]) and matches(DIGEST, args["baseRevision"]), "REQUEST_INVALID")
+        row = self.db.execute(
+            "SELECT * FROM capsule_restore_receipts WHERE capsule_digest=? AND base_revision=?",
+            (args["capsuleDigest"], args["baseRevision"])).fetchone()
+        return {"schema": "vivo.memory-capsule-commit-status/1", **args,
+                "status": "committed" if row else "not-observed",
+                "receipt": self.decode_restore_receipt(row) if row else None}
+
+    def recent_restore_receipts(self, args):
+        need(exact(args, {"limit"}) and integer(args["limit"], 1, 16), "REQUEST_INVALID")
+        rows = self.db.execute("SELECT * FROM capsule_restore_receipts ORDER BY seq DESC LIMIT ?",
+                               (args["limit"],)).fetchall()
+        return {"schema": "vivo.memory-capsule-commit-history/1",
+                "receipts": [self.decode_restore_receipt(row) for row in rows]}
+
     def capsule_dispatch(self, principal, body):
         need(principal.role == "owner", "FORBIDDEN", 403)
         need(exact(body, {"op", "args"}) and isinstance(body["args"], dict), "REQUEST_INVALID")
         op, args = body["op"], body["args"]
+        if op == "receipt":
+            with self.transaction():
+                return self.restore_receipt(args)
+        if op == "recent":
+            with self.transaction():
+                return self.recent_restore_receipts(args)
         need(op in ("preview", "restore"), "REQUEST_INVALID")
         need(exact(args, {"capsule"} if op == "preview" else {"capsule", "review"}), "REQUEST_INVALID")
         capsule = args["capsule"]
@@ -346,6 +405,20 @@ class EvidenceVault:
             self.db.executemany(
                 "INSERT INTO evidence(memory_id,run_id,envelope,bytes,archived_at) VALUES(?,?,?,?,?)",
                 [(record["memoryId"], record["runId"], raw, size, now) for record, raw, size in added])
+            if added:
+                # Every changed restore consumes at least one of the bounded
+                # 128 evidence slots. Therefore receipts are bounded by the
+                # vault capacity without eviction or unbounded no-op writes.
+                receipt = {"schema": "vivo.memory-capsule-commit/1",
+                           "capsuleDigest": capsule["journalSha256"], "baseRevision": revision,
+                           "committedAt": now, "addedMemoryIds": [record["memoryId"] for record, _, _ in added],
+                           "added": len(added), "duplicates": duplicates, "totalAtCommit": current + len(added),
+                           "newReportsPrivateAtCommit": True}
+                receipt_raw = canonical(receipt)
+                self.db.execute("""INSERT INTO capsule_restore_receipts
+                    (capsule_digest,base_revision,receipt,receipt_digest) VALUES(?,?,?,?)""",
+                    (capsule["journalSha256"], revision, receipt_raw,
+                     hashlib.sha256(receipt_raw.encode("utf-8")).hexdigest()))
             return {"schema": "vivo.memory-capsule-restore/1", "capsuleDigest": capsule["journalSha256"],
                     "status": "restored" if added else "unchanged", "added": len(added),
                     "duplicates": duplicates, "total": current + len(added), "newReportsPrivate": True}

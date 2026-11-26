@@ -109,6 +109,17 @@ async def main():
                 await status(owner_status,"2 accessible reports")
                 check("owner archives and restores two reports",await owner_sheet.get_by_label("Remote Neural Memory results").locator("details").count()==2)
                 check("exactly one review and one restore request",len(capsule_requests)==2)
+                await owner_sheet.get_by_role("button",name="Check last restore receipt").click()
+                await status(capsule_status,"Commit confirmed: 1 new reports were restored.")
+                receipts=owner_sheet.get_by_label("Vault restore receipts")
+                await receipts.locator("summary").click()
+                receipt_text=await receipts.inner_text()
+                check("restore receipt links capsule and added original evidence",
+                      capsule["journalSha256"] in receipt_text and reports[1]["reportSha256"] in receipt_text)
+                await owner_sheet.get_by_role("button",name="Recent restore receipts").click()
+                await status(capsule_status,"1 recent changed-restore receipts")
+                check("owner can recall committed restore history",await receipts.locator("details").count()==1)
+                check("receipt queries never resubmit restore",len(capsule_requests)==4)
 
                 await open_panel(editor, "neural")
                 check("editor cannot see archive or grant controls", not await editor_sheet.get_by_role("button",name="Archive selected report").is_visible())
