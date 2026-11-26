@@ -371,3 +371,36 @@ test('complete backup set validates exact coverage, rejects missing and mixed pa
   assert.equal(calls.length,before);
   await shutdown(transport,socket);
 });
+
+
+test('complete restore reviews exact manifest, writes once and reconciles the historical receipt without retry',async()=>{
+  const {transport,socket}=await admitted();
+  const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+  const reportJson=JSON.stringify({schema:'matumbo.provider-council/1',mode:'fixture',runId:'restore-set-fixture',worldActionExecuted:false,postedChargesUsd:null});
+  const reportSha256=await hash(reportJson),journalJson=JSON.stringify([{schema:'matumbo.provider-council-export/1',reportJson,reportSha256}]);
+  const capsule={schema:'matumbo.neural-memory-capsule/1',journalJson,journalSha256:await hash(journalJson)};
+  const revision='a'.repeat(64),baseRevision='b'.repeat(64);
+  const manifestJson=JSON.stringify({schema:'vivo.memory-backup-manifest/1',revision,total:1,parts:[{offset:0,count:1,journalSha256:capsule.journalSha256}],includesGrants:false,includesRestoreReceipts:false});
+  const manifestDigest=await hash(manifestJson),bundle={schema:'vivo.memory-backup-set/1',manifestJson,manifestSha256:manifestDigest,capsules:[capsule]};
+  const review={schema:'vivo.memory-backup-review/1',manifestDigest,sourceRevision:revision,baseRevision,parts:1,current:0,incoming:1,added:1,duplicates:0,resulting:1,fixture:1,liveClaims:0,newReportsPrivate:true};
+  const restored={schema:'vivo.memory-backup-restore/1',manifestDigest,status:'restored',added:1,duplicates:0,total:1,newReportsPrivate:true};
+  const core={schema:'vivo.memory-backup-commit/1',manifestDigest,baseRevision,committedAt:123,addedMemoryIds:['council:'+reportSha256],added:1,duplicates:0,totalAtCommit:1,newReportsPrivateAtCommit:true};
+  const receipt={...core,receiptSha256:await hash(JSON.stringify(core))};
+  const committed={schema:'vivo.memory-backup-commit-status/1',manifestDigest,baseRevision,status:'committed',receipt};
+  const calls=[];
+  const serve=result=>async(url,init)=>{assert.equal(url,'http://vivo.test/api/neural-memory/backup-set');calls.push(JSON.parse(init.body));return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result})};};
+  assert.deepEqual(await transport.reviewCompleteMemoryBackup(bundle,serve(review)),review);
+  assert.deepEqual(await transport.restoreCompleteMemoryBackup(bundle,review,serve(restored)),restored);
+  assert.deepEqual(await transport.reconcileCompleteMemoryRestore(review,serve(committed)),committed);
+  assert.deepEqual(await transport.recentCompleteMemoryRestores(serve({schema:'vivo.memory-backup-commit-history/1',receipts:[receipt]})),[receipt]);
+  assert.deepEqual(calls.map(c=>c.op),['preview','restore','receipt','recent']);
+  assert.deepEqual(calls[1].args,{bundle,review:{manifestDigest,baseRevision}});
+  await assert.rejects(transport.restoreCompleteMemoryBackup(bundle,{...review,manifestDigest:'c'.repeat(64)},serve(restored)),/MEMORY_BACKUP_REVIEW_REQUIRED/);
+  await assert.rejects(transport.reviewCompleteMemoryBackup({...bundle,capsules:[]},serve(review)),/MEMORY_BACKUP_SET_INVALID/);
+  assert.equal(calls.length,4);
+  transport.role='editor';
+  await assert.rejects(transport.reviewCompleteMemoryBackup(bundle,serve(review)),/MEMORY_OWNER_REQUIRED/);
+  await assert.rejects(transport.restoreCompleteMemoryBackup(bundle,review,serve(restored)),/MEMORY_OWNER_REQUIRED/);
+  assert.equal(calls.length,4);
+  await shutdown(transport,socket);
+});

@@ -187,17 +187,30 @@ const backupPartSelect=element('select',{disabled:true});backupPartSelect.setAtt
 const backupExtract=element('button',{type:'button',textContent:'Extract verified capsule',disabled:true});
 const backupVerifyStatus=element('p',{textContent:'No complete backup selected.'});
 backupVerifyStatus.setAttribute('aria-label','Backup verification status');backupVerifyStatus.setAttribute('aria-live','polite');
+const backupReviewAll=element('button',{type:'button',textContent:'Review complete backup on server',disabled:true});
+const backupRestoreAll=element('button',{type:'button',textContent:'Restore all reviewed reports',disabled:true});
+const backupCheckAll=element('button',{type:'button',textContent:'Check complete restore receipt',disabled:true});
+const backupRecentAll=element('button',{type:'button',textContent:'Recent complete restore receipts'});
+const backupRestoreStatus=element('p',{textContent:'Select and verify a complete backup first.'});
+backupRestoreStatus.setAttribute('aria-label','Complete restore status');backupRestoreStatus.setAttribute('aria-live','polite');
+const backupRestoreReceipts=element('div');backupRestoreReceipts.setAttribute('aria-label','Complete restore receipts');
 vaultBackup.append(backupStart,backupNext,backupComplete,backupStatus,
-  element('p',{className:'muted',textContent:'A complete backup bundles all parts with an ordered digest manifest. Verify a downloaded file locally, then extract each capsule for the existing reviewed restore flow. A complete backup is not a one-step full server restore.'}),
-  backupVerifyFile,backupPartSelect,backupExtract,backupVerifyStatus);
-let backupEpoch=0,backupBusy=false,backupCursor=null,verifiedBackup=null;
+  element('p',{className:'muted',textContent:'Verify the complete backup locally, then either extract a capsule or explicitly review all parts on this private server. Restoration merges evidence in one transaction. No credentials, grants or prior receipts are imported.'}),
+  backupVerifyFile,backupPartSelect,backupExtract,backupVerifyStatus,
+  backupReviewAll,backupRestoreAll,backupCheckAll,backupRecentAll,backupRestoreStatus,backupRestoreReceipts);
+let backupEpoch=0,backupBusy=false,backupCursor=null,verifiedBackup=null,verifiedBundle=null,backupStaged=null,backupLastReview=null;
 function updateBackupControls(){
   backupStart.disabled=backupBusy;backupNext.disabled=backupBusy||!backupCursor;backupComplete.disabled=backupBusy;
   backupVerifyFile.disabled=backupBusy;backupPartSelect.disabled=backupBusy||!verifiedBackup;
   backupExtract.disabled=backupBusy||!verifiedBackup||backupPartSelect.value==='';
+  backupReviewAll.disabled=backupBusy||!verifiedBundle;
+  backupRestoreAll.disabled=backupBusy||!backupStaged;
+  backupCheckAll.disabled=backupBusy||!backupLastReview;
+  backupRecentAll.disabled=backupBusy;
 }
 function clearVerifiedBackup(){
-  verifiedBackup=null;
+  verifiedBackup=null;verifiedBundle=null;backupStaged=null;
+  backupRestoreStatus.textContent='Select and verify a complete backup first.';
   backupPartSelect.replaceChildren(element('option',{value:'',textContent:'Select a verified part'}));
   backupPartSelect.value='';backupVerifyFile.value='';
 }
@@ -208,7 +221,7 @@ function requestBackupFile(text,filename){
   finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 }
 function resetVaultBackup(){
-  backupEpoch++;backupBusy=false;backupCursor=null;vaultBackup.open=false;clearVerifiedBackup();
+  backupEpoch++;backupBusy=false;backupCursor=null;backupLastReview=null;backupRestoreReceipts.replaceChildren();vaultBackup.open=false;clearVerifiedBackup();
   backupVerifyStatus.textContent='No complete backup selected.';
   backupStatus.textContent='No backup started.';updateBackupControls();
 }
@@ -263,7 +276,8 @@ backupVerifyFile.onchange=async()=>{
     if(file.size>MEMORY_BACKUP_SET_MAX_BYTES)throw Error('Complete backup exceeds the file limit.');
     const parsed=JSON.parse(await file.text());if(!current())return;
     const verified=await verifyMemoryBackupSet(parsed);if(!current())return;
-    verifiedBackup=verified;
+    verifiedBackup=verified;verifiedBundle=parsed;
+    backupRestoreStatus.textContent='Verified locally. Review explicitly to upload the complete backup to this private vault.';
     verified.parts.forEach((part,index)=>backupPartSelect.append(element('option',{value:String(index),
       textContent:part.count===0?'Empty capsule':'Reports '+(part.offset+1)+'–'+(part.offset+part.count)})));
     backupVerifyStatus.textContent='Verified complete backup: '+verified.total+' reports · '+verified.parts.length+' capsule parts. No missing or duplicate runs.';
@@ -277,6 +291,67 @@ backupExtract.onclick=()=>{
   requestBackupFile(JSON.stringify(part.capsule,null,2)+'\n',
     'neural-memory-'+part.journalSha256.slice(0,12)+'.json');
   backupVerifyStatus.textContent='Verified capsule download requested. Restore this part through the reviewed capsule flow.';
+};
+backupReviewAll.onclick=async()=>{
+  if(backupBusy||!verifiedBundle||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++backupEpoch,bundle=verifiedBundle;
+  const current=()=>transport===client&&!client.closed&&epoch===backupEpoch&&role==='owner';
+  backupBusy=true;backupStaged=null;updateBackupControls();
+  backupRestoreStatus.textContent='Reviewing all parts on the private server…';
+  try{
+    const review=await client.reviewCompleteMemoryBackup(bundle);if(!current())return;
+    backupStaged={bundle,review};
+    backupRestoreStatus.textContent='Preview: '+review.added+' new · '+review.duplicates+' duplicates · '+review.parts+' parts. '+review.fixture+' fixture / '+review.liveClaims+' host-reported live claims. New reports stay private.';
+  }catch(error){if(current())backupRestoreStatus.textContent=error.code||error.message;}
+  finally{if(current()){backupBusy=false;updateBackupControls();}}
+};
+backupRestoreAll.onclick=async()=>{
+  if(backupBusy||!backupStaged||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++backupEpoch,staged=backupStaged;
+  const current=()=>transport===client&&!client.closed&&epoch===backupEpoch&&role==='owner';
+  backupBusy=true;backupStaged=null;backupLastReview=staged.review.added?staged.review:null;updateBackupControls();
+  try{
+    const result=await client.restoreCompleteMemoryBackup(staged.bundle,staged.review);if(!current())return;
+    backupRestoreStatus.textContent='Restored '+result.added+' new reports · '+result.duplicates+' duplicates skipped · '+result.total+' in private vault.';
+    await recallMemory();
+  }catch(error){if(current())backupRestoreStatus.textContent=(error.code||error.message)+' · Outcome unconfirmed. Check the receipt and recall before reviewing again.';}
+  finally{if(current()){backupBusy=false;updateBackupControls();}}
+};
+function showCompleteRestoreReceipt(receipt){
+  const item=element('details');
+  item.append(element('summary',{textContent:'Committed '+receipt.added+' new reports · '+receipt.duplicates+' duplicates skipped'}),
+    element('p',{textContent:'Manifest SHA-256: '+receipt.manifestDigest}),
+    element('p',{textContent:'Receipt SHA-256: '+receipt.receiptSha256}),
+    element('p',{textContent:'Total at commit: '+receipt.totalAtCommit+' · new reports were private at commit. Current grants may differ.'}));
+  for(const id of receipt.addedMemoryIds)item.append(element('p',{textContent:id}));
+  backupRestoreReceipts.append(item);
+}
+backupCheckAll.onclick=async()=>{
+  if(backupBusy||!backupLastReview||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++backupEpoch,review=backupLastReview;
+  const current=()=>transport===client&&!client.closed&&epoch===backupEpoch&&role==='owner';
+  backupBusy=true;backupRestoreReceipts.replaceChildren();updateBackupControls();
+  try{
+    const result=await client.reconcileCompleteMemoryRestore(review);if(!current())return;
+    if(result.status==='committed'){
+      showCompleteRestoreReceipt(result.receipt);
+      backupRestoreStatus.textContent='Complete commit confirmed: '+result.receipt.added+' new reports were restored.';
+      await recallMemory();
+    }else backupRestoreStatus.textContent='No changed-restore receipt observed. This is not proof of rollback. Recall before reviewing again.';
+  }catch(error){if(current())backupRestoreStatus.textContent=error.code||error.message;}
+  finally{if(current()){backupBusy=false;updateBackupControls();}}
+};
+backupRecentAll.onclick=async()=>{
+  if(backupBusy||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++backupEpoch;
+  const current=()=>transport===client&&!client.closed&&epoch===backupEpoch&&role==='owner';
+  backupBusy=true;backupRestoreReceipts.replaceChildren();updateBackupControls();
+  try{
+    const receipts=await client.recentCompleteMemoryRestores();if(!current())return;
+    receipts.forEach(showCompleteRestoreReceipt);
+    backupRestoreStatus.textContent=receipts.length+' recent complete restore receipts · historical, not current permissions.';
+  }catch(error){if(current())backupRestoreStatus.textContent=error.code||error.message;}
+  finally{if(current()){backupBusy=false;updateBackupControls();}}
 };
 memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory,vaultRecovery,vaultBackup);
 const agentContext=element('details');
