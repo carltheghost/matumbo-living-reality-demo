@@ -196,3 +196,70 @@ test('concurrent approval for the same task admits only one assignment',async()=
   const results=await Promise.allSettled([f.bridge.admin.approveRecommendation(plan),f.bridge.admin.approveRecommendation(plan)]);
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal((await progress(f)).task.epoch,2);assert.equal(f.calls(),0);
 });
+
+const planSpec=()=>({objective:'Prepare two objects and assemble',steps:[
+  {key:'a',title:'Prepare first object',sourceId:'muse',dependsOn:[]},
+  {key:'b',title:'Prepare second object',sourceId:'codex',dependsOn:[]},
+  {key:'finish',title:'Assemble',sourceId:'muse',dependsOn:['a','b']},
+]});
+test('reviewed plan creates all ordinary detached tasks atomically and never runs work',async()=>{
+  const f=fixture();const preview=await f.bridge.admin.previewPlan(planSpec());
+  assert.equal(preview.stageCount,2);assert.deepEqual(preview.steps.map(s=>s.stage),[1,1,2]);assert.equal((await inspect(f)).length,0);
+  preview.steps[0].title='Modified response';preview.steps[2].dependsOn=[];
+  const result=await f.bridge.admin.commitPlan(preview.token),state=await f.bridge.admin.inspect();
+  assert.equal(result.created.length,3);assert.equal(state.tasks[0].title,'Prepare first object');
+  assert.deepEqual(state.tasks[2].dependsOn,state.tasks.slice(0,2).map(t=>t.id));
+  assert.deepEqual(state.attachments,[]);assert.equal(state.plans[0].ready,2);assert.equal(state.plans[0].blocked,1);assert.equal(f.calls(),0);
+  assert(!JSON.stringify(state.tasks).includes('sessionId'));await assert.rejects(progress(f),{code:'TASK_NOT_ATTACHED'});
+  await assert.rejects(f.bridge.admin.commitPlan(preview.token),{code:'PLAN_PREVIEW_STALE'});
+});
+test('plan preview defaults use a registered session and reject unknown owners and cycles',async()=>{
+  const f=fixture(),preview=await f.bridge.admin.previewPlan({objective:'One task',steps:[{key:'one',title:'Prepare'}]},'a');
+  assert.equal(preview.steps[0].sourceId,'muse');
+  await assert.rejects(f.bridge.admin.previewPlan({objective:'Invalid',steps:[{key:'a',title:'A',sourceId:'other'}]}),{code:'PLAN_AGENT_UNAVAILABLE'});
+  await assert.rejects(f.bridge.admin.previewPlan({objective:'Invalid',steps:[{key:'a',title:'A',sourceId:'muse',dependsOn:['b']},{key:'b',title:'B',sourceId:'codex',dependsOn:['a']}]}),{code:'PLAN_DEPENDENCY_CYCLE'});
+  await assert.rejects(f.bridge.admin.commitPlan(preview.token),{code:'PLAN_PREVIEW_STALE'});assert.equal((await inspect(f)).length,0);
+});
+test('plan save rechecks candidate session generation, and world round trip invalidates review',async()=>{
+  const f=fixture(),first=await f.bridge.admin.previewPlan(planSpec());
+  f.sessions.set('b',{...f.sessions.get('b'),generation:2});
+  await assert.rejects(f.bridge.admin.commitPlan(first.token),{code:'PLAN_AGENT_STALE'});
+  const second=await f.bridge.admin.previewPlan(planSpec());f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();
+  await assert.rejects(f.bridge.admin.commitPlan(second.token),{code:'PLAN_PREVIEW_STALE'});assert.equal((await inspect(f)).length,0);
+});
+test('new preview and explicit discard both invalidate a previously reviewed batch',async()=>{
+  const f=fixture(),first=await f.bridge.admin.previewPlan(planSpec()),second=await f.bridge.admin.previewPlan(planSpec());
+  await assert.rejects(f.bridge.admin.commitPlan(first.token),{code:'PLAN_PREVIEW_STALE'});f.bridge.admin.discardPlan(second.token);
+  await assert.rejects(f.bridge.admin.commitPlan(second.token),{code:'PLAN_PREVIEW_STALE'});assert.equal((await inspect(f)).length,0);
+});
+test('concurrent save cannot duplicate an approved plan, and no attachment is created',async()=>{
+  const f=fixture(),preview=await f.bridge.admin.previewPlan(planSpec());
+  const results=await Promise.allSettled([f.bridge.admin.commitPlan(preview.token),f.bridge.admin.commitPlan(preview.token)]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);const state=await f.bridge.admin.inspect();
+  assert.equal(state.tasks.length,3);assert.equal(state.plans.length,1);assert.deepEqual(state.attachments,[]);assert.equal(f.calls(),0);
+});
+test('capacity changes after preview and storage failure both fail without partial tasks',async()=>{
+  const f=fixture(),p=await f.bridge.admin.previewPlan(planSpec());for(let i=0;i<14;i++)await f.bridge.admin.create('a','Existing '+i);
+  await assert.rejects(f.bridge.admin.commitPlan(p.token),{code:'TASK_CAPACITY'});assert.equal((await inspect(f)).length,14);
+  const g=fixture(),q=await g.bridge.admin.previewPlan(planSpec());g.store.fail();
+  await assert.rejects(g.bridge.admin.commitPlan(q.token),/storage failed/);assert.equal((await inspect(g)).length,0);
+  await assert.rejects(g.bridge.admin.commitPlan(q.token),{code:'PLAN_PREVIEW_STALE'});
+});
+test('saved plan uses existing agent ranking, receipt completion, and direct dependency evidence',async()=>{
+  const f=fixture();eligible(f,'a');eligible(f,'b');const p=await f.bridge.admin.previewPlan(planSpec()),saved=await f.bridge.admin.commitPlan(p.token);
+  const [a,b,finish]=saved.created.map(x=>x.taskId);
+  assert.equal((await f.bridge.admin.recommend(finish)).reason,'TASK_PREREQUISITES_INCOMPLETE');
+  await f.bridge.admin.approveRecommendation(await f.bridge.admin.recommend(a));await run(f,'prepare-a');await complete(f,'a',(await progress(f)).task);
+  assert.equal((await f.bridge.admin.recommend(finish)).reason,'TASK_PREREQUISITES_INCOMPLETE');
+  await f.bridge.admin.approveRecommendation(await f.bridge.admin.recommend(b));await run(f,'prepare-b','b');await complete(f,'b',(await progress(f,'b')).task);
+  await f.bridge.admin.approveRecommendation(await f.bridge.admin.recommend(finish));const state=await progress(f);
+  assert.equal(state.mission.state,'ready');assert.deepEqual(state.mission.dependencies.flatMap(d=>d.receipts.map(r=>r.operationId)),['prepare-a','prepare-b']);
+  await run(f,'assemble');await complete(f,'a',(await progress(f)).task);
+  assert.equal((await f.bridge.admin.inspect()).plans[0].completed,3);assert.equal(f.calls(),3);
+});
+test('reload preserves completed plan membership and discards unsaved previews',async()=>{
+  const f=fixture(),p=await f.bridge.admin.previewPlan(planSpec()),saved=await f.bridge.admin.commitPlan(p.token);
+  const pending=await f.bridge.admin.previewPlan(planSpec());f.bridge=f.build();
+  const state=await f.bridge.admin.inspect();assert.equal(state.plans[0].planId,saved.planId);assert.equal(state.tasks.length,3);assert.deepEqual(state.attachments,[]);
+  await assert.rejects(f.bridge.admin.commitPlan(pending.token),{code:'PLAN_PREVIEW_STALE'});
+});

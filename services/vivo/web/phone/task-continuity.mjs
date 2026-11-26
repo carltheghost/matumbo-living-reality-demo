@@ -1,6 +1,7 @@
 /** Local, owner-attached task evidence. Never executes or restores an action on load. */
 import {TASK_JOURNAL_SCHEMA as SCHEMA,LEGACY_TASK_JOURNAL_SCHEMA,normalizePrerequisites,validateMissionGraph,addPrerequisites,assertMissionReady,completeMissionTask,missionView} from './mission-graph.mjs';
 import {rankMissionAgents} from './mission-orchestrator.mjs';
+import {compileMissionPlan,buildPlannedTasks,validatePlanMetadata,summarizeMissionPlans} from './mission-planner.mjs';
 const TOOL='task.progress',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
@@ -23,7 +24,7 @@ const valid=(journal,key)=>{
     need(owner===t.sourceId,'TASK_STORAGE_INVALID');
     for(const s of t.steps){need(s&&(s.sourceId===undefined?history.length===0:owners.has(s.sourceId))&&(s.spaceId===undefined||id(s.spaceId)),'TASK_STORAGE_INVALID');need(id(s.operationId)&&id(s.entityId)&&/^[a-f0-9]{64}$/.test(s.sha256)&&['pending','confirmed','conflict','not-dispatched'].includes(s.state)&&!operations.has(s.operationId),'TASK_STORAGE_INVALID');operations.add(s.operationId);if(s.state==='confirmed')need(Number.isSafeInteger(s.revision)&&s.revision>=0&&typeof s.changed==='boolean','TASK_STORAGE_INVALID');}
   }
-  return validateMissionGraph(journal);
+  return validatePlanMetadata(validateMissionGraph(journal));
 };
 /** Atomic same-origin IndexedDB updates; deliberately no volatile fallback. */
 export class IndexedDbTaskStore {
@@ -40,7 +41,7 @@ export class IndexedDbTaskStore {
 }
 /** Host is trusted; its native registry remains the only world-action authority. */
 export function createTaskContinuity({registry,downstream,validateEdit,getEnvelope,store=new IndexedDbTaskStore(),newId=()=>crypto.randomUUID()}){
-  const bindings=new Map(),attaching=new Map();let currentKey=null,lastWarning=null,scopeEpoch=0;
+  const bindings=new Map(),attaching=new Map();let currentKey=null,lastWarning=null,scopeEpoch=0,planDraft=null;
   const active=session=>{const a=registry.agentController.assertActive(session);return {sourceId:a.sourceId,sessionId:a.sessionId,generation:a.generation};};
   const sameAgent=(a,b)=>a?.sessionId===b?.sessionId&&a?.generation===b?.generation&&a?.sourceId===b?.sourceId;
   function syncScope(){const scope=scopeOf(getEnvelope());const key=scope?keyOf(scope):null;if(key!==currentKey){clear();currentKey=key;}return key;}
@@ -51,7 +52,54 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
   function binding(session){syncScope();const agent=active(session),b=bindings.get(agent.sessionId);if(b&&!sameAgent(b.agent,agent)){bindings.delete(agent.sessionId);return null;}return b||null;}
   function checkBinding(b){need(syncScope()===b.key&&bindings.get(b.agent.sessionId)===b&&sameAgent(active(b.agent),b.agent),'TASK_ATTACHMENT_STALE');}
   function pause(session){const sessionId=typeof session==='string'?session:session?.sessionId;bindings.delete(sessionId);attaching.delete(sessionId);}
-  function clear(){bindings.clear();attaching.clear();scopeEpoch++;}
+  function clear(){bindings.clear();attaching.clear();planDraft=null;scopeEpoch++;}
+  // Owner-side review only. The preview is kept in this host, not entrusted to
+  // a mutable client response. Saving never attaches or dispatches a task.
+  function assertPlanCurrent(draft){
+    need(syncScope()===draft.key&&scopeEpoch===draft.epoch&&planDraft===draft,'PLAN_PREVIEW_STALE');
+  }
+  function assertPlanAgents(draft){
+    for(const step of draft.compiled.steps){
+      try{need(sameAgent(active(step.agent),step.agent),'PLAN_AGENT_STALE');}catch{throw fail('PLAN_AGENT_STALE');}
+    }
+  }
+  async function previewPlan(spec,defaultSession=null){
+    const key=scopeKey(),epoch=scopeEpoch;
+    need(!planDraft?.committing,'PLAN_COMMIT_IN_PROGRESS');
+    planDraft=null;
+    const defaultSourceId=defaultSession===null?null:active(defaultSession).sourceId;
+    const agents=[];
+    for(const candidate of registry.agents?.()||[]){
+      try{const a=active(candidate);if(sameAgent(a,candidate))agents.push({...a,status:'active'});}catch{}
+    }
+    const compiled=compileMissionPlan({objective:spec?.objective,steps:spec?.steps,defaultSourceId},agents);
+    const draft={token:newId(),key,epoch,compiled,ready:false,committing:false};
+    planDraft=draft;
+    try{
+      const remaining=await tx(key,j=>{
+        assertPlanCurrent(draft);assertPlanAgents(draft);
+        const rows=buildPlannedTasks(j,compiled,draft.token,LIMIT);
+        return LIMIT-j.tasks.length-rows.length;
+      });
+      assertPlanCurrent(draft);assertPlanAgents(draft);draft.ready=true;
+      return structuredClone({token:draft.token,...compiled,remainingAfterSave:remaining});
+    }catch(error){if(planDraft===draft)planDraft=null;throw error;}
+  }
+  function discardPlan(token){if(planDraft&&planDraft.token===token&&!planDraft.committing)planDraft=null;}
+  async function commitPlan(token){
+    const key=scopeKey(),draft=planDraft;
+    need(draft&&draft.token===token&&draft.key===key&&draft.ready&&!draft.committing,'PLAN_PREVIEW_STALE');
+    assertPlanCurrent(draft);draft.committing=true;
+    try{
+      return await tx(key,j=>{
+        assertPlanCurrent(draft);assertPlanAgents(draft);
+        const rows=buildPlannedTasks(j,draft.compiled,draft.token,LIMIT);
+        j.tasks.push(...rows);
+        return {planId:draft.token,objective:draft.compiled.objective,scopeKey:key,
+          created:rows.map(t=>({taskId:t.id,sourceId:t.sourceId,stepKey:t.plan.stepKey})),authorizesAction:false};
+      });
+    }finally{if(planDraft===draft)planDraft=null;}
+  }
   function recommendationFor(j,task,ignorePending=null){
     const attachments=[];
     for(const b of bindings.values()){
@@ -128,7 +176,7 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
     if(bindings.get(b.agent.sessionId)===b)pause(b.agent);
     return result;
   }
-  async function inspect(){const key=scopeKey();const tasks=await tx(key,j=>j.tasks);need(syncScope()===key,'TASK_ATTACHMENT_STALE');for(const [sid,b] of bindings){try{checkBinding(b);const t=tasks.find(t=>t.id===b.taskId);if(t&&!t.closed&&t.epoch===b.epoch)continue;}catch{}bindings.delete(sid);}return {tasks,attachments:[...bindings.values()].map(b=>({taskId:b.taskId,sourceId:b.agent.sourceId,sessionId:b.agent.sessionId})),warning:lastWarning};}
+  async function inspect(){const key=scopeKey();const tasks=await tx(key,j=>j.tasks);need(syncScope()===key,'TASK_ATTACHMENT_STALE');for(const [sid,b] of bindings){try{checkBinding(b);const t=tasks.find(t=>t.id===b.taskId);if(t&&!t.closed&&t.epoch===b.epoch)continue;}catch{}bindings.delete(sid);}return {tasks,plans:summarizeMissionPlans(tasks),attachments:[...bindings.values()].map(b=>({taskId:b.taskId,sourceId:b.agent.sourceId,sessionId:b.agent.sessionId})),warning:lastWarning};}
   async function reconcile(){
     const envelope=getEnvelope(),key=scopeKey();need(scopeOf(envelope)&&keyOf(scopeOf(envelope))===key,'TASK_SCOPE_CHANGED');
     const receipts=Array.isArray(envelope.snapshot.localOperationResults)?envelope.snapshot.localOperationResults:[];
@@ -153,5 +201,5 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       try{if(syncScope()===b.key)await reconcile();}catch{lastWarning='Task evidence could not be refreshed. Review the existing operation before retrying.';}
     }
   }
-  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,approveRecommendation,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
+  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,approveRecommendation,previewPlan,commitPlan,discardPlan,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
 }
