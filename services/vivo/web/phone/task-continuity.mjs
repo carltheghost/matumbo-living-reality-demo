@@ -6,7 +6,8 @@ import {diagnoseMissionTask,recoverySnapshot,reopenReviewedTask,validateRecovery
 import {collectMissionExperience,taskMissionExperience} from './mission-experience.mjs';
 import {selectMissionEvidence,normalizeMissionRecall,recallMissionEvidence} from './mission-recall.mjs';
 import {normalizeMissionTrace,traceMissionEvidence} from './mission-associations.mjs';
-const TOOL='task.progress',RECALL='neural.missionRecall',TRACE='neural.missionTrace',LIMIT=16,STEPS=64,HANDOFFS=16;
+import {normalizeMissionForecast,forecastMissionEvidence} from './mission-forecast.mjs';
+const TOOL='task.progress',RECALL='neural.missionRecall',TRACE='neural.missionTrace',FORECAST='neural.missionForecast',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
 const id=x=>typeof x==='string'&&x.length>0&&x.length<=256&&!/[\u0000-\u001f\u007f]/.test(x);
@@ -255,14 +256,15 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       return {taskId:b.taskId,sourceTaskIds:[...sourceTaskIds],readOnly:true,authorizesAction:false};
     }catch(e){if(recallGrants.get(b.agent.sessionId)===g)recallGrants.delete(b.agent.sessionId);throw e;}
   }
-  async function recallFor(b,args,trace=false){
+  async function recallFor(b,args,name){
     need(b,'TASK_NOT_ATTACHED');const g=recallGrantFor(b);need(g,'MISSION_RECALL_NOT_GRANTED');
-    const query=trace?normalizeMissionTrace(args):normalizeMissionRecall(args);assertRecallGrant(b,g);
+    const normalize=name===TRACE?normalizeMissionTrace:name===FORECAST?normalizeMissionForecast:normalizeMissionRecall;
+    const query=normalize(args);assertRecallGrant(b,g);
     const result=await tx(b.key,j=>{
       assertRecallGrant(b,g);owns(j,b);
       const [worldId,projectId]=JSON.parse(b.key);
       const tasks=selectMissionEvidence(j.tasks,b.taskId,g.sourceTaskIds);
-      const read=trace?traceMissionEvidence:recallMissionEvidence;
+      const read=name===TRACE?traceMissionEvidence:name===FORECAST?forecastMissionEvidence:recallMissionEvidence;
       return {...read({scope:{worldId,projectId},tasks,args:query}),targetTaskId:b.taskId,attachmentEpoch:b.epoch};
     });
     assertRecallGrant(b,g);return result;
@@ -270,13 +272,13 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
   function listFor(session){
     const tools=downstream.listFor(session);
     try{const b=binding(session);if(b)return [...tools,{name:TOOL,description:'Read the attached local task journal. This grants no action authority.'},
-      ...(recallGrantFor(b)?[{name:RECALL,description:'Read owner-selected completed mission evidence for this attachment. Exact spaceId and entityId, optional offset and limit (1–32). No action authority.'},{name:TRACE,description:'Trace an exact evidence association between two objects using only owner-shared completed tasks. Arguments: from and to (spaceId, entityId), optional maxHops (1–8). Associations are not causal proof or action authority.'}]:[])];}catch{}
+      ...(recallGrantFor(b)?[{name:RECALL,description:'Read owner-selected completed mission evidence for this attachment. Exact spaceId and entityId, optional offset and limit (1–32). No action authority.'},{name:TRACE,description:'Trace an exact evidence association between two objects using only owner-shared completed tasks. Arguments: from and to (spaceId, entityId), optional maxHops (1–8). Associations are not causal proof or action authority.'},{name:FORECAST,description:'Suggest a next object to inspect from distinct owner-shared completed task sequences. Exact spaceId and entityId. Returns historical counts, competing evidence, abstention and retrospective evaluation; never a calibrated probability or action authority.'}]:[])];}catch{}
     return tools;
   }
   async function invokeFor(session,name,args={}){
-    if(name!==TOOL&&name!==RECALL&&name!==TRACE&&name!=='vivo.world.edit')return downstream.invokeFor(session,name,args);
+    if(name!==TOOL&&name!==RECALL&&name!==TRACE&&name!==FORECAST&&name!=='vivo.world.edit')return downstream.invokeFor(session,name,args);
     const b=binding(session);
-    if(name===RECALL||name===TRACE)return recallFor(b,args,name===TRACE);
+    if(name===RECALL||name===TRACE||name===FORECAST)return recallFor(b,args,name);
     if(name===TOOL){need(b,'TASK_NOT_ATTACHED');need(args&&typeof args==='object'&&!Array.isArray(args)&&Object.keys(args).length===0,'TASK_ARGUMENTS_INVALID');const result=await tx(b.key,j=>{const task=owns(j,b);const mission=missionView(j,task);return {task,mission,experience:taskMissionExperience(task,mission)};});checkBinding(b);return {schema:SCHEMA,...result,readOnly:true,authorizesAction:false};}
     if(!b)return downstream.invokeFor(session,name,args);
     checkBinding(b);const safe=structuredClone(args);const v=validateEdit(safe,getEnvelope());need(!v.prior,'TASK_OPERATION_ALREADY_RECORDED');const sha256=await digest(fingerprint(v));checkBinding(b);
