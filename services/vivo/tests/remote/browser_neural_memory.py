@@ -120,10 +120,24 @@ async def main():
                 await status(capsule_status,"1 recent changed-restore receipts")
                 check("owner can recall committed restore history",await receipts.locator("details").count()==1)
                 check("receipt queries never resubmit restore",len(capsule_requests)==4)
+                await owner_sheet.get_by_text("Back up private evidence vault",exact=True).click()
+                async with owner.expect_download(timeout=15000) as pending:
+                    await owner_sheet.get_by_role("button",name="Download first backup part").click()
+                backup=await pending.value
+                backup_path=await backup.path()
+                exported=json.loads(backup_path.read_text(encoding="utf-8"))
+                check("owner backup preserves exact original capsule",
+                      exported==capsule and exported["journalSha256"]==hashlib.sha256(exported["journalJson"].encode()).hexdigest())
+                await status(owner_sheet.get_by_label("Vault backup status"),"Final part")
+                check("backup is read-only and completes at two reports",len(capsule_requests)==5 and
+                      await owner_sheet.get_by_role("button",name="Download next backup part").is_disabled())
+                await owner_sheet.get_by_role("button",name="Recall evidence").click()
+                await status(owner_status,"2 accessible reports")
 
                 await open_panel(editor, "neural")
                 check("editor cannot see archive or grant controls", not await editor_sheet.get_by_role("button",name="Archive selected report").is_visible())
                 check("editor cannot see private capsule restore",not await editor_sheet.get_by_text("Restore a local Neural Memory capsule",exact=True).is_visible())
+                check("editor cannot see full vault backup",not await editor_sheet.get_by_text("Back up private evidence vault",exact=True).is_visible())
                 await editor_sheet.get_by_text("Prepare agent evidence context",exact=True).click()
                 await editor_sheet.get_by_label("Required provider in evidence").select_option("kimi")
                 await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()

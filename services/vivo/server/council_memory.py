@@ -369,10 +369,55 @@ class EvidenceVault:
         return {"schema": "vivo.memory-capsule-commit-history/1",
                 "receipts": [self.decode_restore_receipt(row) for row in rows]}
 
+    def backup_capsule(self, args):
+        """Return one recoverable part of an owner-only, revision-pinned backup.
+
+        Parts retain original Council envelopes in archive order. Grants,
+        invitation identifiers, commit history and credentials are deliberately
+        excluded. Any intervening evidence/grant mutation invalidates the cursor.
+        """
+        need(exact(args, {"after", "revision"}), "REQUEST_INVALID")
+        after, expected = args["after"], args["revision"]
+        need((after is None and expected is None) or
+             (integer(after, 1) and matches(DIGEST, expected)), "REQUEST_INVALID")
+        revision, total, _, _ = self.capsule_plan([])
+        if expected is not None:
+            need(hmac.compare_digest(expected, revision), "BACKUP_REVISION_STALE", 409)
+        rows = self.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall()
+        if after is not None:
+            need(any(row[0] == after for row in rows), "BACKUP_CURSOR_INVALID", 409)
+        start = sum(row[0] <= after for row in rows) if after is not None else 0
+        need(after is None or start < total, "BACKUP_CURSOR_INVALID", 409)
+        envelopes, last_seq = [], None
+        journal_bytes = 2  # brackets, plus exact envelope bytes and commas
+        for row in rows[start:]:
+            _, envelope = self.decode(row)
+            size = len(canonical(envelope).encode("utf-8")) + bool(envelopes)
+            if len(envelopes) >= CAPSULE_MAX_REPORTS or journal_bytes + size > CAPSULE_MAX_JOURNAL:
+                break
+            envelopes.append(envelope)
+            journal_bytes += size
+            last_seq = row[0]
+        need(bool(envelopes) or total == 0, "BACKUP_PART_TOO_LARGE", 409)
+        raw = canonical(envelopes)
+        capsule = {"schema": CAPSULE_SCHEMA, "journalJson": raw,
+                   "journalSha256": hashlib.sha256(raw.encode("utf-8")).hexdigest()}
+        # Apply the same validator that will be used at restore time.
+        validate_capsule(capsule)
+        through = start + len(envelopes)
+        return {"schema": "vivo.memory-backup-part/1", "revision": revision,
+                "after": after, "offset": start, "count": len(envelopes),
+                "total": total, "nextAfter": last_seq if through < total else None,
+                "complete": through == total, "capsule": capsule,
+                "includesGrants": False, "includesRestoreReceipts": False}
+
     def capsule_dispatch(self, principal, body):
         need(principal.role == "owner", "FORBIDDEN", 403)
         need(exact(body, {"op", "args"}) and isinstance(body["args"], dict), "REQUEST_INVALID")
         op, args = body["op"], body["args"]
+        if op == "backup":
+            with self.transaction():
+                return self.backup_capsule(args)
         if op == "receipt":
             with self.transaction():
                 return self.restore_receipt(args)
