@@ -560,3 +560,41 @@ test('strategy uses current native eligibility even for future waves and rejects
   f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();release();
   await assert.rejects(pending,{code:'STRATEGY_SCOPE_STALE'});assert.equal(f.calls(),0);
 });
+
+test('critic improves a real journal strategy without modifying task completion or agent grants',async()=>{
+  const f=fixture();eligible(f,'a');eligible(f,'b');
+  const spec={objective:'Critical chain review',steps:[
+    {key:'a',title:'Independent A',sourceId:'muse',dependsOn:[]},
+    {key:'b',title:'Independent B',sourceId:'muse',dependsOn:[]},
+    {key:'c',title:'Critical start',sourceId:'muse',dependsOn:[]},
+    {key:'d',title:'Critical middle',sourceId:'muse',dependsOn:['c']},
+    {key:'e',title:'Critical finish',sourceId:'muse',dependsOn:['d']}]};
+  const p=await f.bridge.admin.previewPlan(spec),saved=await f.bridge.admin.commitPlan(p.token),ids=saved.created.map(t=>t.taskId);
+  const before=await f.bridge.admin.inspect(),r=await f.bridge.admin.reviewStrategy({taskIds:ids,unavailableSourceIds:['muse']});
+  assert.equal(r.baseline.originalRounds,4);assert.equal(r.baseline.preferredRounds,3);assert.equal(r.baseline.proofStatus,'exact-search-proven');
+  assert.equal(r.baseline.improvementRounds,1);assert.equal(r.alternative.preferredRounds,5);assert.equal(r.conditionalRoundDifference,2);
+  assert.equal(r.singleSourceStress.tested,2);assert.equal(r.authorizesAction,false);assert.equal(r.predictsCompletion,false);
+  const end=before.tasks.find(t=>t.title==='Critical finish');
+  assert.equal((await f.bridge.admin.recommend(end.id)).reason,'TASK_PREREQUISITES_INCOMPLETE');
+  assert.deepEqual(await f.bridge.admin.inspect(),before);assert.equal(f.calls(),0);
+  assert(!f.bridge.tools.listFor('a').some(t=>/critic|reviewStrategy/i.test(t.name)));
+});
+test('critic exposes missing external prerequisites and uncertain task evidence without inventing completions',async()=>{
+  const f=fixture();eligible(f,'a');eligible(f,'b');
+  const root=await attach(f);f.mode('missing');await run(f);
+  const child=await f.bridge.admin.create('b','Blocked child',[root.taskId]);f.bridge.admin.pause('b');
+  const before=await f.bridge.admin.inspect();
+  const both=await f.bridge.admin.reviewStrategy({taskIds:[root.taskId,child.taskId]});
+  assert.equal(both.baseline.proofStatus,'blocked-under-fixed-snapshot');assert.equal(both.baseline.audit.unscheduled,2);
+  assert.equal(both.baseline.audit.conditionalLowerBound,null);assert.equal(both.conditionalRoundDifference,null);
+  const single=await f.bridge.admin.reviewStrategy({taskIds:[child.taskId]});
+  assert.deepEqual(single.baseline.unscheduled[0].externalPrerequisiteIds,[root.taskId]);
+  assert.deepEqual(await f.bridge.admin.inspect(),before);assert.equal(f.calls(),1);
+});
+test('critic rechecks world/branch epoch before returning a report',async()=>{
+  const f=fixture();eligible(f,'a');const a=await attach(f);f.bridge.admin.pause('a');
+  await assert.rejects(f.bridge.admin.reviewStrategy({taskIds:[a.taskId,a.taskId]}),{code:'SCENARIO_TASKS_INVALID'});
+  const release=f.store.hold(),pending=f.bridge.admin.reviewStrategy({taskIds:[a.taskId]});await release.entered;
+  f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();release();
+  await assert.rejects(pending,{code:'CRITIC_SCOPE_STALE'});assert.equal(f.calls(),0);
+});
