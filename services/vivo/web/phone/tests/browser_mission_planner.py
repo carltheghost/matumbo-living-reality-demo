@@ -51,6 +51,16 @@ def exercise(page, route, label):
     assert strategy["baseline"]["roundCount"]==2 and strategy["alternative"]["roundCount"]==3 and strategy["roundDifference"]==1,strategy
     assert strategy["authorizesAction"] is False and strategy["predictsCompletion"] is False,strategy
     assert strategy["baseline"]["waves"][-1]["assignments"][0]["taskId"]==ids["finish"],strategy
+    panel.get_by_role("button",name="Challenge and review mission strategy").click()
+    idle()
+    critic_text=panel.locator("#vivoMissionScenario").inner_text()
+    assert "Current availability · 2 → 2 hypothetical rounds" in critic_text,critic_text
+    assert "Hypothetical availability · 3 → 3 hypothetical rounds" in critic_text,critic_text
+    assert "Conditional minimum proved by lower bound" in critic_text and "Single-source stress tests: 3/3 sources" in critic_text,critic_text
+    critic=page.evaluate("taskIds=>window.VivaPhoneAgentAdmin.taskAccess.reviewStrategy({taskIds,unavailableSourceIds:['planner-a','planner-b']})",list(ids.values()))
+    assert critic["baseline"]["audit"]["valid"] and critic["alternative"]["audit"]["valid"],critic
+    assert critic["baseline"]["preferredRounds"]==2 and critic["alternative"]["preferredRounds"]==3,critic
+    assert critic["authorizesAction"] is False and critic["predictsCompletion"] is False,critic
     unchanged=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
     assert unchanged["tasks"]==initial["tasks"] and unchanged["attachments"]==[],unchanged
     stale=page.evaluate("""async()=>{
@@ -87,7 +97,30 @@ def exercise(page, route, label):
     assert third["source"]=="planner-c" and third["result"]["status"]=="accepted",third
     evidence=third["progress"]["mission"]["dependencies"]
     assert [r["operationId"] for d in evidence for r in d["receipts"]]==["plan:left","plan:right"],evidence
+    # A second, independent synthetic mission exposes a greedy scheduling loss.
+    # The original real mission is completed; the second mission stays detached.
+    chain=page.evaluate("""async()=>{
+      const access=window.VivaPhoneAgentAdmin.taskAccess;
+      const steps=[['a','Independent A',[]],['b','Independent B',[]],['c','Critical start',[]],['d','Critical middle',['c']],['e','Critical finish',['d']]]
+        .map(([key,title,dependsOn])=>({key,title,sourceId:'planner-a',dependsOn}));
+      const p=await access.previewPlan({objective:'Challenge critical chain',steps});
+      return access.commitPlan(p.token);
+    }""")
+    before_review=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
+    panel.get_by_role("button",name="Refresh saved tasks").click()
+    idle()
+    panel.get_by_role("combobox",name="Saved task in this world and branch").select_option(chain["created"][0]["taskId"])
+    panel.get_by_role("listbox",name="Hypothetically unavailable agent sources").select_option(["planner-c"])
+    panel.get_by_role("button",name="Challenge and review mission strategy").click()
+    idle()
+    critic_text=panel.locator("#vivoMissionScenario").inner_text()
+    assert "Hypothetical availability · 4 → 3 hypothetical rounds" in critic_text,critic_text
+    assert "Conditional minimum proved by exact search" in critic_text,critic_text
+    improved=page.evaluate("taskIds=>window.VivaPhoneAgentAdmin.taskAccess.reviewStrategy({taskIds,unavailableSourceIds:['planner-c']})",[t["taskId"] for t in chain["created"]])
+    assert improved["alternative"]["originalRounds"]==4 and improved["alternative"]["preferredRounds"]==3,improved
+    assert improved["alternative"]["proofStatus"]=="exact-search-proven" and improved["alternative"]["audit"]["valid"],improved
     completed=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
+    assert completed==before_review,completed
     assert completed["plans"][0]["completed"]==3 and completed["attachments"]==[],completed
     enter_local(page,route,world_id)
     open_agent_panel(page)
@@ -99,7 +132,7 @@ def exercise(page, route, label):
     assert restored["branchId"]==third["branchId"] and restored["plans"]==completed["plans"],restored
     assert restored["tasks"]==completed["tasks"] and restored["attachments"]==[],restored
     assert sorted(restored["receipts"])==["plan:finish","plan:left","plan:right"],restored
-    return {"created":3,"completed":3,"parallelPrerequisites":2,"staleReviewRejected":True,"reload":True,"autoGrant":False,"scenarioComparison":True,"hypotheticalOutageCapacity":1,"scenarioReadOnly":True,"multiStageStrategy":True,"outageExtraRounds":1,"strategyReadOnly":True}
+    return {"created":3,"completed":3,"parallelPrerequisites":2,"staleReviewRejected":True,"reload":True,"autoGrant":False,"scenarioComparison":True,"hypotheticalOutageCapacity":1,"scenarioReadOnly":True,"multiStageStrategy":True,"outageExtraRounds":1,"strategyReadOnly":True,"strategyCritic":True,"greedyRounds":4,"exactRounds":3,"criticReadOnly":True}
 
 
 def main(base):

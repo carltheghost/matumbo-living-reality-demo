@@ -9,6 +9,7 @@ import {normalizeMissionTrace,traceMissionEvidence} from './mission-associations
 import {normalizeMissionForecast,forecastMissionEvidence} from './mission-forecast.mjs';
 import {validateScenario,compareMissionScenarios} from './mission-scenarios.mjs';
 import {compareMissionStrategies} from './mission-strategy.mjs';
+import {reviewMissionStrategies} from './mission-critic.mjs';
 const TOOL='task.progress',RECALL='neural.missionRecall',TRACE='neural.missionTrace',FORECAST='neural.missionForecast',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
@@ -170,6 +171,17 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       });
     }finally{if(recoveryDraft===draft)recoveryDraft=null;}
   }
+  async function reviewStrategy(input){
+    const query=validateScenario(input),key=scopeKey(),epoch=scopeEpoch;
+    const assertCurrent=()=>need(syncScope()===key&&scopeEpoch===epoch,'CRITIC_SCOPE_STALE');
+    const result=await tx(key,j=>{
+      assertCurrent();
+      const tasks=query.taskIds.map(taskId=>find(j,taskId));
+      const rankings=new Map(tasks.filter(t=>t.completed!==true).map(t=>[t.id,recommendationFor(j,t,null,true)]));
+      return {...reviewMissionStrategies({tasks:j.tasks,taskIds:query.taskIds,rankings,unavailableSourceIds:query.unavailableSourceIds},compareMissionStrategies,compareMissionScenarios),scopeKey:key,scopeEpoch:epoch};
+    });
+    assertCurrent();return result;
+  }
   async function compareStrategy(input){
     const query=validateScenario(input),key=scopeKey(),epoch=scopeEpoch;
     const assertCurrent=()=>need(syncScope()===key&&scopeEpoch===epoch,'STRATEGY_SCOPE_STALE');
@@ -318,5 +330,5 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       try{if(syncScope()===b.key)await reconcile();}catch{lastWarning='Task evidence could not be refreshed. Review the existing operation before retrying.';}
     }
   }
-  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,compareScenario,compareStrategy,approveRecommendation,previewPlan,commitPlan,discardPlan,diagnose,commitRecovery,discardRecovery,grantMissionRecall,revokeMissionRecall,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
+  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,compareScenario,compareStrategy,reviewStrategy,approveRecommendation,previewPlan,commitPlan,discardPlan,diagnose,commitRecovery,discardRecovery,grantMissionRecall,revokeMissionRecall,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
 }
