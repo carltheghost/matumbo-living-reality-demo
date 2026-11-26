@@ -60,11 +60,12 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.invites.close()
         self.temp.cleanup()
 
-    async def rpc(self, op, args=None, token=OWNER, expected=200, origin=ORIGIN, capsule=False):
+    async def rpc(self, op, args=None, token=OWNER, expected=200, origin=ORIGIN, capsule=False, backup_set=False):
         headers = {"Origin": origin}
         if token is not None:
             headers["Authorization"] = "Bearer "+token
-        async with self.client.post("/api/neural-memory/capsule" if capsule else "/api/neural-memory", headers=headers,
+        path = "/api/neural-memory/backup-set" if backup_set else "/api/neural-memory/capsule" if capsule else "/api/neural-memory"
+        async with self.client.post(path, headers=headers,
                                     json={"op":op,"args":args or {}}) as response:
             body = await response.json()
             self.assertEqual(response.status, expected, body)
@@ -471,3 +472,89 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.vault.db.execute("UPDATE evidence SET envelope='{}'")
         self.assertEqual(await self.rpc("backup",args,expected=409,capsule=True),"STORED_EVIDENCE_INVALID")
         self.assertEqual(await self.rpc("backup",{"after":1,"revision":None},expected=400,capsule=True),"REQUEST_INVALID")
+
+
+    @staticmethod
+    def complete_bundle(parts):
+        capsules = []
+        manifest_parts = []
+        offset = 0
+        for envelopes in parts:
+            raw = json.dumps(envelopes,separators=(",",":"),ensure_ascii=False)
+            digest = hashlib.sha256(raw.encode()).hexdigest()
+            capsules.append({"schema":"matumbo.neural-memory-capsule/1","journalJson":raw,"journalSha256":digest})
+            manifest_parts.append({"offset":offset,"count":len(envelopes),"journalSha256":digest})
+            offset += len(envelopes)
+        manifest = json.dumps({"schema":"vivo.memory-backup-manifest/1","revision":"a"*64,
+            "total":offset,"parts":manifest_parts,"includesGrants":False,"includesRestoreReceipts":False},
+            separators=(",",":"))
+        return {"schema":"vivo.memory-backup-set/1","manifestJson":manifest,
+                "manifestSha256":hashlib.sha256(manifest.encode()).hexdigest(),"capsules":capsules}
+
+    async def test_atomic_complete_backup_restore_70_reports_receipt_and_restart(self):
+        entries = [change(self.mission,lambda r:r.update(runId=f"complete-{i:03}")) for i in range(70)]
+        bundle = self.complete_bundle([entries[:64],entries[64:]])
+        first = await self.rpc("archive",{"envelope":entries[0]})
+        await self.rpc("grant",{"memoryId":first["record"]["memoryId"],"invitationId":self.one["id"],"granted":True})
+        before = self.vault.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall()
+        grants = self.vault.db.execute("SELECT * FROM grants").fetchall()
+        self.assertEqual(await self.rpc("preview",{"bundle":bundle},token=self.one["token"],expected=403,backup_set=True),"FORBIDDEN")
+        review = await self.rpc("preview",{"bundle":bundle},backup_set=True)
+        self.assertEqual((review["incoming"],review["parts"],review["current"],review["added"],review["duplicates"],review["resulting"]),(70,2,1,69,1,70))
+        self.assertTrue(review["newReportsPrivate"])
+        self.assertEqual(self.vault.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall(),before)
+        key={k:review[k] for k in ("manifestDigest","baseRevision")}
+        args={"bundle":bundle,"review":key}
+        self.assertEqual(await self.rpc("restore",args,token=self.one["token"],expected=403,backup_set=True),"FORBIDDEN")
+        self.vault.db.execute("""CREATE TRIGGER fail_last_part BEFORE INSERT ON evidence
+            WHEN NEW.run_id='complete-069' BEGIN SELECT RAISE(ABORT,'fixture last part failure'); END""")
+        self.assertEqual(await self.rpc("restore",args,expected=503,backup_set=True),"MEMORY_STORAGE_UNAVAILABLE")
+        self.assertEqual(self.vault.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall(),before)
+        self.vault.db.execute("DROP TRIGGER fail_last_part")
+        self.vault.db.execute("""CREATE TRIGGER fail_set_receipt BEFORE INSERT ON backup_set_restore_receipts
+            BEGIN SELECT RAISE(ABORT,'fixture receipt failure'); END""")
+        self.assertEqual(await self.rpc("restore",args,expected=503,backup_set=True),"MEMORY_STORAGE_UNAVAILABLE")
+        self.assertEqual(self.vault.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall(),before)
+        self.assertEqual((await self.rpc("receipt",key,backup_set=True))["status"],"not-observed")
+        self.vault.db.execute("DROP TRIGGER fail_set_receipt")
+        restored=await self.rpc("restore",args,backup_set=True)
+        self.assertEqual((restored["status"],restored["added"],restored["total"]),("restored",69,70))
+        self.assertEqual([self.vault.decode(row)[1] for row in self.vault.db.execute("SELECT * FROM evidence ORDER BY seq")],entries)
+        self.assertEqual(self.vault.db.execute("SELECT * FROM grants").fetchall(),grants)
+        self.assertEqual(len((await self.rpc("search",token=self.one["token"]))["records"]),1)
+        committed=await self.rpc("receipt",key,backup_set=True)
+        self.assertEqual(committed["status"],"committed")
+        self.assertEqual(committed["receipt"]["addedMemoryIds"],["council:"+e["reportSha256"] for e in entries[1:]])
+        self.assertEqual(await self.rpc("receipt",key,token=self.one["token"],expected=403,backup_set=True),"FORBIDDEN")
+        self.assertEqual(await self.rpc("restore",args,expected=409,backup_set=True),"BACKUP_REVIEW_STALE")
+        again=await self.rpc("preview",{"bundle":bundle},backup_set=True)
+        again_key={k:again[k] for k in ("manifestDigest","baseRevision")}
+        self.assertEqual((await self.rpc("restore",{"bundle":bundle,"review":again_key},backup_set=True))["status"],"unchanged")
+        self.assertEqual((await self.rpc("receipt",again_key,backup_set=True))["status"],"not-observed")
+        self.assertEqual((await self.rpc("recent",{"limit":16},backup_set=True))["receipts"],[committed["receipt"]])
+        await self.client.close();self.vault.close();self.invites.close()
+        self.vault=EvidenceVault(self.path/"evidence.sqlite");self.invites=InvitationStore(self.path/"invites.sqlite")
+        await self.start()
+        self.assertEqual(await self.rpc("receipt",key,backup_set=True),committed)
+        self.assertEqual(self.vault.db.execute("SELECT count(*) FROM evidence").fetchone()[0],70)
+        self.assertEqual(self.vault.db.execute("SELECT * FROM grants").fetchall(),grants)
+
+    async def test_complete_backup_rejects_missing_duplicate_conflicting_or_stale_parts(self):
+        bundle=self.complete_bundle([[self.mission],[self.arithmetic]])
+        await self.rpc("archive",{"envelope":self.mission})
+        before=self.vault.db.execute("SELECT * FROM evidence").fetchall()
+        for bad in ({**bundle,"capsules":bundle["capsules"][:1]},
+                    {**bundle,"capsules":list(reversed(bundle["capsules"]))},
+                    {**bundle,"manifestSha256":"0"*64},
+                    self.complete_bundle([[self.mission],[self.mission]])):
+            self.assertEqual(await self.rpc("preview",{"bundle":bad},expected=400,backup_set=True),"BACKUP_SET_INVALID")
+        conflict=change(self.mission,lambda r:r["rows"][0].update(latencyMs=r["rows"][0]["latencyMs"]+1))
+        bad=self.complete_bundle([[self.arithmetic],[conflict]])
+        self.assertEqual(await self.rpc("preview",{"bundle":bad},expected=409,backup_set=True),"RUN_CONFLICT")
+        review=await self.rpc("preview",{"bundle":bundle},backup_set=True)
+        key={k:review[k] for k in ("manifestDigest","baseRevision")}
+        await self.rpc("grant",{"memoryId":"council:"+self.mission["reportSha256"],"invitationId":self.one["id"],"granted":True})
+        self.assertEqual(await self.rpc("restore",{"bundle":bundle,"review":key},expected=409,backup_set=True),"BACKUP_REVIEW_STALE")
+        self.assertEqual(self.vault.db.execute("SELECT * FROM evidence").fetchall(),before)
+        self.assertEqual(self.vault.db.execute("SELECT count(*) FROM backup_set_restore_receipts").fetchone()[0],0)
+        self.assertEqual(await self.rpc("preview",{"bundle":bundle},origin="https://wrong.test",expected=403,backup_set=True),"ORIGIN_NOT_ALLOWED")

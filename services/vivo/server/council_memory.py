@@ -27,6 +27,8 @@ CAPSULE_SCHEMA = "matumbo.neural-memory-capsule/1"
 CAPSULE_MAX_REPORTS = 64
 CAPSULE_MAX_JOURNAL = 512 * 1024
 CAPSULE_MAX_REQUEST = 2 * CAPSULE_MAX_JOURNAL + 8192
+BACKUP_SET_MAX_BYTES = 5 * 1024 * 1024
+BACKUP_SET_MAX_REQUEST = BACKUP_SET_MAX_BYTES + 8192
 MAX_SAFE = 2**53 - 1
 PROVIDERS = {"openai", "anthropic", "google", "deepseek", "kimi", "nvidia", "xai"}
 JOBS = {"A": (3, 5), "B": (4, 7), "C": (5, 9), "D": (2, 4)}
@@ -225,6 +227,50 @@ def validate_capsule(capsule):
         raise MemoryError("CAPSULE_INVALID") from None
 
 
+def validate_backup_set(bundle):
+    """Independently validate complete ordered coverage before a restore.
+
+    The manifest is an integrity/coverage contract, not authenticated origin.
+    It cannot import grants, credentials or prior restore receipts.
+    """
+    try:
+        need(exact(bundle, {"schema", "manifestJson", "manifestSha256", "capsules"})
+             and bundle["schema"] == "vivo.memory-backup-set/1")
+        raw, claimed, capsules = bundle["manifestJson"], bundle["manifestSha256"], bundle["capsules"]
+        need(isinstance(raw, str) and raw.isascii() and len(raw) <= 32768
+             and matches(DIGEST, claimed) and isinstance(capsules, list)
+             and 1 <= len(capsules) <= MAX_REPORTS)
+        need(len(canonical(bundle).encode("utf-8")) <= BACKUP_SET_MAX_BYTES)
+        need(hmac.compare_digest(hashlib.sha256(raw.encode("utf-8")).hexdigest(), claimed))
+        manifest = strict_json(raw)
+        need(exact(manifest, {"schema", "revision", "total", "parts", "includesGrants", "includesRestoreReceipts"})
+             and canonical(manifest) == raw and manifest["schema"] == "vivo.memory-backup-manifest/1"
+             and matches(DIGEST, manifest["revision"]) and integer(manifest["total"], 0, MAX_REPORTS)
+             and manifest["includesGrants"] is False and manifest["includesRestoreReceipts"] is False
+             and isinstance(manifest["parts"], list) and len(manifest["parts"]) == len(capsules))
+        incoming, seen = [], set()
+        offset, journal_bytes = 0, 0
+        for part, capsule in zip(manifest["parts"], capsules):
+            need(exact(part, {"offset", "count", "journalSha256"})
+                 and integer(part["offset"], 0, MAX_REPORTS) and part["offset"] == offset
+                 and integer(part["count"], 0, CAPSULE_MAX_REPORTS)
+                 and offset + part["count"] <= manifest["total"]
+                 and (part["count"] > 0 or (manifest["total"] == 0 and len(capsules) == 1)))
+            entries = validate_capsule(capsule)
+            need(len(entries) == part["count"] and capsule["journalSha256"] == part["journalSha256"])
+            for record, _, _ in entries:
+                need(record["runId"] not in seen)
+                seen.add(record["runId"])
+            incoming.extend(entries)
+            offset += len(entries)
+            journal_bytes += len(capsule["journalJson"].encode("utf-8"))
+        need(offset == manifest["total"] and journal_bytes <= MAX_BYTES + 384
+             and sum(entry[2] for entry in incoming) <= MAX_BYTES)
+        return manifest, incoming
+    except (MemoryError, ValueError, TypeError, UnicodeError, RecursionError):
+        raise MemoryError("BACKUP_SET_INVALID") from None
+
+
 class EvidenceVault:
     """One owner namespace per existing private remote data directory."""
     def __init__(self, path):
@@ -251,6 +297,13 @@ class EvidenceVault:
               receipt TEXT NOT NULL,
               receipt_digest TEXT NOT NULL,
               UNIQUE(capsule_digest, base_revision));
+            CREATE TABLE IF NOT EXISTS backup_set_restore_receipts(
+              seq INTEGER PRIMARY KEY,
+              manifest_digest TEXT NOT NULL,
+              base_revision TEXT NOT NULL,
+              receipt TEXT NOT NULL,
+              receipt_digest TEXT NOT NULL,
+              UNIQUE(manifest_digest, base_revision));
         """)
 
     @contextmanager
@@ -323,26 +376,29 @@ class EvidenceVault:
              and total_bytes + sum(item[2] for item in added) <= MAX_BYTES, "MEMORY_CAPACITY", 409)
         return revision, len(rows), added, duplicates
 
-    def decode_restore_receipt(self, row):
+    def decode_restore_receipt(self, row, *, backup_set=False):
         """Revalidate a historical commit receipt without implying current grants."""
-        _, capsule_digest, base_revision, raw, digest = row
+        _, source_digest, base_revision, raw, digest = row
+        field = "manifestDigest" if backup_set else "capsuleDigest"
+        kind = "backup" if backup_set else "capsule"
+        maximum = MAX_REPORTS if backup_set else CAPSULE_MAX_REPORTS
         try:
             need(isinstance(raw, str) and len(raw) <= 16384 and matches(DIGEST, digest)
                  and hmac.compare_digest(hashlib.sha256(raw.encode("utf-8")).hexdigest(), digest))
             receipt = strict_json(raw)
-            need(exact(receipt, {"schema", "capsuleDigest", "baseRevision", "committedAt",
+            need(exact(receipt, {"schema", field, "baseRevision", "committedAt",
                                 "addedMemoryIds", "added", "duplicates", "totalAtCommit",
                                 "newReportsPrivateAtCommit"}) and canonical(receipt) == raw)
-            need(receipt["schema"] == "vivo.memory-capsule-commit/1"
-                 and receipt["capsuleDigest"] == capsule_digest and matches(DIGEST, capsule_digest)
+            need(receipt["schema"] == f"vivo.memory-{kind}-commit/1"
+                 and receipt[field] == source_digest and matches(DIGEST, source_digest)
                  and receipt["baseRevision"] == base_revision and matches(DIGEST, base_revision)
                  and integer(receipt["committedAt"]) and receipt["newReportsPrivateAtCommit"] is True)
             ids = receipt["addedMemoryIds"]
-            need(isinstance(ids, list) and 1 <= len(ids) <= CAPSULE_MAX_REPORTS
+            need(isinstance(ids, list) and 1 <= len(ids) <= maximum
                  and all(matches(MEMORY_ID, item) for item in ids) and len(set(ids)) == len(ids))
-            need(integer(receipt["added"], 1, CAPSULE_MAX_REPORTS) and receipt["added"] == len(ids)
-                 and integer(receipt["duplicates"], 0, CAPSULE_MAX_REPORTS)
-                 and receipt["added"] + receipt["duplicates"] <= CAPSULE_MAX_REPORTS
+            need(integer(receipt["added"], 1, maximum) and receipt["added"] == len(ids)
+                 and integer(receipt["duplicates"], 0, maximum)
+                 and receipt["added"] + receipt["duplicates"] <= maximum
                  and integer(receipt["totalAtCommit"], receipt["added"] + receipt["duplicates"], MAX_REPORTS))
             for memory_id in ids:
                 evidence = self.db.execute("SELECT * FROM evidence WHERE memory_id=?", (memory_id,)).fetchone()
@@ -352,22 +408,51 @@ class EvidenceVault:
         except (MemoryError, ValueError, TypeError, UnicodeError, RecursionError):
             raise MemoryError("STORED_RESTORE_RECEIPT_INVALID", 409) from None
 
-    def restore_receipt(self, args):
-        need(exact(args, {"capsuleDigest", "baseRevision"})
-             and matches(DIGEST, args["capsuleDigest"]) and matches(DIGEST, args["baseRevision"]), "REQUEST_INVALID")
-        row = self.db.execute(
-            "SELECT * FROM capsule_restore_receipts WHERE capsule_digest=? AND base_revision=?",
-            (args["capsuleDigest"], args["baseRevision"])).fetchone()
-        return {"schema": "vivo.memory-capsule-commit-status/1", **args,
+    def restore_receipt(self, args, *, backup_set=False):
+        field = "manifestDigest" if backup_set else "capsuleDigest"
+        kind = "backup" if backup_set else "capsule"
+        need(exact(args, {field, "baseRevision"})
+             and matches(DIGEST, args[field]) and matches(DIGEST, args["baseRevision"]), "REQUEST_INVALID")
+        sql = ("SELECT * FROM backup_set_restore_receipts WHERE manifest_digest=? AND base_revision=?"
+               if backup_set else
+               "SELECT * FROM capsule_restore_receipts WHERE capsule_digest=? AND base_revision=?")
+        row = self.db.execute(sql, (args[field], args["baseRevision"])).fetchone()
+        return {"schema": f"vivo.memory-{kind}-commit-status/1", **args,
                 "status": "committed" if row else "not-observed",
-                "receipt": self.decode_restore_receipt(row) if row else None}
+                "receipt": self.decode_restore_receipt(row, backup_set=backup_set) if row else None}
 
-    def recent_restore_receipts(self, args):
+    def recent_restore_receipts(self, args, *, backup_set=False):
         need(exact(args, {"limit"}) and integer(args["limit"], 1, 16), "REQUEST_INVALID")
-        rows = self.db.execute("SELECT * FROM capsule_restore_receipts ORDER BY seq DESC LIMIT ?",
-                               (args["limit"],)).fetchall()
-        return {"schema": "vivo.memory-capsule-commit-history/1",
-                "receipts": [self.decode_restore_receipt(row) for row in rows]}
+        sql = ("SELECT * FROM backup_set_restore_receipts ORDER BY seq DESC LIMIT ?" if backup_set else
+               "SELECT * FROM capsule_restore_receipts ORDER BY seq DESC LIMIT ?")
+        rows = self.db.execute(sql, (args["limit"],)).fetchall()
+        kind = "backup" if backup_set else "capsule"
+        return {"schema": f"vivo.memory-{kind}-commit-history/1",
+                "receipts": [self.decode_restore_receipt(row, backup_set=backup_set) for row in rows]}
+
+    def commit_reviewed_evidence(self, added, duplicates, current, revision, source_digest, *, backup_set=False):
+        """Caller owns the transaction; evidence and its receipt are indivisible."""
+        now = int(time.time())
+        self.db.executemany(
+            "INSERT INTO evidence(memory_id,run_id,envelope,bytes,archived_at) VALUES(?,?,?,?,?)",
+            [(record["memoryId"], record["runId"], raw, size, now) for record, raw, size in added])
+        if not added:
+            return
+        # Across both receipt tables, each changed transaction consumes at
+        # least one of the non-evicting evidence slots; no unbounded no-op writes.
+        kind = "backup" if backup_set else "capsule"
+        field = "manifestDigest" if backup_set else "capsuleDigest"
+        receipt = {"schema": f"vivo.memory-{kind}-commit/1",
+                   field: source_digest, "baseRevision": revision, "committedAt": now,
+                   "addedMemoryIds": [record["memoryId"] for record, _, _ in added],
+                   "added": len(added), "duplicates": duplicates, "totalAtCommit": current + len(added),
+                   "newReportsPrivateAtCommit": True}
+        raw = canonical(receipt)
+        sql = ("""INSERT INTO backup_set_restore_receipts
+                (manifest_digest,base_revision,receipt,receipt_digest) VALUES(?,?,?,?)""" if backup_set else
+               """INSERT INTO capsule_restore_receipts
+                (capsule_digest,base_revision,receipt,receipt_digest) VALUES(?,?,?,?)""")
+        self.db.execute(sql, (source_digest, revision, raw, hashlib.sha256(raw.encode("utf-8")).hexdigest()))
 
     def backup_capsule(self, args):
         """Return one recoverable part of an owner-only, revision-pinned backup.
@@ -444,27 +529,44 @@ class EvidenceVault:
                         "liveClaims": sum(record["mode"] == "live" for record, _, _ in incoming),
                         "newReportsPrivate": True}
             need(hmac.compare_digest(review["baseRevision"], revision), "CAPSULE_REVIEW_STALE", 409)
-            now = int(time.time())
-            # One SQLite transaction; no per-record archive() commits.
-            # Existing evidence rows and grants are never modified.
-            self.db.executemany(
-                "INSERT INTO evidence(memory_id,run_id,envelope,bytes,archived_at) VALUES(?,?,?,?,?)",
-                [(record["memoryId"], record["runId"], raw, size, now) for record, raw, size in added])
-            if added:
-                # Every changed restore consumes at least one of the bounded
-                # 128 evidence slots. Therefore receipts are bounded by the
-                # vault capacity without eviction or unbounded no-op writes.
-                receipt = {"schema": "vivo.memory-capsule-commit/1",
-                           "capsuleDigest": capsule["journalSha256"], "baseRevision": revision,
-                           "committedAt": now, "addedMemoryIds": [record["memoryId"] for record, _, _ in added],
-                           "added": len(added), "duplicates": duplicates, "totalAtCommit": current + len(added),
-                           "newReportsPrivateAtCommit": True}
-                receipt_raw = canonical(receipt)
-                self.db.execute("""INSERT INTO capsule_restore_receipts
-                    (capsule_digest,base_revision,receipt,receipt_digest) VALUES(?,?,?,?)""",
-                    (capsule["journalSha256"], revision, receipt_raw,
-                     hashlib.sha256(receipt_raw.encode("utf-8")).hexdigest()))
+            self.commit_reviewed_evidence(added, duplicates, current, revision, capsule["journalSha256"])
             return {"schema": "vivo.memory-capsule-restore/1", "capsuleDigest": capsule["journalSha256"],
+                    "status": "restored" if added else "unchanged", "added": len(added),
+                    "duplicates": duplicates, "total": current + len(added), "newReportsPrivate": True}
+
+    def backup_set_dispatch(self, principal, body):
+        need(principal.role == "owner", "FORBIDDEN", 403)
+        need(exact(body, {"op", "args"}) and isinstance(body["args"], dict), "REQUEST_INVALID")
+        op, args = body["op"], body["args"]
+        if op == "receipt":
+            with self.transaction():
+                return self.restore_receipt(args, backup_set=True)
+        if op == "recent":
+            with self.transaction():
+                return self.recent_restore_receipts(args, backup_set=True)
+        need(op in ("preview", "restore"), "REQUEST_INVALID")
+        need(exact(args, {"bundle"} if op == "preview" else {"bundle", "review"}), "REQUEST_INVALID")
+        bundle = args["bundle"]
+        manifest, incoming = validate_backup_set(bundle)
+        digest = bundle["manifestSha256"]
+        if op == "restore":
+            review = args["review"]
+            need(exact(review, {"manifestDigest", "baseRevision"}) and
+                 matches(DIGEST, review["baseRevision"]) and review["manifestDigest"] == digest,
+                 "BACKUP_REVIEW_REQUIRED", 409)
+        with self.transaction():
+            revision, current, added, duplicates = self.capsule_plan(incoming)
+            if op == "preview":
+                return {"schema": "vivo.memory-backup-review/1", "manifestDigest": digest,
+                        "sourceRevision": manifest["revision"], "baseRevision": revision,
+                        "parts": len(manifest["parts"]), "current": current, "incoming": len(incoming),
+                        "added": len(added), "duplicates": duplicates, "resulting": current + len(added),
+                        "fixture": sum(record["mode"] == "fixture" for record, _, _ in incoming),
+                        "liveClaims": sum(record["mode"] == "live" for record, _, _ in incoming),
+                        "newReportsPrivate": True}
+            need(hmac.compare_digest(review["baseRevision"], revision), "BACKUP_REVIEW_STALE", 409)
+            self.commit_reviewed_evidence(added, duplicates, current, revision, digest, backup_set=True)
+            return {"schema": "vivo.memory-backup-restore/1", "manifestDigest": digest,
                     "status": "restored" if added else "unchanged", "added": len(added),
                     "duplicates": duplicates, "total": current + len(added), "newReportsPrivate": True}
 
@@ -698,9 +800,9 @@ def attach_memory_routes(app, *, vault, origin, authenticate, invitations):
         except sqlite3.Error:
             return reply({"error": "MEMORY_STORAGE_UNAVAILABLE"}, 503)
 
-    async def capsule_dispatch(request):
-        # A separate bounded owner-only route keeps the ordinary 64 KiB API
-        # limit unchanged. Recheck admission after the asynchronous upload.
+    async def owner_upload(request, limit, handler):
+        # Separate bounded owner-only routes preserve the ordinary 64 KiB
+        # API and single-capsule limits. Reauthenticate after the upload.
         if request.headers.get("Origin") != origin:
             return reply({"error": "ORIGIN_NOT_ALLOWED"}, 403)
         header = request.headers.get("Authorization", "")
@@ -715,18 +817,18 @@ def attach_memory_routes(app, *, vault, origin, authenticate, invitations):
         try:
             need(request.content_type == "application/json", "REQUEST_INVALID")
             need(request.headers.get("Content-Encoding", "identity").lower() == "identity", "REQUEST_INVALID")
-            need(request.content_length is None or request.content_length <= CAPSULE_MAX_REQUEST,
+            need(request.content_length is None or request.content_length <= limit,
                  "REQUEST_TOO_LARGE", 413)
             raw = bytearray()
             async with asyncio.timeout(15):
                 async for chunk in request.content.iter_chunked(16384):
-                    need(len(raw) + len(chunk) <= CAPSULE_MAX_REQUEST, "REQUEST_TOO_LARGE", 413)
+                    need(len(raw) + len(chunk) <= limit, "REQUEST_TOO_LARGE", 413)
                     raw.extend(chunk)
             try:
                 principal = authenticate(header[7:])
             except Exception:
                 return reply({"error": "AUTH_REQUIRED"}, 401)
-            return reply({"result": vault.capsule_dispatch(principal, strict_json(raw.decode("utf-8")))})
+            return reply({"result": handler(principal, strict_json(raw.decode("utf-8")))})
         except MemoryError as error:
             return reply({"error": error.code}, error.status)
         except TimeoutError:
@@ -736,5 +838,12 @@ def attach_memory_routes(app, *, vault, origin, authenticate, invitations):
         except sqlite3.Error:
             return reply({"error": "MEMORY_STORAGE_UNAVAILABLE"}, 503)
 
+    async def capsule_dispatch(request):
+        return await owner_upload(request, CAPSULE_MAX_REQUEST, vault.capsule_dispatch)
+
+    async def backup_set_dispatch(request):
+        return await owner_upload(request, BACKUP_SET_MAX_REQUEST, vault.backup_set_dispatch)
+
     app.router.add_post("/api/neural-memory", dispatch)
     app.router.add_post("/api/neural-memory/capsule", capsule_dispatch)
+    app.router.add_post("/api/neural-memory/backup-set", backup_set_dispatch)

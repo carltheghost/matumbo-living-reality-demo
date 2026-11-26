@@ -246,6 +246,55 @@ async def main():
                 reasoning_text=await reasoning.inner_text()
                 check("revocation leaves local proof but no private evidence",
                       "Verified plan: C,D" in reasoning_text and "Local proof only." in reasoning_text and digest not in reasoning_text)
+                # Two real fixture envelopes plus two new originals spread across
+                # two capsules. The entire set must be reviewed and committed once.
+                extra=[]
+                for i in range(2):
+                    payload=json.loads(reports[0]["reportJson"])
+                    payload["runId"]="complete-restore-browser-"+str(i)
+                    raw=json.dumps(payload,separators=(",",":"),ensure_ascii=False)
+                    extra.append({"schema":"matumbo.provider-council-export/1","reportJson":raw,
+                                  "reportSha256":hashlib.sha256(raw.encode()).hexdigest()})
+                parts,manifest_parts,offset=[],[],0
+                for envelopes in ([reports[0],extra[0]],[reports[1],extra[1]]):
+                    raw=json.dumps(envelopes,separators=(",",":"),ensure_ascii=False)
+                    part_digest=hashlib.sha256(raw.encode()).hexdigest()
+                    parts.append({"schema":"matumbo.neural-memory-capsule/1","journalJson":raw,"journalSha256":part_digest})
+                    manifest_parts.append({"offset":offset,"count":len(envelopes),"journalSha256":part_digest})
+                    offset+=len(envelopes)
+                raw_manifest=json.dumps({"schema":"vivo.memory-backup-manifest/1","revision":"a"*64,
+                    "total":offset,"parts":manifest_parts,"includesGrants":False,"includesRestoreReceipts":False},separators=(",",":"))
+                complete_set={"schema":"vivo.memory-backup-set/1","manifestJson":raw_manifest,
+                    "manifestSha256":hashlib.sha256(raw_manifest.encode()).hexdigest(),"capsules":parts}
+                set_requests=[]
+                owner.on("request",lambda request:set_requests.append(json.loads(request.post_data)["op"]) if request.url.endswith("/api/neural-memory/backup-set") else None)
+                await verify_input.set_input_files({"name":"complete.json","mimeType":"application/json",
+                    "buffer":json.dumps(complete_set).encode()})
+                await status(verify_status,"Verified complete backup: 4 reports · 2 capsule parts.")
+                check("complete restore selection is local and cannot commit",not set_requests and
+                      await owner_sheet.get_by_role("button",name="Restore all reviewed reports").is_disabled())
+                await owner_sheet.get_by_role("button",name="Review complete backup on server").click()
+                set_status=owner_sheet.get_by_label("Complete restore status")
+                await status(set_status,"Preview: 2 new · 2 duplicates · 2 parts.")
+                await owner_sheet.get_by_role("button",name="Recall evidence").click()
+                await status(owner_status,"2 accessible reports")
+                check("complete review does not write",set_requests==["preview"])
+                await owner_sheet.get_by_role("button",name="Restore all reviewed reports").click()
+                await status(set_status,"Restored 2 new reports · 2 duplicates skipped · 4 in private vault.")
+                await status(owner_status,"4 accessible reports")
+                await owner_sheet.get_by_role("button",name="Check complete restore receipt").click()
+                await status(set_status,"Complete commit confirmed: 2 new reports were restored.")
+                set_receipts=owner_sheet.get_by_label("Complete restore receipts")
+                await set_receipts.locator("summary").click()
+                receipt_text=await set_receipts.inner_text()
+                check("one complete commit receipt binds both new original reports",
+                      complete_set["manifestSha256"] in receipt_text and all(e["reportSha256"] in receipt_text for e in extra))
+                await owner_sheet.get_by_role("button",name="Recent complete restore receipts").click()
+                await status(set_status,"1 recent complete restore receipts")
+                check("complete recovery only commits once",set_requests==["preview","restore","receipt","recent"])
+                await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
+                await status(editor_status,"No matching authorized evidence.")
+                check("complete restoration grants no new collaborator access",await result.locator("details").count()==0)
                 check("no page errors",not errors)
                 check("no external browser requests",not forbidden)
             finally:
