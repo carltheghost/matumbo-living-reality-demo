@@ -1,0 +1,7 @@
+# Phone rendered-transform acceptance
+
+On the earlier reasoning revision, the broad phone suite failed once in material contact admission and again when it sampled the mobile canvases immediately after the FieldWorld preview existed. The independent verifier revision subsequently passed the complete phone suite and all seven integration workflows; its exact source tree has been merged into main (32da5554af9f39678a8712a39acaf9951d5248fb).
+
+The transform acceptance now observes the real scheduled PhoneRenderer.draw and drawEntity calls in the disposable browser test only. It establishes a completed baseline frame, then records a completed paint of the exact selected relic transform, its operation ID, geometry, delta and two contact IDs. The observed frame must match the current FieldWorld transform, contain nontrivial scale and rotation, and change canvas pixels. A timeout reports the last actual paint, current model, contacts and renderer state. The observer restores the original methods and does not call draw, mutate object state or change the production renderer. Existing persistence, cancellation, camera-off and offline checks remain in place.
+
+This separates model publication from render completion rather than increasing an arbitrary sleep or removing a pixel assertion. The independent material-contact timeout is not declared fixed here. Fresh browser CI is required; this is synthetic Chromium evidence, not physical tracking certification.

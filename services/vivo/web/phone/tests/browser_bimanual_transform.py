@@ -12,7 +12,7 @@ import shutil
 import sys
 import time
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 
 def open_world_controls(page) -> None:
@@ -218,6 +218,119 @@ def wait_revision(page, object_id: str, revision: int) -> dict:
         arg={"objectId": object_id, "revision": revision},
     )
     return snapshot_entity(page, object_id)
+
+
+def observe_rendered_transform(page, object_id: str, first_id: int, second_id: int) -> None:
+    """Observe real scheduled draw calls, without requesting or faking a frame.
+
+    FieldWorld publishes a preview before the throttled renderer paints it.
+    Record the target entity that actually passed through drawEntity, then
+    inspect the canvas only after the enclosing original draw has completed.
+    """
+    page.evaluate(
+        """
+        ({ objectId, contactIds }) => {
+          const renderer = window.VivaShared.R;
+          if (window.__bimanualPaintObserver) window.__bimanualPaintObserver.stop();
+          const originalDraw = renderer.draw, originalEntity = renderer.drawEntity;
+          let active = false, target = null, sequence = 0, baseline = null, painted = null;
+          const pixels = () => [document.querySelector('#world').toDataURL(),
+            document.querySelector('#overlay').toDataURL()];
+          const observeEntity = function (...args) {
+            const hit = Reflect.apply(originalEntity, this, args);
+            const entity = args[1];
+            if (active && entity?.id === objectId && hit?.interactive) {
+              const preview = this.previewFor(objectId);
+              target = {
+                entityId: entity.id,
+                localPreview: entity.localPreview === true,
+                operationId: preview?.operationId ?? null,
+                geometry: entity.geometry ? JSON.parse(JSON.stringify(entity.geometry)) : null,
+                delta: preview?.delta ? [...preview.delta] : null,
+              };
+            }
+            return hit;
+          };
+          const observeDraw = function (...args) {
+            target = null; active = true;
+            let result;
+            try { result = Reflect.apply(originalDraw, this, args); }
+            finally { active = false; }
+            sequence++;
+            if (target && !target.localPreview && !baseline) {
+              baseline = { sequence, pixels: pixels() };
+            } else if (baseline && target?.localPreview && target.operationId &&
+                target.geometry?.scale > 1.05 && Math.abs(target.geometry?.rotation) > 0.05) {
+              const contacts = window.VivaPhoneEngine.interaction().contacts
+                .filter(item => item.objectId === objectId).map(item => item.contactId).sort();
+              if (JSON.stringify(contacts) === JSON.stringify(contactIds) &&
+                  (!painted || painted.operationId !== target.operationId ||
+                   JSON.stringify(painted.geometry) !== JSON.stringify(target.geometry) ||
+                   JSON.stringify(painted.delta) !== JSON.stringify(target.delta))) {
+                const after = pixels();
+                painted = {
+                  ...target, sequence, baselineSequence: baseline.sequence, contacts,
+                  pixelChanged: after.some((bytes, i) => bytes !== baseline.pixels[i]),
+                  pixelLengths: after.map(bytes => bytes.length),
+                };
+              }
+            }
+            return result;
+          };
+          renderer.drawEntity = observeEntity;
+          renderer.draw = observeDraw;
+          window.__bimanualPaintObserver = {
+            baseline: () => Boolean(baseline),
+            result: () => painted,
+            stop() {
+              if (renderer.draw === observeDraw) renderer.draw = originalDraw;
+              if (renderer.drawEntity === observeEntity) renderer.drawEntity = originalEntity;
+              delete window.__bimanualPaintObserver;
+            },
+          };
+        }
+        """,
+        {"objectId": object_id, "contactIds": sorted([f"touch:{first_id}", f"touch:{second_id}"])},
+    )
+    page.wait_for_function("() => window.__bimanualPaintObserver?.baseline()", timeout=12000)
+
+
+def wait_rendered_transform(page, object_id: str) -> dict:
+    try:
+        page.wait_for_function(
+            """
+            objectId => {
+              const drawn = window.__bimanualPaintObserver?.result();
+              const current = window.VivaPhoneEngine.fieldWorld()?.previews?.find(p => p.entityId === objectId);
+              // Match the current transform, not an earlier intermediate
+              // first-contact frame, and never count model-only visibility.
+              return Boolean(drawn && current && current.kind === 'transform' &&
+                drawn.operationId === current.operationId &&
+                JSON.stringify(drawn.geometry) === JSON.stringify(current.geometry) &&
+                JSON.stringify(drawn.delta) === JSON.stringify(current.delta));
+            }
+            """,
+            arg=object_id, timeout=12000,
+        )
+        result = page.evaluate("() => window.__bimanualPaintObserver.result()")
+        assert result["sequence"] > result["baselineSequence"], result
+        assert result["pixelChanged"], "A completed transform draw did not change either canvas: " + json.dumps(result)
+        assert result["pixelLengths"][0] > 1000 and result["pixelLengths"][1] > 100, result
+        return result
+    except PlaywrightTimeoutError as error:
+        diagnostic = page.evaluate(
+            """objectId => ({
+                drawn: window.__bimanualPaintObserver?.result(),
+                model: window.VivaPhoneEngine.fieldWorld()?.previews?.find(p => p.entityId === objectId),
+                contacts: window.VivaPhoneEngine.interaction().contacts,
+                hidden: document.hidden,
+                lastDraw: window.VivaShared.R._lastDraw,
+                renderer: window.VivaShared.R.backend,
+            })""", object_id
+        )
+        raise AssertionError("No completed matching transform frame: " + json.dumps(diagnostic)) from error
+    finally:
+        page.evaluate("() => window.__bimanualPaintObserver?.stop()")
 
 
 def begin_pair(page, object_id: str, first_id: int, second_id: int) -> tuple[dict, dict]:
@@ -451,11 +564,9 @@ def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[st
     eye_switch = run_eye_switch_fence_regression(page, route)
     independent_refresh = run_independent_preview_refresh_regression(page, route)
     initial = snapshot_entity(page, "relic")
-    baseline_pixels = page.evaluate(
-        "() => [document.querySelector('#world').toDataURL(), document.querySelector('#overlay').toDataURL()]"
-    )
-
+    observe_rendered_transform(page, "relic", 1, 2)
     begin_pair(page, "relic", 1, 2)
+    rendered_transform = wait_rendered_transform(page, "relic")
     preview = page.evaluate(
         """
         () => {
@@ -464,8 +575,6 @@ def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[st
           return {
             geometry: relic.geometry,
             delta: model.preview?.delta,
-            previewPixels: document.querySelector('#world').toDataURL(),
-            overlayPixels: document.querySelector('#overlay').toDataURL(),
             contacts: window.VivaPhoneEngine.interaction().contacts,
             previewText: document.querySelector('#phoneFieldPreview').textContent,
           };
@@ -478,11 +587,8 @@ def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[st
     assert abs(preview["geometry"]["rotation"]) > 0.05, preview
     assert len(preview["delta"]) == 4 and abs(preview["delta"][3]) < 1e-9, preview
     assert "transform preview" in preview["previewText"], preview
-    rendered_pixels = page.evaluate(
-        "() => [document.querySelector('#world').toDataURL(), document.querySelector('#overlay').toDataURL()]"
-    )
-    assert rendered_pixels != baseline_pixels, "The local transform preview must be visible on the renderer"
-    assert len(preview["overlayPixels"]) > 100, preview
+    assert rendered_transform["geometry"]["scale"] > 1.05, rendered_transform
+    assert abs(rendered_transform["geometry"]["rotation"]) > 0.05, rendered_transform
 
     dispatch_pointer(page, "pointerup", 1, 0, 0)
     page.wait_for_function(
@@ -663,6 +769,7 @@ def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[st
         "portalGeometry": portal_after_reload["entity"]["geometry"],
         "eyeSwitch": eye_switch,
         "independentPreviewRefresh": independent_refresh,
+        "renderedTransform": rendered_transform,
         "requestCount": len(requests),
         "cameraCalls": 0,
     }
@@ -706,24 +813,20 @@ def main(base_url: str) -> None:
         mobile.on("request", lambda request: mobile_requests.append(request.url))
         enter_local(mobile, route)
         install_pointer_shim(mobile)
-        mobile_before = mobile.evaluate(
-            "() => [document.querySelector('#world').toDataURL(), document.querySelector('#overlay').toDataURL()]"
-        )
+        observe_rendered_transform(mobile, "relic", 31, 32)
         begin_pair(mobile, "relic", 31, 32)
-        mobile_after = mobile.evaluate(
-            "() => [document.querySelector('#world').toDataURL(), document.querySelector('#overlay').toDataURL()]"
-        )
+        mobile_rendered = wait_rendered_transform(mobile, "relic")
         atlas_box = mobile.locator("#phoneFieldAtlas").bounding_box()
         assert atlas_box and atlas_box["width"] > 0 and atlas_box["height"] > 0, atlas_box
-        assert mobile_after != mobile_before, "Mobile renderer did not visibly render the transform preview"
-        assert len(mobile_after[0]) > 1000 and len(mobile_after[1]) > 100, mobile_after
+        assert mobile_rendered["entityId"] == "relic", mobile_rendered
+        assert mobile_rendered["contacts"] == ["touch:31", "touch:32"], mobile_rendered
         assert mobile.evaluate("() => window.__phoneCameraCalls") == 0
         assert not any("/readyz" in url or "/healthz" in url for url in mobile_requests), mobile_requests
         assert not mobile_errors, mobile_errors
         mobile_context.close()
         context.close()
         browser.close()
-        print(json.dumps({"route": route, "desktop": desktop, "mobile": {"viewport": [390, 844], "cameraCalls": 0}, "scope": "synthetic Chromium only; no physical tracking or device acceptance"}))
+        print(json.dumps({"route": route, "desktop": desktop, "mobile": {"viewport": [390, 844], "cameraCalls": 0, "renderedTransform": mobile_rendered}, "scope": "synthetic Chromium only; no physical tracking or device acceptance"}))
 
 
 if __name__ == "__main__":
