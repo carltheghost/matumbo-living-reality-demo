@@ -298,6 +298,68 @@ def mission_budget_comparison(args):
     return {**result, "decisionSha256": hashlib.sha256(canonical(result).encode("utf-8")).hexdigest()}
 
 
+def mission_scenario_comparison(args):
+    """Exact fixed-plan comparison under explicit joint value assumptions."""
+    need(exact(args, {"mission", "scenarios", "nominalId"}), "MISSION_SCENARIO_INVALID")
+    mission = normalize_agent_mission(args["mission"])
+    supplied, nominal_id = args["scenarios"], args["nominalId"]
+    ids = {job["id"] for job in mission["jobs"]}
+    need(isinstance(supplied, list) and 2 <= len(supplied) <= 8
+         and matches(MISSION_JOB_ID, nominal_id), "MISSION_SCENARIO_INVALID")
+    scenarios, seen = [], set()
+    for item in supplied:
+        need(exact(item, {"id", "values"}) and matches(MISSION_JOB_ID, item["id"])
+             and item["id"] not in seen and isinstance(item["values"], dict)
+             and set(item["values"]) == ids
+             and all(integer(v, 0, MISSION_MAX_UNIT) for v in item["values"].values()),
+             "MISSION_SCENARIO_INVALID")
+        seen.add(item["id"])
+        scenarios.append({"id": item["id"], "values": {key:item["values"][key] for key in sorted(ids)}})
+    need(nominal_id in seen, "MISSION_SCENARIO_INVALID")
+    scenarios.sort(key=lambda item:item["id"])
+    nominal = next(i for i,item in enumerate(scenarios) if item["id"] == nominal_id)
+    need(scenarios[nominal]["values"] == {job["id"]:job["value"] for job in mission["jobs"]},
+         "MISSION_SCENARIO_NOMINAL_MISMATCH")
+    rows = mission_rows(mission)
+    feasible = []
+    for candidate,cost,_,allowed in rows:
+        if allowed:
+            chosen = candidate.split(",") if candidate else []
+            feasible.append([candidate,cost,[sum(item["values"][job] for job in chosen) for item in scenarios]])
+    ceilings = [max(row[2][i] for row in feasible) for i in range(len(scenarios))] if feasible else []
+    evaluated = [[candidate,cost,values,min(values),max(c-v for c,v in zip(ceilings,values))]
+                 for candidate,cost,values in feasible]
+    def project(row):
+        if row is None:
+            return None
+        return {"candidate":row[0],"cost":row[1],
+                "values":[{"scenarioId":item["id"],"value":v} for item,v in zip(scenarios,row[2])],
+                "nominalValue":row[2][nominal],"worstValue":row[3],"maximumRegret":row[4]}
+    nominal_best = min(evaluated,key=lambda r:(-r[2][nominal],r[1],r[0]),default=None)
+    robust_best = min(evaluated,key=lambda r:(-r[3],-r[2][nominal],r[1],r[0]),default=None)
+    regret_best = min(evaluated,key=lambda r:(r[4],-r[3],-r[2][nominal],r[1],r[0]),default=None)
+    result = {
+        "schema":"vivo.agent-scenario-comparison/1","mission":mission,
+        "missionSha256":hashlib.sha256(canonical(mission).encode("utf-8")).hexdigest(),
+        "scenarios":scenarios,"nominalId":nominal_id,"status":"feasible" if evaluated else "infeasible",
+        "scenarioOptima":[{"scenarioId":item["id"],"proposal":project(min(evaluated,
+            key=lambda r:(-r[2][i],r[1],r[0]),default=None))} for i,item in enumerate(scenarios)],
+        "nominalChoice":project(nominal_best),"maximinChoice":project(robust_best),
+        "minimaxRegretChoice":project(regret_best),
+        "proof":{"method":"exhaustive-joint-scenarios/1","subsetsChecked":len(rows),
+                 "feasibleSubsets":len(evaluated),
+                 "evaluationSha256":hashlib.sha256(canonical(evaluated).encode("utf-8")).hexdigest(),
+                 "assumptions":"fixed-costs-explicit-joint-value-scenarios-no-probabilities",
+                 "nominalRanking":"nominal-desc-cost-asc-id-asc",
+                 "maximinRanking":"worst-desc-nominal-desc-cost-asc-id-asc",
+                 "regretRanking":"regret-asc-worst-desc-nominal-desc-cost-asc-id-asc"},
+        "evidence":{"status":"hypothetical-scenario-comparison","recordsUsed":0},
+        "authority":"evidence-only","providerAuthenticated":False,"providerCallsInitiated":0,
+        "postedChargesUsd":None,"worldActionExecuted":False,
+    }
+    return {**result,"decisionSha256":hashlib.sha256(canonical(result).encode("utf-8")).hexdigest()}
+
+
 def validate_envelope(envelope):
     """Reproduce the bounded JS /1 and /2 report contract independently.
 
@@ -969,6 +1031,8 @@ class EvidenceVault:
             return self.plan_agent_mission(principal, args)
         if op == "compare-budgets":
             return mission_budget_comparison(args)
+        if op == "compare-scenarios":
+            return mission_scenario_comparison(args)
         if op == "get":
             need(exact(args, {"memoryId"}), "REQUEST_INVALID")
             return self.get(principal, args["memoryId"])

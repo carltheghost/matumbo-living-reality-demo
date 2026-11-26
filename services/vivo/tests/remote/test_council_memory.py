@@ -726,3 +726,59 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(checked["proof"]["structurallyFeasibleSubsets"],4096)
         self.assertEqual(checked["proof"]["frontierPoints"],13)
         self.assertEqual(checked["target"]["minimumBudget"],12)
+
+
+    async def test_scenario_comparison_distinct_choices_and_no_historical_reads(self):
+        mission={"budget":1,"jobs":[{"id":"A","cost":1,"value":10},{"id":"B","cost":1,"value":6},
+                  {"id":"C","cost":1,"value":8}],"required":[],"conflicts":[]}
+        args={"mission":mission,"nominalId":"NOM","scenarios":[
+            {"id":"STRESS","values":{"A":0,"B":6,"C":5}},{"id":"NOM","values":{"A":10,"B":6,"C":8}}]}
+        result=await self.rpc("compare-scenarios",args)
+        self.assertEqual(result["nominalChoice"]["candidate"],"A")
+        self.assertEqual(result["nominalChoice"]["maximumRegret"],6)
+        self.assertEqual(result["maximinChoice"]["candidate"],"B")
+        self.assertEqual(result["maximinChoice"]["worstValue"],6)
+        self.assertEqual(result["minimaxRegretChoice"]["candidate"],"C")
+        self.assertEqual(result["minimaxRegretChoice"]["maximumRegret"],2)
+        self.assertEqual(result["proof"]["subsetsChecked"],8)
+        self.assertEqual(result["proof"]["feasibleSubsets"],4)
+        self.assertEqual([item["proposal"]["candidate"] for item in result["scenarioOptima"]],["A","B"])
+        await self.rpc("archive",{"envelope":self.mission})
+        self.assertEqual(await self.rpc("compare-scenarios",args),result)
+        self.assertEqual(await self.rpc("compare-scenarios",args,token=self.one["token"]),result)
+        self.assertNotIn(self.mission["reportSha256"],json.dumps(result))
+        reordered={**args,"scenarios":list(reversed(args["scenarios"])),
+                   "mission":{**mission,"jobs":list(reversed(mission["jobs"]))}}
+        self.assertEqual(await self.rpc("compare-scenarios",reordered),result)
+
+    async def test_scenario_comparison_constraints_invalid_and_bound(self):
+        mission={"budget":2,"jobs":[{"id":"A","cost":1,"value":1},{"id":"B","cost":1,"value":5}],
+                 "required":["B"],"conflicts":[],"dependencies":[["B","A"]]}
+        scenarios=[{"id":"NOM","values":{"A":1,"B":5}},{"id":"STRESS","values":{"A":0,"B":2}}]
+        args={"mission":mission,"scenarios":scenarios,"nominalId":"NOM"}
+        result=await self.rpc("compare-scenarios",args)
+        self.assertEqual(result["proof"]["feasibleSubsets"],1)
+        for field in ("nominalChoice","maximinChoice","minimaxRegretChoice"):
+            self.assertEqual(result[field]["candidate"],"A,B")
+            self.assertEqual(result[field]["maximumRegret"],0)
+        blocked=await self.rpc("compare-scenarios",{**args,"mission":{**mission,"budget":1}})
+        self.assertEqual(blocked["status"],"infeasible")
+        self.assertIsNone(blocked["nominalChoice"])
+        self.assertTrue(all(item["proposal"] is None for item in blocked["scenarioOptima"]))
+        for bad in ([scenarios[0]],[scenarios[0],scenarios[0]],
+                    [scenarios[0],{"id":"STRESS","values":{"A":1}}],
+                    [scenarios[0],{"id":"STRESS","values":{"A":1,"B":True}}],
+                    [scenarios[0],{"id":"STRESS","values":{"A":-1,"B":2}}]):
+            self.assertEqual(await self.rpc("compare-scenarios",{**args,"scenarios":bad},expected=400),"MISSION_SCENARIO_INVALID")
+        mismatch=[{"id":"NOM","values":{"A":1,"B":4}},scenarios[1]]
+        self.assertEqual(await self.rpc("compare-scenarios",{**args,"scenarios":mismatch},expected=400),"MISSION_SCENARIO_NOMINAL_MISMATCH")
+        self.assertEqual(await self.rpc("compare-scenarios",args,token=None,expected=401),"AUTH_REQUIRED")
+        jobs=[{"id":f"J{i:02}","cost":1,"value":1} for i in range(12)]
+        maximum={"mission":{"budget":12,"jobs":jobs,"required":[],"conflicts":[]},
+                 "nominalId":"NOM","scenarios":[{"id":"NOM","values":{j["id"]:1 for j in jobs}},
+                   *[{"id":f"S{i}","values":{j["id"]:i for j in jobs}} for i in range(7)]]}
+        bounded=await self.rpc("compare-scenarios",maximum)
+        self.assertEqual(bounded["proof"]["subsetsChecked"],4096)
+        self.assertEqual(bounded["proof"]["feasibleSubsets"],4096)
+        self.assertEqual(bounded["nominalChoice"]["nominalValue"],12)
+        self.assertEqual(bounded["maximinChoice"]["worstValue"],0)
