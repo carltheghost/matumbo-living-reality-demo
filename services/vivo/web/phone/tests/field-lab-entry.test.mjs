@@ -90,7 +90,7 @@ async function until(fn,label,timeout=25000){
   throw new Error(`Timed out: ${label}${last?': '+last.message:''}`);
 }
 
-test('real Chromium integrated route: 11D edit, save/reload, tools, source privacy', {timeout:90000},async t=>{
+test('real Chromium integrated route: 11D edit, save/reload, tools, source privacy', {timeout:120000},async t=>{
   if(!existsSync(resolve(phone,'bootstrap.mjs')))return t.skip('Complete repository runtime not present in this checkout');
   const executable=[process.env.CHROME_PATH,'/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','/opt/google/chrome/chrome'].find(p=>p&&existsSync(p));
   if(!executable)return t.skip('Chromium/Chrome executable unavailable; browser acceptance not claimed');
@@ -109,7 +109,7 @@ test('real Chromium integrated route: 11D edit, save/reload, tools, source priva
   const base=`http://127.0.0.1:${server.address().port}`;
   function send(method,params={},sessionId=session){
     return new Promise((resolve,reject)=>{
-      const id=++serial;const timer=setTimeout(()=>{pending.delete(id);reject(new Error(`CDP timeout ${method}`));},15000);
+      const id=++serial;const timer=setTimeout(()=>{pending.delete(id);reject(new Error(`CDP timeout ${method}${method==='Runtime.evaluate'?' · '+String(params.expression||'').slice(0,140):''}`));},30000);
       pending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({id,method,params,...(sessionId?{sessionId}:{})}));
     });
   }

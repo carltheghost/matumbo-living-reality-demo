@@ -40,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           test -x "$CHROME_PATH"
-          node --test services/vivo/web/phone/tests/*.test.mjs | tee test-evidence/phone.tap
+          node --test --test-concurrency=1 services/vivo/web/phone/tests/*.test.mjs | tee test-evidence/phone.tap
           ! grep -Eq '^# skipped [1-9][0-9]*$' test-evidence/phone.tap
       - name: Explicit component browser checks
         run: python services/vivo/tests/accounts/browser_component.py --evidence test-evidence

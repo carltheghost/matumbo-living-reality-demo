@@ -232,7 +232,8 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     const count=state=>task.steps.filter(s=>s.state===state).length;
     taskDetail.textContent=task.title+' · '+task.sourceId+' · '+(task.closed?'closed':attached?'attached':'detached')+'\n'
       +'Confirmed '+count('confirmed')+' · unresolved '+count('pending')+' · conflicts '+count('conflict')+' · not dispatched '+count('not-dispatched')+'\n'
-      +task.steps.map(s=>s.state+' · '+s.entityId+' · '+s.operationId+(s.state==='confirmed'?' · revision '+s.revision:'')).join('\n');
+      +task.steps.map(s=>s.state+' · '+(s.sourceId||task.sourceId)+' · '+s.entityId+' · '+s.operationId+(s.state==='confirmed'?' · revision '+s.revision:'')).join('\n')
+      +(task.handoffs||[]).map(h=>'\nHandoff · '+h.from+' → '+h.to+' · epoch '+h.epoch).join('');
   }
   function invalidateTaskScope(){
     const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;
@@ -253,11 +254,16 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   const refreshTaskButton=button('Refresh saved tasks',taskRun(()=>refreshTasks()));
   const createTaskButton=button('Create and attach task',taskRun(async()=>{const result=await taskAdmin().create(selectedAgent(),taskTitle.value);taskTitle.value='';await refreshTasks(result.taskId);}));
   const resumeTaskButton=button('Resume selected task explicitly',taskRun(async()=>{const id=selectedTask();await taskAdmin().resume(selectedAgent(),id);await refreshTasks(id);}));
+  const handoffTaskButton=button('Handoff selected task to chosen agent',taskRun(async()=>{
+    const id=selectedTask(),task=journal?.tasks.find(t=>t.id===id);
+    if(!task)throw Error('Refresh and review the saved task first.');
+    await taskAdmin().handoff(selectedAgent(),id,{sourceId:task.sourceId,epoch:task.epoch});await refreshTasks(id);
+  }));
   const reconcileTaskButton=button('Reconcile native receipts',taskRun(async()=>{await taskAdmin().reconcile();await refreshTasks();}));
   const pauseTaskButton=button('Detach selected agent from task',taskRun(async()=>{taskAdmin().pause(selectedAgent());await refreshTasks();}));
   const closeTaskButton=button('Close attached task journal',taskRun(async()=>{await taskAdmin().finish(selectedAgent());await refreshTasks();}));
-  section.append(node('h4','Persistent agent task journal'),node('p','Use the active agent selector above. Only attached native world edits are journaled. Reconcile unresolved receipts before continuing; detaching does not revoke native action permissions. No automatic replay or cloud sync.'),
-    taskTitle,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,reconcileTaskButton,pauseTaskButton,closeTaskButton,taskStatus,taskDetail);
+  section.append(node('h4','Persistent agent task journal'),node('p','Use the active agent selector above. Only attached native world edits are journaled. Review receipts before handoff. An explicit handoff replaces the chosen agent’s task attachment without changing native grants. Unresolved object edits block other attached tasks. Detaching does not revoke native action permissions. No automatic replay or cloud sync.'),
+    taskTitle,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,handoffTaskButton,reconcileTaskButton,pauseTaskButton,closeTaskButton,taskStatus,taskDetail);
   for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])worldEvents?.addEventListener?.(event,invalidateTaskScope);
   invalidateTaskScope();
   refreshMemoryAgents();

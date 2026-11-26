@@ -35,3 +35,65 @@ test('pause during pending attach cannot silently activate a session',async()=>{
 test('pause after reservation prevents dispatch and records a known non-dispatch',async()=>{const f=fixture();await attach(f);const release=f.store.hold();const pending=run(f);await release.entered;f.bridge.admin.pause('a');release();await assert.rejects(pending);assert.equal(f.calls(),0);const step=(await inspect(f))[0].steps[0];assert.equal(step?.state,'not-dispatched');});
 test('finishing retains unresolved evidence and cannot be reopened',async()=>{const f=fixture(),a=await attach(f);f.mode('missing');await run(f);await f.bridge.admin.finish('a');assert.equal((await inspect(f))[0].closed,true);assert.equal((await inspect(f))[0].steps[0].state,'pending');await assert.rejects(f.bridge.admin.resume('a',a.taskId));});
 test('corrupted storage and unavailable IndexedDB fail closed',async()=>{const f=fixture();f.store.values.set(JSON.stringify(['world','main']),{schema:'unknown',tasks:[]});await assert.rejects(attach(f),{code:'TASK_STORAGE_INVALID'});await assert.rejects(new IndexedDbTaskStore(null).transact('x',()=>{}),{code:'TASK_STORAGE_UNAVAILABLE'});});
+
+const transfer=(f,task,to='b')=>f.bridge.admin.handoff(to,task.id,{sourceId:task.sourceId,epoch:task.epoch});
+test('explicit handoff preserves the mission and attributes each native receipt to its actual source',async()=>{
+  const f=fixture();await attach(f);await run(f);const old=(await progress(f)).task;
+  assert.equal(f.bridge.tools.listFor('b').some(t=>t.name==='task.progress'),false);
+  await transfer(f,old);await assert.rejects(progress(f),{code:'TASK_ATTACHMENT_STALE'});
+  await assert.rejects(run(f,'old-source-new-edit'),{code:'TASK_ATTACHMENT_STALE'});assert.equal(f.calls(),1);
+  const next=(await progress(f,'b')).task;assert.equal(next.id,old.id);assert.equal(next.epoch,old.epoch+1);
+  assert.deepEqual(next.handoffs,[{from:'muse',to:'codex',epoch:next.epoch}]);assert.equal(next.steps[0].sourceId,'muse');
+  await assert.rejects(run(f,'op1','b'),{code:'TASK_OPERATION_ALREADY_RECORDED'});await run(f,'op2','b');
+  assert.deepEqual((await progress(f,'b')).task.steps.map(s=>[s.sourceId,s.state]),[['muse','confirmed'],['codex','confirmed']]);assert.equal(f.calls(),2);
+});
+test('handoff requires a reviewed source and epoch; stale or competing transfers cannot win',async()=>{
+  const f=fixture();await attach(f);const task=(await progress(f)).task;const other=f.build();
+  await assert.rejects(f.bridge.admin.handoff('b',task.id,{}),{code:'TASK_HANDOFF_EXPECTATION_REQUIRED'});
+  await assert.rejects(transfer(f,task,'a'),{code:'TASK_HANDOFF_SAME_SOURCE'});
+  const results=await Promise.allSettled([transfer(f,task),other.admin.handoff('b',task.id,{sourceId:task.sourceId,epoch:task.epoch})]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.find(r=>r.status==='rejected').reason.code,'TASK_HANDOFF_STALE');
+  assert.equal((await inspect(f))[0].handoffs.length,1);
+});
+test('pending or conflicting receipts block handoff; matching native evidence unlocks only pending work',async()=>{
+  const f=fixture();await attach(f);f.mode('missing');await run(f);let task=(await progress(f)).task;
+  await assert.rejects(transfer(f,task),{code:'TASK_RECONCILIATION_REQUIRED'});f.receipt(edit());await f.bridge.admin.reconcile();
+  task=(await progress(f)).task;await transfer(f,task);assert.equal((await progress(f,'b')).task.sourceId,'codex');
+  await run(f,'op2','b');f.receipt(edit('op2'),'wrong');await f.bridge.admin.reconcile();
+  await assert.rejects(transfer(f,(await progress(f,'b')).task,'a'),{code:'TASK_RECONCILIATION_REQUIRED'});
+});
+test('the same pending object is reserved across tasks and tabs, but a different object remains available',async()=>{
+  const f=fixture();await attach(f);const other=f.build();await other.admin.create('b','Independent task');
+  const release=f.hold(),pending=run(f);while(!f.calls())await tick();
+  try{
+    await assert.rejects(other.tools.invokeFor('b','vivo.world.edit',edit('op2')),{code:'TASK_OBJECT_RESERVED'});assert.equal(f.calls(),1);
+    const separate=other.tools.invokeFor('b','vivo.world.edit',{...edit('op3'),entityId:'other'});while(f.calls()<2)await tick();release();await Promise.all([pending,separate]);
+    await other.tools.invokeFor('b','vivo.world.edit',edit('op4'));assert.equal(f.calls(),3);
+  }finally{release();await pending.catch(()=>{});}
+});
+test('unresolved evidence remains reserved even when its task is closed',async()=>{
+  const f=fixture();await attach(f);f.mode('missing');await run(f);await f.bridge.admin.finish('a');await f.bridge.admin.create('b','Other task');
+  await assert.rejects(run(f,'op2','b'),{code:'TASK_OBJECT_RESERVED'});assert.equal(f.calls(),1);
+});
+test('legacy v1 history is attributed before transfer without rewriting operation digests',async()=>{
+  const f=fixture();await attach(f);await run(f);const key=JSON.stringify(['world','main']),legacy=f.store.values.get(key).tasks[0];
+  const oldDigest=legacy.steps[0].sha256;delete legacy.steps[0].sourceId;delete legacy.steps[0].spaceId;
+  await transfer(f,legacy);const task=(await progress(f,'b')).task;assert.equal(task.steps[0].sourceId,'muse');assert.equal(task.steps[0].sha256,oldDigest);
+});
+test('handoff survives reload without restoring authority or allowing a previous source to resume',async()=>{
+  const f=fixture();await attach(f);await run(f);const task=(await progress(f)).task;await transfer(f,task);
+  f.bridge=f.build();await assert.rejects(progress(f,'b'),{code:'TASK_NOT_ATTACHED'});
+  await assert.rejects(f.bridge.admin.resume('a',task.id),{code:'TASK_SOURCE_MISMATCH'});
+  await f.bridge.admin.resume('b',task.id);const restored=(await progress(f,'b')).task;assert.equal(restored.handoffs.length,1);assert.equal(restored.steps[0].sourceId,'muse');assert.equal(f.calls(),1);
+});
+test('handoff never appears in model tools and corrupted source history fails closed',async()=>{
+  const f=fixture();await attach(f);await transfer(f,(await progress(f)).task);assert.ok(!f.bridge.tools.listFor('b').some(t=>t.name.includes('handoff')));
+  const key=JSON.stringify(['world','main']);f.store.values.get(key).tasks[0].handoffs[0].to='invented';
+  await assert.rejects(progress(f,'b'),{code:'TASK_STORAGE_INVALID'});
+});
+test('a rejected handoff preserves the recipient’s existing task attachment',async()=>{
+  const f=fixture();await attach(f);const original=(await progress(f)).task;
+  const recipient=await f.bridge.admin.create('b','Recipient task');f.mode('missing');await run(f);
+  await assert.rejects(transfer(f,original),{code:'TASK_RECONCILIATION_REQUIRED'});
+  assert.equal((await progress(f,'b')).task.id,recipient.taskId);
+});
