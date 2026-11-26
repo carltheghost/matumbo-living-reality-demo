@@ -183,8 +183,19 @@ const MISSION_MAX_JOBS=12, MISSION_MAX_UNIT=1000000;
 const missionCheck=condition=>{if(!condition)throw Error('MEMORY_MISSION_INVALID');};
 const missionInteger=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
 const asciiCompare=(a,b)=>a<b?-1:a>b?1:0;
+function missionLayers(ids,dependencies){
+  const remaining=new Set(ids),done=new Set(),layers=[];
+  while(remaining.size){
+    const layer=[...remaining].filter(id=>dependencies.every(([target,dep])=>target!==id||done.has(dep))).sort(asciiCompare);
+    if(!layer.length)throw Error('MISSION_DEPENDENCY_CYCLE');
+    layers.push(layer);
+    for(const id of layer){remaining.delete(id);done.add(id);}
+  }
+  return layers;
+}
 export function normalizeAgentMission(mission){
-  missionCheck(reasoningKeys(mission,['budget','jobs','required','conflicts'])&&
+  const fields=['budget','jobs','required','conflicts'];
+  missionCheck((reasoningKeys(mission,fields)||reasoningKeys(mission,[...fields,'dependencies']))&&
     missionInteger(mission.budget,0,MISSION_MAX_JOBS*MISSION_MAX_UNIT)&&Array.isArray(mission.jobs)&&
     mission.jobs.length>=1&&mission.jobs.length<=MISSION_MAX_JOBS);
   const ids=new Set(),jobs=[];
@@ -202,8 +213,20 @@ export function normalizeAgentMission(mission){
     const key=[...pair].sort(asciiCompare).join(',');
     missionCheck(!pairs.has(key));pairs.add(key);
   }
-  return {budget:mission.budget,jobs:jobs.sort((a,b)=>asciiCompare(a.id,b.id)),
+  const dependencies=Object.hasOwn(mission,'dependencies')?mission.dependencies:[];
+  missionCheck(Array.isArray(dependencies)&&dependencies.length<=ids.size*(ids.size-1));
+  const edges=new Set();
+  for(const edge of dependencies){
+    missionCheck(Array.isArray(edge)&&edge.length===2&&edge.every(id=>ids.has(id))&&edge[0]!==edge[1]);
+    const key=edge.join(',');
+    missionCheck(!edges.has(key));edges.add(key);
+  }
+  const orderedEdges=[...edges].sort(asciiCompare).map(key=>key.split(','));
+  missionLayers(ids,orderedEdges);
+  const result={budget:mission.budget,jobs:jobs.sort((a,b)=>asciiCompare(a.id,b.id)),
     required:[...required].sort(asciiCompare),conflicts:[...pairs].sort(asciiCompare).map(key=>key.split(','))};
+  if(orderedEdges.length)result.dependencies=orderedEdges;
+  return result;
 }
 function normalizeMissionSelection(scope){
   missionCheck(reasoningKeys(scope,['mode','providers','limit'])&&['fixture','live'].includes(scope.mode)&&
@@ -218,31 +241,52 @@ const missionHash=async(text,cryptoApi)=>{
 };
 async function recomputeMission(mission,cryptoApi){
   // Independent bitmask enumeration, including the empty subset.
-  const rows=[];
+  const dependencies=mission.dependencies??[],rows=[];
   for(let mask=0;mask<(1<<mission.jobs.length);mask++){
     const jobs=mission.jobs.filter((_,i)=>mask&(1<<i)),ids=new Set(jobs.map(j=>j.id));
     const cost=jobs.reduce((sum,j)=>sum+j.cost,0),value=jobs.reduce((sum,j)=>sum+j.value,0);
     const feasible=cost<=mission.budget&&mission.required.every(id=>ids.has(id))&&
-      mission.conflicts.every(([a,b])=>!ids.has(a)||!ids.has(b));
+      mission.conflicts.every(([a,b])=>!ids.has(a)||!ids.has(b))&&
+      dependencies.every(([target,dep])=>!ids.has(target)||ids.has(dep));
     rows.push([jobs.map(j=>j.id).join(','),cost,value,feasible]);
   }
   rows.sort((a,b)=>asciiCompare(a[0],b[0]));
   const feasible=rows.filter(row=>row[3]).sort((a,b)=>b[2]-a[2]||a[1]-b[1]||asciiCompare(a[0],b[0]));
   const [best,second]=feasible;
   const projected=row=>row?{candidate:row[0],cost:row[1],value:row[2],feasible:true}:null;
-  return {proposal:projected(best),proof:{method:'exhaustive-bounded-subsets/1',
+  const proof={method:dependencies.length?'exhaustive-dependent-subsets/1':'exhaustive-bounded-subsets/1',
     subsetsChecked:rows.length,feasibleSubsets:feasible.length,
     equallyValuableOptima:best?feasible.filter(row=>row[2]===best[2]).length:0,
     runnerUp:projected(second),optimalityGap:second?best[2]-second[2]:null,
     enumerationSha256:await missionHash(JSON.stringify(rows),cryptoApi),
-    ranking:'value-desc-cost-asc-id-asc',includesEmptyChoice:true}};
+    ranking:'value-desc-cost-asc-id-asc',includesEmptyChoice:true};
+  if(dependencies.length){
+    // Compute closure via a reverse adjacency worklist, independently of
+    // Python's bounded repeated sweep.
+    const prerequisites=new Map(mission.jobs.map(j=>[j.id,[]]));
+    for(const [target,dep] of dependencies)prerequisites.get(target).push(dep);
+    const closure=new Set(mission.required),queue=[...closure];
+    for(let i=0;i<queue.length;i++)for(const dep of prerequisites.get(queue[i])){
+      if(!closure.has(dep)){closure.add(dep);queue.push(dep);}
+    }
+    const cost=mission.jobs.filter(j=>closure.has(j.id)).reduce((sum,j)=>sum+j.cost,0);
+    const conflicts=mission.conflicts.filter(pair=>pair.every(id=>closure.has(id)));
+    const blockers=[];
+    if(cost>mission.budget)blockers.push('required-closure-over-budget');
+    if(conflicts.length)blockers.push('required-closure-conflict');
+    missionCheck(Boolean(blockers.length)===!best);
+    Object.assign(proof,{requiredClosure:[...closure].sort(asciiCompare),requiredMinimumCost:cost,
+      requiredConflicts:conflicts,infeasibilityReasons:blockers,
+      dependencyLayers:missionLayers(best?.[0]?best[0].split(','):[],dependencies),executionAuthority:'advisory-only'});
+  }
+  return {proposal:projected(best),proof};
 }
 export async function verifyAgentMissionPlan(packet,request,{cryptoApi=globalThis.crypto}={}){
   missionCheck(reasoningKeys(request,['mission','selection']));
   const mission=normalizeAgentMission(request.mission),scope=normalizeMissionSelection(request.selection);
   missionCheck(reasoningKeys(packet,['schema','mission','missionSha256','selection','proposal','status','proof','evidence',
     'authority','providerAuthenticated','providerCallsInitiated','postedChargesUsd','worldActionExecuted','decisionSha256'])&&
-    packet.schema==='vivo.agent-mission-plan/1'&&packet.authority==='evidence-only'&&packet.providerAuthenticated===false&&
+    packet.schema===(mission.dependencies?.length?'vivo.agent-mission-plan/2':'vivo.agent-mission-plan/1')&&packet.authority==='evidence-only'&&packet.providerAuthenticated===false&&
     packet.providerCallsInitiated===0&&packet.postedChargesUsd===null&&packet.worldActionExecuted===false&&
     reasoningDigest(packet.decisionSha256)&&JSON.stringify(packet.mission)===JSON.stringify(mission)&&
     JSON.stringify(packet.selection)===JSON.stringify(scope)&&

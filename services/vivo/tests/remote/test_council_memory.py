@@ -621,3 +621,49 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await self.rpc("plan",{"mission":bad,"selection":scope},expected=400),"MISSION_INVALID")
         self.assertEqual(await self.rpc("plan",{"mission":mission,"selection":{**scope,"mode":"all"}},expected=400),"MISSION_INVALID")
         self.assertEqual(await self.rpc("plan",{"mission":mission,"selection":scope},token=None,expected=401),"AUTH_REQUIRED")
+
+
+    async def test_dependency_mission_layers_required_closure_and_legacy_fingerprint(self):
+        scope={"mode":"fixture","providers":[],"limit":4}
+        jobs=[{"id":"A","cost":3,"value":5},{"id":"B","cost":4,"value":7},
+              {"id":"C","cost":5,"value":9},{"id":"D","cost":2,"value":4}]
+        known={"budget":7,"jobs":jobs,"required":[],"conflicts":[]}
+        plain=await self.rpc("plan",{"mission":known,"selection":scope})
+        empty=await self.rpc("plan",{"mission":{**known,"dependencies":[]},"selection":scope})
+        self.assertEqual(plain,empty)
+        mission={**known,"budget":10,"dependencies":[["D","A"],["C","D"]]}
+        args={"mission":mission,"selection":scope}
+        result=await self.rpc("plan",args)
+        self.assertEqual(result["schema"],"vivo.agent-mission-plan/2")
+        self.assertEqual(result["proposal"],{"candidate":"A,C,D","cost":10,"value":18,"feasible":True})
+        self.assertEqual(result["proof"]["dependencyLayers"],[["A"],["D"],["C"]])
+        self.assertEqual(result["proof"]["requiredClosure"],[])
+        self.assertEqual(result["proof"]["runnerUp"]["candidate"],"A,B,D")
+        self.assertEqual(result["proof"]["optimalityGap"],2)
+        self.assertEqual(result["evidence"],{"status":"mission-not-in-memory-contract","receipt":None})
+        reordered={**mission,"jobs":list(reversed(jobs)),"dependencies":list(reversed(mission["dependencies"]))}
+        self.assertEqual(await self.rpc("plan",{"mission":reordered,"selection":scope}),result)
+        impossible={**mission,"budget":9,"required":["C"]}
+        no_plan=await self.rpc("plan",{"mission":impossible,"selection":scope})
+        self.assertEqual(no_plan["status"],"infeasible")
+        self.assertIsNone(no_plan["proposal"])
+        self.assertEqual(no_plan["proof"]["requiredClosure"],["A","C","D"])
+        self.assertEqual(no_plan["proof"]["requiredMinimumCost"],10)
+        self.assertEqual(no_plan["proof"]["infeasibilityReasons"],["required-closure-over-budget"])
+        both={**impossible,"conflicts":[["A","C"]]}
+        blocked=await self.rpc("plan",{"mission":both,"selection":scope})
+        self.assertEqual(blocked["proof"]["requiredConflicts"],[["A","C"]])
+        self.assertEqual(blocked["proof"]["infeasibilityReasons"],["required-closure-over-budget","required-closure-conflict"])
+        for bad in ({"dependencies":[["A","D"],["D","C"],["C","A"]]},
+                    {"dependencies":[["A","B"],["B","A"]]}):
+            self.assertEqual(await self.rpc("plan",{"mission":{**mission,**bad},"selection":scope},expected=400),"MISSION_DEPENDENCY_CYCLE")
+        for edges in ([["A","A"]],[["A","Z"]],[["C","D"],["C","D"]],None):
+            self.assertEqual(await self.rpc("plan",{"mission":{**mission,"dependencies":edges},"selection":scope},expected=400),"MISSION_INVALID")
+        chain={"budget":12,"jobs":[{"id":f"J{i:02}","cost":1,"value":1} for i in range(12)],
+               "required":[],"conflicts":[],"dependencies":[[f"J{i:02}",f"J{i-1:02}"] for i in range(1,12)]}
+        maximum=await self.rpc("plan",{"mission":chain,"selection":scope})
+        self.assertEqual(maximum["proof"]["subsetsChecked"],4096)
+        self.assertEqual(maximum["proof"]["feasibleSubsets"],13)
+        self.assertEqual(maximum["proof"]["dependencyLayers"],[[f"J{i:02}"] for i in range(12)])
+        self.assertEqual(maximum["proposal"]["value"],12)
+        self.assertEqual(self.vault.db.execute("SELECT count(*) FROM evidence").fetchone()[0],0)

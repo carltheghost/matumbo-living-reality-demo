@@ -116,9 +116,23 @@ MISSION_MAX_JOBS = 12
 MISSION_MAX_UNIT = 1_000_000
 
 
+def mission_layers(ids, dependencies):
+    """Deterministic precedence layers, not a timed or authorized schedule."""
+    remaining, completed, layers = set(ids), set(), []
+    while remaining:
+        ready = sorted(job for job in remaining
+                       if all(dep in completed for target, dep in dependencies if target == job))
+        need(bool(ready), "MISSION_DEPENDENCY_CYCLE")
+        layers.append(ready)
+        remaining.difference_update(ready)
+        completed.update(ready)
+    return layers
+
+
 def normalize_agent_mission(mission):
     """Exact bounded integer resource allocation; no executable instructions."""
-    need(exact(mission, {"budget", "jobs", "required", "conflicts"}), "MISSION_INVALID")
+    fields = {"budget", "jobs", "required", "conflicts"}
+    need(exact(mission, fields) or exact(mission, fields | {"dependencies"}), "MISSION_INVALID")
     budget, jobs, required, conflicts = (mission[k] for k in ("budget", "jobs", "required", "conflicts"))
     need(integer(budget, 0, MISSION_MAX_JOBS * MISSION_MAX_UNIT)
          and isinstance(jobs, list) and 1 <= len(jobs) <= MISSION_MAX_JOBS, "MISSION_INVALID")
@@ -141,14 +155,31 @@ def normalize_agent_mission(mission):
         key = tuple(sorted(pair))
         need(key not in pairs, "MISSION_INVALID")
         pairs.add(key)
-    return {"budget": budget, "jobs": sorted(normalized, key=lambda job: job["id"]),
-            "required": sorted(required), "conflicts": [list(pair) for pair in sorted(pairs)]}
+    dependencies = mission.get("dependencies", [])
+    need(isinstance(dependencies, list) and len(dependencies) <= len(ids)*(len(ids)-1),
+         "MISSION_INVALID")
+    edges = set()
+    for edge in dependencies:
+        need(isinstance(edge, list) and len(edge) == 2
+             and all(isinstance(item, str) and item in ids for item in edge)
+             and edge[0] != edge[1] and tuple(edge) not in edges, "MISSION_INVALID")
+        edges.add(tuple(edge))
+    ordered_edges = [list(edge) for edge in sorted(edges)]
+    # Reject cycles anywhere in the declared definition, including optional
+    # jobs. Keep the legacy v1 fingerprint for an absent or empty edge list.
+    mission_layers(ids, ordered_edges)
+    result = {"budget": budget, "jobs": sorted(normalized, key=lambda job: job["id"]),
+              "required": sorted(required), "conflicts": [list(pair) for pair in sorted(pairs)]}
+    if ordered_edges:
+        result["dependencies"] = ordered_edges
+    return result
 
 
 def mission_certificate(mission):
     """Enumerate combinations independently of the browser's bitmask solver."""
     jobs = mission["jobs"]
     required = set(mission["required"])
+    dependencies = mission.get("dependencies", [])
     rows = []
     for size in range(len(jobs)+1):
         for subset in combinations(jobs, size):
@@ -156,7 +187,8 @@ def mission_certificate(mission):
             cost = sum(job["cost"] for job in subset)
             value = sum(job["value"] for job in subset)
             feasible = (cost <= mission["budget"] and required.issubset(ids)
-                        and not any(a in ids and b in ids for a,b in mission["conflicts"]))
+                        and not any(a in ids and b in ids for a,b in mission["conflicts"])
+                        and all(target not in ids or dep in ids for target,dep in dependencies))
             rows.append([",".join(job["id"] for job in subset), cost, value, feasible])
     rows.sort(key=lambda row: row[0])
     feasible = sorted((row for row in rows if row[3]), key=lambda row: (-row[2], row[1], row[0]))
@@ -164,8 +196,8 @@ def mission_certificate(mission):
         return {"candidate": row[0], "cost": row[1], "value": row[2], "feasible": True} if row else None
     best = feasible[0] if feasible else None
     second = feasible[1] if len(feasible) > 1 else None
-    return projected(best), {
-        "method": "exhaustive-bounded-subsets/1",
+    proof = {
+        "method": "exhaustive-dependent-subsets/1" if dependencies else "exhaustive-bounded-subsets/1",
         "subsetsChecked": len(rows), "feasibleSubsets": len(feasible),
         "equallyValuableOptima": sum(row[2] == best[2] for row in feasible) if best else 0,
         "runnerUp": projected(second),
@@ -174,6 +206,26 @@ def mission_certificate(mission):
         "ranking": "value-desc-cost-asc-id-asc",
         "includesEmptyChoice": True,
     }
+    if dependencies:
+        # With nonnegative costs and no mandatory optional jobs, the closed
+        # required set itself is feasible exactly when these blockers are absent.
+        closure = set(required)
+        for _ in jobs:
+            closure.update(dep for target, dep in dependencies if target in closure)
+        cost = sum(job["cost"] for job in jobs if job["id"] in closure)
+        conflicts = [pair for pair in mission["conflicts"] if all(item in closure for item in pair)]
+        blockers = []
+        if cost > mission["budget"]:
+            blockers.append("required-closure-over-budget")
+        if conflicts:
+            blockers.append("required-closure-conflict")
+        need(bool(blockers) == (best is None), "MISSION_PROOF_INVALID")
+        chosen = best[0].split(",") if best and best[0] else []
+        proof.update({"requiredClosure": sorted(closure), "requiredMinimumCost": cost,
+                      "requiredConflicts": conflicts, "infeasibilityReasons": blockers,
+                      "dependencyLayers": mission_layers(chosen, dependencies),
+                      "executionAuthority": "advisory-only"})
+    return projected(best), proof
 
 
 def validate_envelope(envelope):
@@ -794,7 +846,7 @@ class EvidenceVault:
             evidence = self.agent_reason(principal, {"task": "route-constraint-v1", **scope})
             need(best == evidence["proposal"])
         decision = {
-            "schema": "vivo.agent-mission-plan/1",
+            "schema": "vivo.agent-mission-plan/2" if mission.get("dependencies") else "vivo.agent-mission-plan/1",
             "mission": mission,
             "missionSha256": hashlib.sha256(canonical(mission).encode("utf-8")).hexdigest(),
             "selection": scope, "proposal": best,
