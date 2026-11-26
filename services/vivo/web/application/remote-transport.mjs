@@ -104,6 +104,22 @@ export class RemoteTransport {
     this.conversationProviders.clear();
     await Promise.all(providers.map(provider=>provider.close().catch(()=>{})));
   }
+  async memoryRequest(op,args={},fetchImpl=globalThis.fetch){
+    if(this.closed||!this.session)throw Object.assign(new Error('REMOTE_ADMISSION_REQUIRED'),{code:'REMOTE_ADMISSION_REQUIRED'});
+    const origin=new URL(this.url).origin.replace(/^ws/,'http');
+    if(globalThis.location?.origin&&globalThis.location.origin!==origin)throw Error('MEMORY_ORIGIN_INVALID');
+    const socket=this.socket,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),this.timeoutMs);
+    try{
+      const response=await fetchImpl(origin+'/api/neural-memory',{method:'POST',redirect:'error',cache:'no-store',
+        credentials:'omit',signal:controller.signal,headers:{'Content-Type':'application/json',
+          Authorization:'Bearer '+this.invitationToken},body:JSON.stringify({op,args})});
+      const body=await response.json();
+      if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+      if(body?.schema!=='vivo.neural-memory/1')throw Error('MEMORY_PROTOCOL_INVALID');
+      if(!response.ok)throw Object.assign(new Error(/^[A-Z][A-Z0-9_]{1,63}$/.test(body.error)?body.error:'MEMORY_REQUEST_FAILED'),{code:body.error});
+      return body.result;
+    }finally{clearTimeout(timer);}
+  }
   createInvite(ttlSeconds=3600){return this.call('invite.create',{ttlSeconds});}
   revokeInvite(id){return this.call('invite.revoke',{id});}
   listInvites(){return this.call('invite.list',{});}
