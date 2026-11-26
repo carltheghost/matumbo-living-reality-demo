@@ -408,3 +408,47 @@ test('another tab changing the task epoch fences the old recall grant',async()=>
   await assert.rejects(f.bridge.tools.invokeFor('b',recallTool,recallQuery),{code:'TASK_ATTACHMENT_STALE'});
   assert.deepEqual((await f.bridge.admin.inspect()).missionRecallGrants,[]);assert.equal(f.calls(),2);
 });
+
+const associationTool='neural.missionTrace';
+const associationQuery={from:{spaceId:'room',entityId:'object'},to:{spaceId:'room',entityId:'other'}};
+async function associationFixture(){
+  const {f,first,hidden,target}=await recallFixture();
+  const second=await f.bridge.admin.create('a','Dependent evidence',[first.taskId]);
+  await f.bridge.tools.invokeFor('a','vivo.world.edit',{...edit('linked-op'),entityId:'other'});
+  await complete(f,'a',(await progress(f)).task);
+  const grant=ids=>f.bridge.admin.grantMissionRecall('b',{taskId:target.taskId,epoch:target.epoch,sourceTaskIds:ids});
+  return {f,first,hidden,target,second,grant};
+}
+test('association tool requires the existing explicit grant and never reveals unshared prerequisites',async()=>{
+  const {f,first,second,target,grant}=await associationFixture();
+  assert(!f.bridge.tools.listFor('b').some(t=>t.name===associationTool));
+  await assert.rejects(f.bridge.tools.invokeFor('b',associationTool,associationQuery),{code:'MISSION_RECALL_NOT_GRANTED'});
+  await grant([second.taskId]);assert(f.bridge.tools.listFor('b').some(t=>t.name===associationTool));
+  const hidden=await f.bridge.tools.invokeFor('b',associationTool,associationQuery);
+  assert.equal(hidden.reason,'OBJECT_NOT_IN_SHARED_EVIDENCE');assert(!JSON.stringify(hidden).includes(first.taskId));
+  await grant([first.taskId,second.taskId]);
+  const r=await f.bridge.tools.invokeFor('b',associationTool,associationQuery);
+  assert.equal(r.status,'matched');assert.equal(r.targetTaskId,target.taskId);assert.equal(r.attachmentEpoch,target.epoch);
+  assert.deepEqual(r.hops.map(h=>h.relation),['observed-in','prerequisite-of','observed-object']);
+  assert.deepEqual(r.hops.filter(h=>h.evidence.kind==='confirmed-receipt').map(h=>h.evidence.operationId),['shared-op','linked-op']);
+  assert(!JSON.stringify(r).includes('private-op'));assert.equal(r.authorizesAction,false);assert.equal(r.causalityProven,false);assert.equal(f.calls(),3);
+});
+test('association trace returns no path outside the hop limit and rejects foreign scope arguments',async()=>{
+  const {f,first,second,grant}=await associationFixture();await grant([first.taskId,second.taskId]);
+  const r=await f.bridge.tools.invokeFor('b',associationTool,{...associationQuery,maxHops:2});assert.equal(r.reason,'NO_SHARED_PATH_WITHIN_BOUND');assert.deepEqual(r.hops,[]);
+  await assert.rejects(f.bridge.tools.invokeFor('b',associationTool,{...associationQuery,sourceTaskIds:[first.taskId]}),{code:'MISSION_TRACE_ARGUMENTS_INVALID'});
+  assert.equal(f.calls(),3);
+});
+test('revoked in-flight association read is fenced and does not execute any native action',async()=>{
+  const {f,first,second,grant}=await associationFixture();await grant([first.taskId,second.taskId]);
+  const release=f.store.hold(),pending=f.bridge.tools.invokeFor('b',associationTool,associationQuery);await release.entered;
+  f.bridge.admin.revokeMissionRecall('b');release();await assert.rejects(pending,{code:'MISSION_RECALL_GRANT_STALE'});
+  assert(!f.bridge.tools.listFor('b').some(t=>t.name===associationTool));assert.equal(f.calls(),3);
+});
+test('world switch and stale attachment epoch invalidate association access',async()=>{
+  const {f,first,second,target,grant}=await associationFixture();await grant([first.taskId,second.taskId]);
+  await f.build().admin.resume('b',target.taskId);
+  await assert.rejects(f.bridge.tools.invokeFor('b',associationTool,associationQuery),{code:'TASK_ATTACHMENT_STALE'});
+  f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();
+  await assert.rejects(f.bridge.tools.invokeFor('b',associationTool,associationQuery),{code:'TASK_NOT_ATTACHED'});assert.equal(f.calls(),3);
+});
