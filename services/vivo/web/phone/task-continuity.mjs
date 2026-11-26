@@ -1,5 +1,6 @@
 /** Local, owner-attached task evidence. Never executes or restores an action on load. */
 import {TASK_JOURNAL_SCHEMA as SCHEMA,LEGACY_TASK_JOURNAL_SCHEMA,normalizePrerequisites,validateMissionGraph,addPrerequisites,assertMissionReady,completeMissionTask,missionView} from './mission-graph.mjs';
+import {rankMissionAgents} from './mission-orchestrator.mjs';
 const TOOL='task.progress',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
@@ -39,7 +40,7 @@ export class IndexedDbTaskStore {
 }
 /** Host is trusted; its native registry remains the only world-action authority. */
 export function createTaskContinuity({registry,downstream,validateEdit,getEnvelope,store=new IndexedDbTaskStore(),newId=()=>crypto.randomUUID()}){
-  const bindings=new Map(),attaching=new Map();let currentKey=null,lastWarning=null;
+  const bindings=new Map(),attaching=new Map();let currentKey=null,lastWarning=null,scopeEpoch=0;
   const active=session=>{const a=registry.agentController.assertActive(session);return {sourceId:a.sourceId,sessionId:a.sessionId,generation:a.generation};};
   const sameAgent=(a,b)=>a?.sessionId===b?.sessionId&&a?.generation===b?.generation&&a?.sourceId===b?.sourceId;
   function syncScope(){const scope=scopeOf(getEnvelope());const key=scope?keyOf(scope):null;if(key!==currentKey){clear();currentKey=key;}return key;}
@@ -50,15 +51,50 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
   function binding(session){syncScope();const agent=active(session),b=bindings.get(agent.sessionId);if(b&&!sameAgent(b.agent,agent)){bindings.delete(agent.sessionId);return null;}return b||null;}
   function checkBinding(b){need(syncScope()===b.key&&bindings.get(b.agent.sessionId)===b&&sameAgent(active(b.agent),b.agent),'TASK_ATTACHMENT_STALE');}
   function pause(session){const sessionId=typeof session==='string'?session:session?.sessionId;bindings.delete(sessionId);attaching.delete(sessionId);}
-  function clear(){bindings.clear();attaching.clear();}
-  async function attach(session,taskId,title,transfer=null,dependsOn=[]){
+  function clear(){bindings.clear();attaching.clear();scopeEpoch++;}
+  function recommendationFor(j,task,ignorePending=null){
+    const attachments=[];
+    for(const b of bindings.values()){
+      const t=j.tasks.find(t=>t.id===b.taskId);
+      if(b.key!==currentKey||!t||t.closed||t.epoch!==b.epoch||t.sourceId!==b.agent.sourceId)continue;
+      try{if(sameAgent(active(b.agent),b.agent))attachments.push({taskId:t.id,sessionId:b.agent.sessionId});}catch{}
+    }
+    const agents=(registry.agents?.()||[]).map(a=>{
+      let tools=[],status=a.status;
+      try{if(sameAgent(active(a),a))tools=downstream.listFor(a).map(t=>t.name);else status='inactive';}catch{status='inactive';}
+      return {...a,status,tools,attachmentPending:a.sessionId!==ignorePending&&attaching.has(a.sessionId)};
+    });
+    return rankMissionAgents({tasks:j.tasks,task,agents,attachments,mission:missionView(j,task)});
+  }
+  async function recommend(taskId){
+    const key=scopeKey(),epoch=scopeEpoch;
+    const result=await tx(key,j=>{const t=find(j,taskId);return {...recommendationFor(j,t),taskId:t.id,sourceId:t.sourceId,epoch:t.epoch,scopeKey:key,scopeEpoch:epoch};});
+    need(syncScope()===key&&scopeEpoch===epoch,'TASK_ASSIGNMENT_STALE');return result;
+  }
+  async function approveRecommendation(plan){
+    const key=scopeKey();
+    need(plan&&plan.state==='recommended'&&id(plan.taskId)&&id(plan.sourceId)&&Number.isSafeInteger(plan.epoch)&&plan.epoch>=1&&plan.scopeKey===key&&plan.scopeEpoch===scopeEpoch,'TASK_ASSIGNMENT_STALE');
+    const choice=plan.recommended;
+    need(choice&&id(choice.sourceId)&&id(choice.sessionId)&&Number.isSafeInteger(choice.generation)&&choice.generation>=1,'TASK_ASSIGNMENT_STALE');
+    const selected={sourceId:choice.sourceId,sessionId:choice.sessionId,generation:choice.generation};
+    const expected={taskId:plan.taskId,sourceId:plan.sourceId,epoch:plan.epoch,scopeKey:key,scopeEpoch:scopeEpoch,recommended:selected};
+    need(sameAgent(active(selected),selected)&&!attaching.has(selected.sessionId),'TASK_ASSIGNMENT_STALE');
+    const transfer=selected.sourceId!==expected.sourceId?{sourceId:expected.sourceId,epoch:expected.epoch}:null;
+    return attach(selected,expected.taskId,null,transfer,[],expected);
+  }
+  async function attach(session,taskId,title,transfer=null,dependsOn=[],approved=null){
     const prerequisites=normalizePrerequisites(dependsOn);
     const key=scopeKey(),agent=active(session),request={};
     // A rejected handoff must not detach the recipient's unrelated task.
     // A successful attachment replaces its earlier volatile binding.
-    if(!transfer)pause(agent);attaching.set(agent.sessionId,request);
+    if(!transfer&&!approved)pause(agent);attaching.set(agent.sessionId,request);
     try{const chosen=await tx(key,j=>{
       let t;
+      if(approved){
+        need(syncScope()===key&&approved.scopeKey===key&&approved.scopeEpoch===scopeEpoch&&attaching.get(agent.sessionId)===request&&sameAgent(active(agent),agent),'TASK_ASSIGNMENT_STALE');
+        const target=find(j,taskId);
+        need(target.sourceId===approved.sourceId&&target.epoch===approved.epoch&&sameAgent(recommendationFor(j,target,agent.sessionId).recommended,agent),'TASK_ASSIGNMENT_STALE');
+      }
       if(taskId===null){need(typeof title==='string'&&title.trim().length>0&&title.trim().length<=100,'TASK_TITLE_INVALID');need(j.tasks.length<LIMIT,'TASK_CAPACITY');t={id:newId(),sourceId:agent.sourceId,title:title.trim(),epoch:1,closed:false,steps:[]};addPrerequisites(j,t,prerequisites);j.tasks.push(t);}
       else{
         t=find(j,taskId);
@@ -117,5 +153,5 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       try{if(syncScope()===b.key)await reconcile();}catch{lastWarning='Task evidence could not be refreshed. Review the existing operation before retrying.';}
     }
   }
-  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
+  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,approveRecommendation,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
 }
