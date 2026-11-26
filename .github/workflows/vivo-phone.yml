@@ -87,6 +87,7 @@ jobs:
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9897/ | tee browser-evidence/agent-stop-source.json
           python services/vivo/web/phone/tests/browser_task_handoff.py http://127.0.0.1:9897/ | tee browser-evidence/task-handoff-source.json
           python services/vivo/web/phone/tests/browser_mission_graph.py http://127.0.0.1:9897/ | tee browser-evidence/mission-graph-source.json
+          python services/vivo/web/phone/tests/browser_mission_planner.py http://127.0.0.1:9897/ | tee browser-evidence/mission-planner-source.json
           python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9897/ | tee browser-evidence/dimensional-contact-source.json
           python services/vivo/web/phone/tests/browser_material_deformation.py http://127.0.0.1:9897/ | tee browser-evidence/material-deformation-source.json
           python services/vivo/web/phone/tests/browser_phone_route_repair.py http://127.0.0.1:9897/ | tee browser-evidence/phone-route-repair-source.json
@@ -251,6 +252,7 @@ jobs:
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9896/ | tee browser-evidence/agent-stop-pages.json
           python services/vivo/web/phone/tests/browser_task_handoff.py http://127.0.0.1:9896/ | tee browser-evidence/task-handoff-pages.json
           python services/vivo/web/phone/tests/browser_mission_graph.py http://127.0.0.1:9896/ | tee browser-evidence/mission-graph-pages.json
+          python services/vivo/web/phone/tests/browser_mission_planner.py http://127.0.0.1:9896/ | tee browser-evidence/mission-planner-pages.json
           python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9896/ | tee browser-evidence/dimensional-contact-pages.json
           python services/vivo/web/phone/tests/browser_material_deformation.py http://127.0.0.1:9896/ | tee browser-evidence/material-deformation-pages.json
       - uses: actions/upload-artifact@v4

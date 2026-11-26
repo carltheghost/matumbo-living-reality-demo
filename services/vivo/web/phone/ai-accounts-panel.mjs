@@ -1,5 +1,6 @@
 import {ConstructiveMemory,exampleMemory} from './constructive-memory.mjs';
 import {missionView} from './mission-graph.mjs';
+import {parseMissionPlanLines} from './mission-planner.mjs';
 /** Native Vivo controls extension. No second world, password inputs, or auto-login. */
 const API='/api/vivo/accounts';
 const message=e=>typeof e?.message==='string'?e.message:'Operation failed';
@@ -224,11 +225,24 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   const taskDetail=node('pre','No task selected.');taskDetail.style.whiteSpace='pre-wrap';taskDetail.style.overflowWrap='anywhere';
   let journal=null,taskBusy=false,taskScope=null,taskScopeEpoch=0,recommendation=null;
   section.dataset.taskBusy='false';
+  let planPreview=null,planInputEpoch=0;
+  const planObjective=node('input');planObjective.maxLength=160;planObjective.setAttribute('aria-label','Mission objective');planObjective.placeholder='Objective';
+  const planLines=node('textarea');planLines.rows=5;planLines.maxLength=8192;planLines.setAttribute('aria-label','Mission plan steps');
+  planLines.placeholder='key | task title | agent source | prerequisite keys';
+  const planDetail=node('pre','Review a plan before saving its tasks.');planDetail.setAttribute('aria-live','polite');planDetail.style.whiteSpace='pre-wrap';planDetail.style.overflowWrap='anywhere';
+  const planSummary=node('pre','Refresh saved tasks to see mission progress.');planSummary.setAttribute('aria-live','polite');planSummary.style.whiteSpace='pre-wrap';planSummary.style.overflowWrap='anywhere';
   const recommendationDetail=node('pre','Select a detached, ready task to review agent recommendations.');recommendationDetail.style.whiteSpace='pre-wrap';recommendationDetail.style.overflowWrap='anywhere';recommendationDetail.setAttribute('aria-live','polite');
   const taskScopeNow=()=>{const host=globalThis.VivaPhoneEngine,e=host?.publishedSnapshot?.();return host?.active&&e?.snapshot?.worldId&&e?.branchId?JSON.stringify([e.snapshot.worldId,e.branchId]):null;};
   const taskAdmin=()=>{const access=globalThis.VivaPhoneAgentAdmin?.taskAccess;if(!access)throw Error('Native task continuity is unavailable.');return access;};
   const selectedAgent=()=>{if(!agentPicker.value)throw Error('Choose an active agent session first.');return agentPicker.value;};
   const selectedTask=()=>{if(!taskPicker.value)throw Error('Select a saved task first.');return taskPicker.value;};
+  function resetPlanPreview(){
+    const old=planPreview;planPreview=null;planInputEpoch++;if(old)globalThis.VivaPhoneAgentAdmin?.taskAccess?.discardPlan?.(old.token);
+    planDetail.textContent='Review a plan before saving its tasks.';savePlanButton.disabled=true;
+  }
+  function drawPlanSummary(){
+    planSummary.textContent=(journal?.plans||[]).map(p=>p.objective+' · '+p.completed+'/'+p.total+' completed · '+p.ready+' ready · '+p.blocked+' blocked · '+p.needsReview+' needs review · '+p.closedIncomplete+' closed incomplete').join('\n')||'No saved mission plans in this world/branch.';
+  }
   function resetRecommendation(){recommendation=null;recommendationDetail.textContent='Select a detached, ready task to review agent recommendations.';approveTaskButton.disabled=true;}
   function drawTask(){
     resetRecommendation();
@@ -243,7 +257,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
       +mission.dependencies.map(d=>'\nPrerequisite · '+d.title+' · '+d.status+' · '+d.receipts.length+' confirmed receipt(s)').join('');
   }
   function invalidateTaskScope(){
-    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;resetRecommendation();
+    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;resetRecommendation();resetPlanPreview();planSummary.textContent='Refresh saved tasks to see mission progress.';
     taskPicker.replaceChildren();prerequisitePicker.replaceChildren();taskDetail.textContent='No task selected.';taskStatus.textContent='World changed. Refresh to inspect the current world’s journal.';
   }
   async function refreshTasks(preferred){
@@ -254,7 +268,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     const placeholder=node('option','Choose a saved task');placeholder.value='';taskPicker.append(placeholder);
     for(const t of journal.tasks){const label=t.title+' · '+t.sourceId+' · '+missionView(journal,t).state;const option=node('option',label);option.value=t.id;taskPicker.append(option);const prerequisite=node('option',label);prerequisite.value=t.id;prerequisite.selected=selectedPrerequisites.has(t.id);prerequisitePicker.append(prerequisite);}
     if(journal.tasks.some(t=>t.id===old))taskPicker.value=old;
-    taskStatus.textContent=journal.warning||journal.tasks.length+' saved task(s) in this world/branch. Grants never resume automatically.';drawTask();
+    taskStatus.textContent=journal.warning||journal.tasks.length+' saved task(s) in this world/branch. Grants never resume automatically.';drawTask();drawPlanSummary();
   }
   const taskRun=fn=>async()=>{if(taskBusy||disposed)return;invalidateTaskScope();const epoch=taskScopeEpoch;taskBusy=true;section.dataset.taskBusy='true';try{refreshMemoryAgents();await fn();}catch(e){if(!disposed){invalidateTaskScope();if(epoch===taskScopeEpoch)taskStatus.textContent=message(e);}}finally{taskBusy=false;section.dataset.taskBusy='false';}};
   taskPicker.addEventListener('change',drawTask);
@@ -279,6 +293,26 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     const plan=recommendation;if(!plan||plan.taskId!==selectedTask())throw Error('Review a current recommendation first.');
     resetRecommendation();await taskAdmin().approveRecommendation(plan);await refreshTasks(plan.taskId);
   }));approveTaskButton.disabled=true;
+  const previewPlanButton=button('Review mission plan',taskRun(async()=>{
+    resetPlanPreview();const epoch=taskScopeEpoch,inputEpoch=planInputEpoch;
+    const preview=await taskAdmin().previewPlan({objective:planObjective.value,steps:parseMissionPlanLines(planLines.value)},agentPicker.value||null);
+    invalidateTaskScope();
+    if(disposed||epoch!==taskScopeEpoch||inputEpoch!==planInputEpoch){globalThis.VivaPhoneAgentAdmin?.taskAccess?.discardPlan?.(preview.token);return;}
+    planPreview=preview;planDetail.textContent=preview.objective+' · '+preview.steps.length+' tasks · '+preview.stageCount+' dependency stages · '+preview.remainingAfterSave+' slots left after save\n'
+      +preview.steps.map(s=>'Stage '+s.stage+' · '+s.key+' · '+s.title+' · '+s.sourceId+(s.dependsOn.length?' · after '+s.dependsOn.join(', '):' · no prerequisites')).join('\n');
+    savePlanButton.disabled=false;
+  }));
+  const savePlanButton=button('Save reviewed mission plan',taskRun(async()=>{
+    const preview=planPreview;if(!preview)throw Error('Review a current plan first.');
+    const epoch=taskScopeEpoch,inputEpoch=planInputEpoch;
+    planPreview=null;savePlanButton.disabled=true;
+    const result=await taskAdmin().commitPlan(preview.token);invalidateTaskScope();
+    if(disposed||epoch!==taskScopeEpoch||inputEpoch!==planInputEpoch)return;
+    planDetail.textContent='Saved '+result.created.length+' detached tasks. No actions or permissions were granted.';
+    await refreshTasks(result.created[0]?.taskId);
+  }));savePlanButton.disabled=true;
+  planObjective.addEventListener('input',resetPlanPreview);planLines.addEventListener('input',resetPlanPreview);agentPicker.addEventListener('change',resetPlanPreview);
+  const examplePlanButton=button('Load native edit example',()=>{resetPlanPreview();planLines.value='prepareA | Record first object state | |\nprepareB | Record second object state | |\nchange | Apply reviewed object change | | prepareA,prepareB';});
   const reconcileTaskButton=button('Reconcile native receipts',taskRun(async()=>{await taskAdmin().reconcile();await refreshTasks();}));
   const pauseTaskButton=button('Detach selected agent from task',taskRun(async()=>{taskAdmin().pause(selectedAgent());await refreshTasks();}));
   const completeTaskButton=button('Complete selected task with confirmed receipts',taskRun(async()=>{
@@ -287,7 +321,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   }));
   const closeTaskButton=button('Close attached task journal',taskRun(async()=>{await taskAdmin().finish(selectedAgent());await refreshTasks();}));
   section.append(node('h4','Persistent agent task journal'),node('p','Use the active agent selector above. Only attached native world edits are journaled. Review receipts before handoff. An explicit handoff replaces the chosen agent’s task attachment without changing native grants. Unresolved object edits block other attached tasks. Detaching does not revoke native action permissions. No automatic replay or cloud sync. Prerequisites must be explicitly completed with confirmed native receipts. Closing a task without completion does not unblock its dependents.'),
-    taskTitle,node('p','Optional prerequisites for a new task (select saved tasks first).'),prerequisitePicker,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,handoffTaskButton,reconcileTaskButton,pauseTaskButton,completeTaskButton,closeTaskButton,taskStatus,taskDetail,node('h4','Mission agent recommendation'),node('p','Advisory only. Uses active native grants, local workload, task continuity, related changed receipts and optional memory availability. Approval attaches a task without granting action permissions.'),recommendTaskButton,approveTaskButton,recommendationDetail);
+    taskTitle,node('p','Optional prerequisites for a new task (select saved tasks first).'),prerequisitePicker,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,handoffTaskButton,reconcileTaskButton,pauseTaskButton,completeTaskButton,closeTaskButton,taskStatus,taskDetail,node('h4','Mission agent recommendation'),node('p','Advisory only. Uses active native grants, local workload, task continuity, related changed receipts and optional memory availability. Approval attaches a task without granting action permissions.'),recommendTaskButton,approveTaskButton,recommendationDetail,node('h4','Shared mission plan'),node('p','One line per subtask: key | title | registered source ID | comma-separated prerequisite keys. Leave source blank to use the selected active agent. The example is a native-edit template, not AI-generated task decomposition. Review and save creates detached tasks only; each still uses the existing recommendation and receipt gates.'),planObjective,planLines,examplePlanButton,previewPlanButton,savePlanButton,planDetail,planSummary);
   for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])worldEvents?.addEventListener?.(event,invalidateTaskScope);
   invalidateTaskScope();
   refreshMemoryAgents();
