@@ -1,4 +1,5 @@
 import { createJevUsageJournal } from "../domains/jev-advice-receipt.js";
+import { parseCouncilReport, COUNCIL_STORAGE_KEY } from "../domains/provider-council-evidence.js";
 /**
  * web-ai.js — Web + AI glass console renderer.
  *
@@ -607,6 +608,71 @@ export function createWebAiConsole({
     "Saved history survives reloads in this tab, not guaranteed after closing it. Imported receipts are not provider-authenticated and do not change demo credits, rewards or posted charges. Provider billing remains authoritative.");
   receiptBoundary.id = "web-ai-jev-import-boundary";
   receiptSection.appendChild(receiptBoundary);
+
+  // Owner-side multi-provider probe reports are read-only evidence, not
+  // live provider connections or financial receipts. Keep them on this object.
+  const councilSection = el(doc, "div", "web-ai-economy-section");
+  councilSection.setAttribute("role","region");
+  councilSection.setAttribute("aria-label","Provider Council evidence — not billing");
+  councilSection.appendChild(el(doc,"strong","web-ai-economy-title","PROVIDER COUNCIL · EVIDENCE ONLY"));
+  const councilLabel=el(doc,"label","web-ai-economy-statusline","Import a provider council report");
+  const councilFile=el(doc,"input");
+  councilFile.type="file";councilFile.accept=".json,application/json";
+  councilLabel.appendChild(councilFile);councilSection.appendChild(councilLabel);
+  const councilStatus=el(doc,"p","web-ai-status","No provider council report imported.");
+  councilStatus.setAttribute("role","status");councilSection.appendChild(councilStatus);
+  const councilRows=el(doc,"div","web-ai-economy-section");
+  councilRows.setAttribute("aria-label","Latest provider council report");councilSection.appendChild(councilRows);
+  councilSection.appendChild(el(doc,"p","web-ai-economy-statusline",
+    "Report contents are not provider-authenticated. Fixture results never establish live availability. Imported observations cannot execute a model, change demo credits, rewards or posted charges. Latest report only, saved in this tab when storage is available."));
+  economySection.insertBefore(councilSection,metrics);
+  let councilEpoch=0;
+  function renderCouncil(report){
+    councilRows.replaceChildren();
+    const source=report.mode==="fixture"?"Fixture report · not live":"Host-reported live probe · not authenticated";
+    const attempted=report.rows.filter(row=>row.attempted).length,correct=report.rows.filter(row=>row.answerCorrect===true).length;
+    councilRows.appendChild(el(doc,"strong","web-ai-economy-title",source));
+    councilRows.appendChild(el(doc,"p","web-ai-economy-statusline",
+      attempted+" attempted · "+correct+" correct answers · actual charges unknown"));
+    for(const row of report.rows){
+      const label=row.provider+" · "+(row.resolvedModel??row.requestedModel??"no model")+" · "+row.status;
+      const evidence=row.usage?row.usage.inputTokens.toLocaleString()+" input / "+row.usage.outputTokens.toLocaleString()+" output tokens":"token counts unavailable";
+      councilRows.appendChild(el(doc,"p","web-ai-economy-statusline",label+" · "+evidence+
+        (row.answerCorrect===null?"":row.answerCorrect?" · correct fixture task":" · incorrect fixture task")));
+    }
+  }
+  async function acceptCouncil(envelope,epoch,save){
+    const report=await parseCouncilReport(envelope);
+    if(epoch!==councilEpoch)return;
+    renderCouncil(report);
+    if(!save){councilStatus.textContent="Restored latest report for this tab.";return;}
+    const bytes=JSON.stringify(envelope);
+    try{
+      if(!sessionStore)throw new Error();
+      sessionStore.setItem(COUNCIL_STORAGE_KEY,bytes);
+      if(sessionStore.getItem(COUNCIL_STORAGE_KEY)!==bytes)throw new Error();
+      councilStatus.textContent="Latest report saved for this tab.";
+    }catch{councilStatus.textContent="Report displayed; tab storage unavailable.";}
+  }
+  try{
+    const saved=sessionStore?.getItem(COUNCIL_STORAGE_KEY);
+    if(saved){
+      if(saved.length>65536)throw new Error("Saved report too large.");
+      acceptCouncil(JSON.parse(saved),councilEpoch,false).catch(()=>{
+        if(councilEpoch===0)councilStatus.textContent="Saved provider report could not be validated.";
+      });
+    }
+  }catch{councilStatus.textContent="Saved provider report could not be read.";}
+  councilFile.addEventListener("change",async()=>{
+    const file=councilFile.files?.[0];if(!file)return;
+    const epoch=++councilEpoch;councilFile.disabled=true;
+    try{
+      if(file.size>65536)throw new Error("Report too large.");
+      await acceptCouncil(JSON.parse(await file.text()),epoch,true);
+    }catch{councilStatus.textContent="Report rejected. Existing evidence and balances were not changed.";}
+    finally{councilFile.value="";councilFile.disabled=false;}
+  });
+
 
 
   const treasurySection = el(doc, "div", "web-ai-economy-section");
