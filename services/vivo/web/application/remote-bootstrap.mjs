@@ -62,19 +62,39 @@ const loadShares=element('button',{type:'button',textContent:'Load invitations a
 const grantMemory=element('button',{type:'button',textContent:'Grant recall access'});
 const revokeMemory=element('button',{type:'button',textContent:'Revoke recall access'});
 memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory);
-memorySheet.append(memoryOwner,memoryQuery,memoryRecall,memoryMore,memoryStatus,memoryResults);
+const agentContext=element('details');
+agentContext.append(element('summary',{textContent:'Prepare agent evidence context'}),
+  element('p',{className:'muted',textContent:'Choose a task and provenance. Recall returns authorized evidence only, including disagreement. No model call or automatic action.'}));
+const taskScope=element('select'),modeScope=element('select'),providerScope=element('select');
+taskScope.setAttribute('aria-label','Agent evidence task');modeScope.setAttribute('aria-label','Agent evidence provenance');
+providerScope.setAttribute('aria-label','Required provider in evidence');
+for(const [value,textContent] of [['route-constraint-v1','Constrained planning'],['arithmetic-31-v1','Arithmetic']])
+  taskScope.append(element('option',{value,textContent}));
+for(const [value,textContent] of [['fixture','Synthetic fixtures'],['live','Host-reported live (unverified)']])
+  modeScope.append(element('option',{value,textContent}));
+for(const value of ['','openai','anthropic','google','deepseek','kimi','nvidia','xai'])
+  providerScope.append(element('option',{value,textContent:value||'Any provider'}));
+const prepareEvidence=element('button',{type:'button',textContent:'Prepare agent evidence'});
+agentContext.append(taskScope,modeScope,providerScope,prepareEvidence);
+memorySheet.append(memoryOwner,memoryQuery,memoryRecall,memoryMore,agentContext,memoryStatus,memoryResults);
 let memoryEpoch=0,memoryCursor=null;
 function clearMemoryView(){
   memoryEpoch++;memoryCursor=null;memoryResults.replaceChildren();shareMemoryId.replaceChildren();shareInvite.replaceChildren();
   memoryFile.value='';memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
+  taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;
   memoryStatus.textContent='Connect to recall evidence.';
 }
 const memoryAction=fn=>async()=>{
   const client=transport,epoch=++memoryEpoch;
-  if(!client||client.closed){memoryStatus.textContent='Connect to recall evidence.';return;}
+  if(!client||client.closed){clearMemoryView();return;}
   const current=()=>transport===client&&!client.closed&&memoryEpoch===epoch;
   memoryStatus.textContent='Reading private memory…';
-  try{await fn(client,current);}catch(e){if(current())memoryStatus.textContent=e.code||e.message||'Memory request failed.';}
+  try{await fn(client,current);}catch(e){if(current()){
+    if(['AUTH_REQUIRED','FORBIDDEN','NOT_FOUND'].includes(e.code)){
+      memoryResults.replaceChildren();shareMemoryId.replaceChildren();shareInvite.replaceChildren();memoryCursor=null;memoryMore.hidden=true;
+    }
+    memoryStatus.textContent=e.code||e.message||'Memory request failed.';
+  }}
 };
 function addMemoryRecord(record){
   const card=element('details');
@@ -98,6 +118,16 @@ function recallMemory(older=false){
 }
 memoryRecall.onclick=()=>void recallMemory();
 memoryMore.onclick=()=>void recallMemory(true);
+prepareEvidence.onclick=memoryAction(async(client,current)=>{
+  memoryResults.replaceChildren();shareMemoryId.replaceChildren();shareInvite.replaceChildren();
+  memoryCursor=null;memoryMore.hidden=true;
+  const packet=await client.prepareAgentContext({task:taskScope.value,mode:modeScope.value,
+    providers:providerScope.value?[providerScope.value]:[],limit:4});
+  if(!current())return;
+  packet.records.forEach(addMemoryRecord);
+  memoryStatus.textContent=packet.status==='no-matching-evidence'?'No matching authorized evidence.':
+    'Prepared '+packet.records.length+' evidence reports · advisory only'+(packet.truncated?' · more matches exist':'');
+});
 archiveMemory.onclick=memoryAction(async(client,current)=>{
   const file=memoryFile.files?.[0];if(!file||file.size>65536)throw Error('Choose a Council JSON report no larger than 64 KB.');
   const envelope=JSON.parse(await file.text());if(!current())return;
@@ -147,7 +177,7 @@ function updateUI(){if(!state)return;const e=currentEntity(),activeRole=role??tr
 }
 async function connect(){if(transport&&!transport.closed)await disconnect();const token=tokenInput.value.trim();if(!token)throw Error('Enter owner or invitation token');
   const socket=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
-  const client=new RemoteTransport({url:socket,token,onState:receive,onError:error=>say('Remote: '+(error.code||error.message||'protocol error'))});transport=client;const admitted=await client.admit();role=admitted.role;clearMemoryView();memoryOwner.hidden=role!=='owner';memoryStatus.textContent='Connected. Select Recall evidence.';receive(admitted.state);
+  const client=new RemoteTransport({url:socket,token,onState:receive,onError:error=>say('Remote: '+(error.code||error.message||'protocol error')),onClose:()=>{if(transport===client)clearMemoryView();}});transport=client;const admitted=await client.admit();role=admitted.role;clearMemoryView();memoryOwner.hidden=role!=='owner';memoryStatus.textContent='Connected. Select Recall evidence.';receive(admitted.state);
   host=await GripHost.open(client,{onPreview:(key,v)=>v?previews.set(key,v):previews.delete(key),onStatus:(_k,e)=>e.code&&say('Grip: '+e.code)});
   inputs=new ApplicationInputs({host,nextEpoch:()=>client.nextEpoch(),project:(entity,anchor,point)=>screenTarget(renderer,entity,anchor,point),onRemove:key=>previews.delete(key)});
   await gridFor(state.eye.dimension);configureAxes();$('welcome').hidden=true;$('toolbar').hidden=false;say('Connected to one canonical Vivo world. Touch, hands and Eye actions use accepted authority state.');

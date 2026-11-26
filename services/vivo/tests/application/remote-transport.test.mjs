@@ -114,3 +114,25 @@ test('unexpected remote socket closure fences an admitted conversation provider'
   assert.equal(provider.available,false);
   assert.equal(transport.closed,true);
 });
+
+test('agent memory context is explicit same-origin scoped recall and never a provider request',async()=>{
+  const {transport,socket}=await admitted();
+  const selection={task:'route-constraint-v1',mode:'fixture',providers:['kimi'],limit:4};
+  const basePacket={schema:'vivo.agent-evidence-context/1',selection,status:'no-matching-evidence',
+    records:[],truncated:false,authority:'evidence-only',providerAuthenticated:false,worldActionExecuted:false,postedChargesUsd:null};
+  const calls=[];
+  const fetchImpl=async(url,init)=>{calls.push({url,init});return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:basePacket})};};
+  assert.deepEqual(await transport.prepareAgentContext(selection,fetchImpl),basePacket);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].url,'http://vivo.test/api/neural-memory');
+  assert.deepEqual(JSON.parse(calls[0].init.body),{op:'context',args:selection});
+  assert.equal(calls[0].init.redirect,'error');
+  assert.equal(calls[0].init.headers.Authorization,'Bearer '+'x'.repeat(24));
+  await assert.rejects(transport.prepareAgentContext(selection,async()=>({ok:true,json:async()=>({schema:'vivo.neural-memory/1',
+    result:{...basePacket,authority:'execute'}})})),/MEMORY_CONTEXT_INVALID/);
+  let release;
+  const pending=transport.prepareAgentContext(selection,()=>new Promise(resolve=>{release=resolve;}));
+  socket.close();
+  release({ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:basePacket})});
+  await assert.rejects(pending,/REMOTE_CLOSED/);
+});

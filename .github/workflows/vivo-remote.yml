@@ -109,6 +109,7 @@ jobs:
           PY
           timeout --signal=TERM 120s python services/vivo/tests/remote/browser_two_person.py             http://127.0.0.1:8769/ "$owner_token" remote-browser-evidence/two-person.json
           timeout --signal=TERM 60s python services/vivo/tests/remote/browser_device_check_smoke.py             http://127.0.0.1:8769/ remote-browser-evidence/device-check-smoke.json
+          timeout --signal=TERM 150s python services/vivo/tests/remote/browser_neural_memory.py http://127.0.0.1:8769/ "$owner_token" remote-browser-evidence/neural-memory.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

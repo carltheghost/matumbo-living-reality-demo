@@ -138,3 +138,54 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         await self.rpc("grant",grant)
         self.invites.db.execute("UPDATE invitations SET expires_at=? WHERE id=?",(int(time.time())-1,self.one["id"]))
         self.assertEqual(await self.rpc("search",token=self.one["token"],expected=401),"AUTH_REQUIRED")
+
+    async def test_agent_context_precision_provenance_dissent_and_permission_fences(self):
+        # Three relevant fixture planning reports, one arithmetic report,
+        # one host-reported live claim, and one planning report missing Kimi.
+        mission_ids = []
+        for n in range(3):
+            evidence = change(self.mission, lambda r: r.update(runId=f"planning-fixture-{n}"))
+            mission_ids.append((await self.rpc("archive", {"envelope": evidence}))["record"]["memoryId"])
+        await self.rpc("archive", {"envelope": self.arithmetic})
+        live = change(self.mission, lambda r: r.update(mode="live", runId="planning-host-claim"))
+        await self.rpc("archive", {"envelope": live})
+        partial = change(self.mission, lambda r: r.update(
+            runId="planning-missing-kimi", rows=[row for row in r["rows"] if row["provider"] != "kimi"]))
+        await self.rpc("archive", {"envelope": partial})
+        scope = {"task": "route-constraint-v1", "mode": "fixture", "providers": ["kimi"], "limit": 8}
+        owner = await self.rpc("context", scope)
+        self.assertEqual(owner["schema"], "vivo.agent-evidence-context/1")
+        self.assertEqual(owner["status"], "evidence-found")
+        self.assertEqual([r["memoryId"] for r in owner["records"]], mission_ids[::-1])
+        self.assertFalse(owner["truncated"])
+        self.assertEqual(owner["authority"], "evidence-only")
+        self.assertFalse(owner["providerAuthenticated"])
+        self.assertFalse(owner["worldActionExecuted"])
+        self.assertIsNone(owner["postedChargesUsd"])
+        for record in owner["records"]:
+            self.assertEqual(len(record["rows"]), 7)
+            self.assertEqual(record["localOptimum"]["candidate"], "C,D")
+            self.assertEqual(next(r for r in record["rows"] if r["provider"] == "kimi")["verdict"], "over-budget")
+            self.assertEqual(next(r for r in record["rows"] if r["provider"] == "xai")["verdict"], "invalid-proposal")
+        top = await self.rpc("context", {**scope, "limit": 2})
+        self.assertEqual([r["memoryId"] for r in top["records"]], mission_ids[:0:-1])
+        self.assertTrue(top["truncated"])
+        empty = await self.rpc("context", scope, token=self.one["token"])
+        self.assertEqual(empty["status"], "no-matching-evidence")
+        self.assertEqual(empty["records"], [])
+        self.assertFalse(empty["truncated"])
+        grant = {"memoryId": mission_ids[0], "invitationId": self.one["id"], "granted": True}
+        await self.rpc("grant", grant)
+        only_shared = await self.rpc("context", {**scope, "limit": 1}, token=self.one["token"])
+        self.assertEqual([r["memoryId"] for r in only_shared["records"]], mission_ids[:1])
+        self.assertFalse(only_shared["truncated"], "unshared records must not leak through truncation")
+        self.assertEqual((await self.rpc("context", scope, token=self.two["token"]))["records"], [])
+        self.assertEqual((await self.rpc("context", {**scope, "mode": "live"}, token=self.one["token"]))["records"], [])
+        await self.rpc("grant", {**grant, "granted": False})
+        self.assertEqual((await self.rpc("context", scope, token=self.one["token"]))["records"], [])
+        self.invites.revoke(self.one["id"])
+        self.assertEqual(await self.rpc("context", scope, token=self.one["token"], expected=401), "AUTH_REQUIRED")
+        for bad in [{"task": scope["task"]}, {**scope, "mode": "all"}, {**scope, "limit": 9},
+                    {**scope, "providers": ["kimi", "kimi"]}, {**scope, "providers": ["unknown"]},
+                    {**scope, "instruction": "execute the plan"}, {**scope, "actorId": "remote.owner"}]:
+            self.assertEqual(await self.rpc("context", bad, expected=400), "REQUEST_INVALID")

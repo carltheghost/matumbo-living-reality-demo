@@ -5,10 +5,10 @@ import {offlineForkCommand} from './offline-branch.mjs';
 import {createRemoteConversationProvider} from './conversation-transport.mjs';
 
 export class RemoteTransport {
-  constructor({url,token,WebSocket:Socket=globalThis.WebSocket,onState=()=>{},onError=()=>{},timeoutMs=7000}={}) {
+  constructor({url,token,WebSocket:Socket=globalThis.WebSocket,onState=()=>{},onError=()=>{},onClose=()=>{},timeoutMs=7000}={}) {
     if(typeof url!=='string'||!url.length||typeof token!=='string'||token.length<20||typeof Socket!=='function')
       throw new TypeError('Remote transport configuration required');
-    this.url=url;this.invitationToken=token;this.Socket=Socket;this.onState=onState;this.onError=onError;this.timeoutMs=timeoutMs;
+    this.url=url;this.invitationToken=token;this.Socket=Socket;this.onState=onState;this.onError=onError;this.onClose=onClose;this.timeoutMs=timeoutMs;
     this.socket=null;this.session=null;this.actorId=null;this.role=null;this.current=null;
     this.pending=new Map();this.listeners=new Set();this.conversationProviders=new Set();this.serial=0;this.closed=true;
   }
@@ -25,7 +25,7 @@ export class RemoteTransport {
       let timer=setTimeout(()=>{try{ws.close();}catch{};reject(Object.assign(new Error('Remote join timeout'),{code:'REMOTE_TIMEOUT'}));},this.timeoutMs);
       const fail=error=>{clearTimeout(timer);this.closed=true;reject(error instanceof Error?error:new Error(String(error)));};
       ws.onerror=()=>fail(Object.assign(new Error('Remote socket failed'),{code:'REMOTE_SOCKET'}));
-      ws.onclose=()=>{this.closed=true;this._rejectPending('REMOTE_CLOSED','Remote socket closed');void this._closeConversationProviders();};
+      ws.onclose=()=>{if(this.socket!==ws)return;this.closed=true;this._rejectPending('REMOTE_CLOSED','Remote socket closed');void this._closeConversationProviders();try{this.onClose();}catch{}};
       ws.onopen=()=>ws.send(JSON.stringify({type:'join',token:this.invitationToken}));
       ws.onmessage=event=>{
         let msg;try{msg=JSON.parse(event.data);}catch{return;}
@@ -119,6 +119,18 @@ export class RemoteTransport {
       if(!response.ok)throw Object.assign(new Error(/^[A-Z][A-Z0-9_]{1,63}$/.test(body.error)?body.error:'MEMORY_REQUEST_FAILED'),{code:body.error});
       return body.result;
     }finally{clearTimeout(timer);}
+  }
+  async prepareAgentContext(selection,fetchImpl=globalThis.fetch){
+    const packet=await this.memoryRequest('context',selection,fetchImpl);
+    if(packet?.schema!=='vivo.agent-evidence-context/1'||packet.authority!=='evidence-only'||
+      packet.providerAuthenticated!==false||packet.worldActionExecuted!==false||packet.postedChargesUsd!==null||
+      packet.selection?.task!==selection.task||packet.selection?.mode!==selection.mode||
+      !Array.isArray(packet.records)||packet.records.length>8||
+      packet.records.some(r=>r.task!==selection.task||r.mode!==selection.mode||r.authority!=='evidence-only'||
+        r.providerAuthenticated!==false||r.worldActionExecuted!==false||r.postedChargesUsd!==null)||
+      !['evidence-found','no-matching-evidence'].includes(packet.status)||
+      (packet.status==='evidence-found')!==(packet.records.length>0))throw Error('MEMORY_CONTEXT_INVALID');
+    return packet;
   }
   createInvite(ttlSeconds=3600){return this.call('invite.create',{ttlSeconds});}
   revokeInvite(id){return this.call('invite.revoke',{id});}

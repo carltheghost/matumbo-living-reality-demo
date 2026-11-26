@@ -296,6 +296,42 @@ class EvidenceVault:
         page = matches_rows[:limit]
         return {"records": page, "nextBefore": page[-1]["sequence"] if len(matches_rows) > limit else None}
 
+    def agent_context(self, principal, args):
+        """Task- and provenance-scoped recall, with all dissent retained.
+
+        No free-form instructions, provider calls or confidence-derived
+        authority. The scope is explicit rather than inferred from a prompt.
+        Filtering, truncation and sequence order concern authorized records
+        only; the result never reveals an inaccessible record's existence.
+        """
+        need(set(args) <= {"task", "mode", "providers", "limit"}, "REQUEST_INVALID")
+        task, mode = args.get("task"), args.get("mode")
+        providers, limit = args.get("providers", []), args.get("limit", 4)
+        need(task in ("arithmetic-31-v1", "route-constraint-v1") and mode in ("fixture", "live"), "REQUEST_INVALID")
+        need(isinstance(providers, list) and len(providers) <= len(PROVIDERS)
+             and all(isinstance(p, str) and p in PROVIDERS for p in providers)
+             and len(set(providers)) == len(providers) and integer(limit, 1, 8), "REQUEST_INVALID")
+        required = set(providers)
+        matching = []
+        for row in self.visible_rows(principal):
+            record, _ = self.decode(row)
+            if record["task"] != task or record["mode"] != mode:
+                continue
+            if not required.issubset({r["provider"] for r in record["rows"]}):
+                continue
+            # Keep the entire scoped report, not only favorable responses
+            # from the requested providers. Missing usage is still null.
+            matching.append(record)
+            if len(matching) > limit:
+                break
+        records = matching[:limit]
+        return {"schema": "vivo.agent-evidence-context/1",
+                "selection": {"task": task, "mode": mode, "providers": sorted(required), "limit": limit},
+                "status": "evidence-found" if records else "no-matching-evidence",
+                "records": records, "truncated": len(matching) > limit,
+                "authority": "evidence-only", "providerAuthenticated": False,
+                "postedChargesUsd": None, "worldActionExecuted": False}
+
     def set_grant(self, principal, memory_id, invitation_id, granted, invitations):
         need(principal.role == "owner", "FORBIDDEN", 403)
         need(matches(INVITE_ID, invitation_id) and type(granted) is bool, "REQUEST_INVALID")
@@ -328,6 +364,8 @@ class EvidenceVault:
         op, args = body["op"], body["args"]
         if op == "search":
             return self.search(principal, args)
+        if op == "context":
+            return self.agent_context(principal, args)
         if op == "get":
             need(exact(args, {"memoryId"}), "REQUEST_INVALID")
             return self.get(principal, args["memoryId"])
