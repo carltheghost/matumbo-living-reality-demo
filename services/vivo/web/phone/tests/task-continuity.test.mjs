@@ -662,3 +662,48 @@ test('world switch fences registration queued against previous branch',async()=>
   await assert.rejects(pending,{code:'TASK_ATTACHMENT_STALE'});
   assert.equal((await f.bridge.admin.inspect()).experiments.counts.registered,0);assert.equal(f.calls(),0);
 });
+
+test('shadow policy trial is preregistered atomically and retains contrary future observation after reload',async()=>{
+  const {f,target,sources,grant}=await forecastFixture();
+  const spec={...experimentalSpec(target,true),comparePolicies:true};
+  await assert.rejects(f.bridge.admin.registerExperiment('b',{...spec,captureForecast:false}),{code:'POLICY_TRIAL_REQUIRES_FORECAST'});
+  await assert.rejects(f.bridge.admin.registerExperiment('b',spec),{code:'MISSION_RECALL_NOT_GRANTED'});
+  await grant(sources);
+  const saved=await f.bridge.admin.registerExperiment('b',spec);
+  assert.deepEqual(saved.policyTrial.decisions.map(x=>x.suggestion?.entityId??null),['other','other',null]);
+  assert(!sources.some(id=>JSON.stringify(saved.policyTrial).includes(id)));
+  assert.equal((await progress(f,'b')).policyTrial.status,'pending');
+  assert.equal((await f.bridge.admin.inspect()).policyReview.counts.pending,1);assert.equal(f.calls(),8);
+  f.bridge=f.build();
+  const resumed=await f.bridge.admin.resume('b',target.taskId);
+  assert.deepEqual((await progress(f,'b')).task.policyTrial,saved.policyTrial);
+  await assert.rejects(f.bridge.admin.registerExperiment('b',{...experimentalSpec(resumed),comparePolicies:true,captureForecast:true}),{code:'MISSION_RECALL_NOT_GRANTED'});
+  await run(f,'policy-cue','b');
+  await f.bridge.tools.invokeFor('b','vivo.world.edit',{...edit('policy-alternative'),entityId:'alternative'});
+  await complete(f,'b',(await progress(f,'b')).task);
+  const state=await f.bridge.admin.inspect(),review=state.policyReview;
+  assert.deepEqual(review.reports[0].results.map(x=>x.outcome),['incorrect','incorrect','abstained']);
+  assert.equal(review.counts.evaluated,1);assert.equal(review.activePolicyId,'baseline/1');assert.equal(review.reviewCandidate,null);
+  assert.equal(review.policies[2].paired.avoidedIncorrect,1);assert.equal(f.calls(),10);
+  f.bridge=f.build();assert.deepEqual((await f.bridge.admin.inspect()).policyReview,review);
+});
+test('shadow policy registration is scoped to the same grant and never exposes trials from unrelated tasks',async()=>{
+  const {f,target,sources,grant}=await forecastFixture();await grant(sources);
+  const release=f.store.hold(),pending=f.bridge.admin.registerExperiment('b',{...experimentalSpec(target,true),comparePolicies:true});await release.entered;
+  f.bridge.admin.revokeMissionRecall('b');release();
+  await assert.rejects(pending,{code:'MISSION_RECALL_GRANT_STALE'});
+  let state=await f.bridge.admin.inspect();assert.equal(state.experiments.counts.registered,0);assert.equal(state.policyReview.counts.registered,0);
+  await grant(sources);
+  await f.bridge.admin.registerExperiment('b',{...experimentalSpec(target,true),comparePolicies:true});
+  await f.bridge.admin.create('a','Unrelated work');
+  assert.equal((await progress(f)).policyTrial,null);
+  assert.equal((await progress(f,'b')).policyTrial.status,'pending');assert.equal(f.calls(),8);
+});
+test('an unregistered or late policy comparison cannot be retroactively added to an experiment',async()=>{
+  const {f,target,sources,grant}=await forecastFixture();await grant(sources);
+  await f.bridge.admin.registerExperiment('b',experimentalSpec(target,true));
+  await assert.rejects(f.bridge.admin.registerExperiment('b',{...experimentalSpec(target,true),comparePolicies:true}),{code:'EXPERIMENT_ALREADY_REGISTERED'});
+  assert.equal((await f.bridge.admin.inspect()).policyReview.counts.registered,0);
+  assert.equal((await progress(f,'b')).policyTrial,null);
+  assert.equal(f.calls(),8);
+});
