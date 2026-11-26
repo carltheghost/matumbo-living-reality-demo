@@ -1555,6 +1555,21 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.
     revokeAll: () => registry.revokeAll(),
     audit: () => structuredClone(registry.audit),
   });
+// matumbo-agent-station-face: explicit owner control inside the original agent surface.
+const mountAgentStationOwnerFace = () => {
+  const mount = document.getElementById('phoneRegisterAgent')?.parentElement;
+  if (!mount || mount.querySelector('[data-agent-station-mount]')) return;
+  import('./station-face.mjs').then(({mountAgentStationFace}) => {
+    if (!mount.isConnected || mount.querySelector('[data-agent-station-mount]')) return;
+    const details = document.createElement('details');
+    details.dataset.agentStationMount = 'true';
+    const title = document.createElement('summary'); title.textContent = 'Agent Station';
+    details.append(title); mount.append(details);
+    mountAgentStationFace(details);
+  }).catch(error => console.warn('Agent Station unavailable', error.message));
+};
+if (document.readyState === 'complete') queueMicrotask(mountAgentStationOwnerFace);
+else window.addEventListener('load', mountAgentStationOwnerFace, {once:true});
 window.VivaPhoneEngine = Object.freeze({
   get active() { return !!engine && localMode; }, get available() { return browserCapabilities.worker; },
   // Keep the public read paired with the rendered field-world envelope. A

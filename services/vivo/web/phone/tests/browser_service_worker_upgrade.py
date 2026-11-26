@@ -1,11 +1,11 @@
-"""Exercise real v13 -> v14 -> v16 -> v17 -> v18 -> v23 -> v24 service-worker upgrades.
+"""Exercise real v13 -> v14 -> v16 -> v17 -> v18 -> v23 -> v24 -> v25 service-worker upgrades.
 
-The test serves seven deployments from one origin. The historical deployments
+The test serves eight deployments from one origin. The historical deployments
 are extracted from pinned repository commits, so the v13 shell is the actual
 pre-house-pool release, the v14 shell is the actual house-pool release, and
 the v16 shell is the exact historical v16 release. The v17 shell is the exact
 deployed current-main base before the phone-route repair, v18 is the exact
-deployed shell after that repair, v23 is the last deployed shell before the material-contact repair, and v24 is the current shell. It verifies
+deployed shell after that repair, v23 is the last deployed shell before the material-contact repair, and v24 is the pinned pre-Station shell, and v25 is the current shell. It verifies
 each cache before poisoning it, retires every cache,
 creates and preserves a house-pool contribution, and reopens the phone route
 offline after each upgrade.
@@ -37,6 +37,8 @@ V17_CACHE = "vivo-phone-shell-2026-10-13-v17"
 V18_CACHE = "vivo-phone-shell-2026-10-13-v18"
 V23_CACHE = "vivo-phone-shell-2026-10-20-v23"
 V24_CACHE = "vivo-phone-shell-2026-11-26-v24"
+V25_CACHE = "vivo-phone-shell-2026-11-26-v25"
+HISTORICAL_V24_COMMIT = "916408af6fbd1915934b81a28f469859eeaf9f8c"
 HISTORICAL_V23_COMMIT = "32da5554af9f39678a8712a39acaf9951d5248fb"
 HISTORICAL_V13_COMMIT = "9f17fac9fd3b5a97ca528c5c1b3bf6abf97ac647"
 HISTORICAL_V14_COMMIT = "a8d5e021671f3c77fc4e3619c1c9e94aee35a892"
@@ -79,6 +81,7 @@ V18_TO_V23_ASSERT_PATHS = [
 
 
 V23_TO_V24_ASSERT_PATHS = [*V18_TO_V23_ASSERT_PATHS, "phone/material-input-runtime.mjs"]
+V24_TO_V25_ASSERT_PATHS = [*V23_TO_V24_ASSERT_PATHS, "phone/native-host.mjs", "phone/station-face.mjs", "phone/continuity-face.mjs", "phone/strategy-face.mjs"]
 
 
 class DeploymentServer(ThreadingHTTPServer):
@@ -372,6 +375,7 @@ def run() -> dict[str, Any]:
         v17_root = make_historical_deployment(repo_root, temporary_root, "v17", HISTORICAL_V17_COMMIT, V17_CACHE)
         v18_root = make_historical_deployment(repo_root, temporary_root, "v18", HISTORICAL_V18_COMMIT, V18_CACHE)
         v23_root = make_historical_deployment(repo_root, temporary_root, "v23", HISTORICAL_V23_COMMIT, V23_CACHE)
+        v24_root = make_historical_deployment(repo_root, temporary_root, "v24", HISTORICAL_V24_COMMIT, V24_CACHE)
         server = DeploymentServer(("127.0.0.1", 0), DeploymentHandler)
         set_deployment(server, v13_root)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -518,9 +522,9 @@ def run() -> dict[str, Any]:
 
                 context.set_offline(False)
                 legacy_v23 = mark_legacy_cache(page, V23_CACHE, "/* retired v23 cache marker */", V23_TO_V24_ASSERT_PATHS)
-                set_deployment(server, web_root)
+                set_deployment(server, v24_root)
                 upgraded_v24 = wait_for_upgrade(page, V23_CACHE, V24_CACHE, V23_TO_V24_ASSERT_PATHS)
-                assert_exact_cached_assets(upgraded_v24, expected_cached_assets(web_root, V23_TO_V24_ASSERT_PATHS))
+                assert_exact_cached_assets(upgraded_v24, expected_cached_assets(v24_root, V23_TO_V24_ASSERT_PATHS))
                 assert upgraded_v24["assets"]["phone/material-input-runtime.mjs"] != (v23_root / "phone/material-input-runtime.mjs").read_text(encoding="utf-8")
                 assert "record.endPromise" in upgraded_v24["assets"]["phone/material-input-runtime.mjs"]
                 context.set_offline(True)
@@ -529,6 +533,16 @@ def run() -> dict[str, Any]:
                 assert after_v24["eyeId"] == before["eyeId"]
                 assert after_v24["availableTumbo"] == before["availableTumbo"]
                 assert after_v24["pool"] == before["pool"]
+
+                context.set_offline(False)
+                legacy_v24 = mark_legacy_cache(page, V24_CACHE, "/* retired v24 cache marker */", V23_TO_V24_ASSERT_PATHS)
+                set_deployment(server, web_root)
+                upgraded_v25 = wait_for_upgrade(page, V24_CACHE, V25_CACHE, V24_TO_V25_ASSERT_PATHS)
+                assert_exact_cached_assets(upgraded_v25, expected_cached_assets(web_root, V24_TO_V25_ASSERT_PATHS))
+                context.set_offline(True)
+                after_v25 = reopen_pool_offline(page, route, before)
+                for key in ("worldId", "eyeId", "availableTumbo", "pool"):
+                    assert after_v25[key] == before[key], key
                 assert not page_errors, page_errors
                 result = {
                     "v13ToV14": {
@@ -611,6 +625,17 @@ def run() -> dict[str, Any]:
                         "eyeIdentityPreserved": after_v24["eyeId"] == before["eyeId"],
                         "cacheNames": upgraded_v24["names"],
                     },
+                    "v24ToV25": {
+                        "historicalCommit": HISTORICAL_V24_COMMIT,
+                        "oldCacheRetired": V24_CACHE not in upgraded_v25["names"],
+                        "newCachePresent": V25_CACHE in upgraded_v25["names"],
+                        "exactStationAssets": True,
+                        "legacyAssetsObserved": all("retired v24 cache marker" in value for value in legacy_v24["assets"].values()),
+                        "housePoolReopenedOffline": after_v25["pool"] == before["pool"],
+                        "worldIdentityPreserved": after_v25["worldId"] == before["worldId"],
+                        "eyeIdentityPreserved": after_v25["eyeId"] == before["eyeId"],
+                        "cacheNames": upgraded_v25["names"],
+                    },
                     "persistedBalancePreservedAcrossV16": after_v16["availableTumbo"] == before["availableTumbo"],
                     "persistedReceiptPreservedAcrossV16": set(before["receiptIds"]).issubset(after_v16["receiptIds"]),
                     "persistedBalancePreserved": after_v17["availableTumbo"] == before["availableTumbo"],
@@ -622,8 +647,8 @@ def run() -> dict[str, Any]:
                     "persistedBalancePreservedAcrossV24": after_v24["availableTumbo"] == before["availableTumbo"],
                     "persistedReceiptPreservedAcrossV24": set(before["receiptIds"]).issubset(after_v24["receiptIds"]),
                     "housePoolReopenedOffline": True,
-                    "cacheNames": upgraded_v24["names"],
-                    "pool": after_v24["pool"],
+                    "cacheNames": upgraded_v25["names"],
+                    "pool": after_v25["pool"],
                     "pageErrors": page_errors,
                 }
                 print(json.dumps(result, indent=2))
