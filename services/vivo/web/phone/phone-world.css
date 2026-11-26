@@ -738,3 +738,13 @@ body.phone-world:not(.phone-local) #status {
   .vivo-companion-world-context { padding-top: 5px; }
   .vivo-companion-world-context > summary { padding: 4px 8px; }
 }
+
+/* Additive social circle; keeps the existing world and resident layout. */
+.vivo-social-room { margin-top: 10px; border-top: 1px solid #55748c; padding: 10px 0; }
+.vivo-social-room summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+.vivo-social-room p { font-size: 12px; line-height: 1.5; }
+.vivo-social-room label { display: block; margin: 8px 0; }
+.vivo-social-room textarea { display: block; width: 100%; box-sizing: border-box; min-height: 64px; }
+.vivo-social-room button { margin: 5px 6px 5px 0; min-height: 40px; }
+.vivo-social-room [role="log"] { max-height: 240px; overflow: auto; overflow-wrap: anywhere; }
+.vivo-social-room [role="log"] p { border-left: 2px solid #79adff; padding: 6px 10px; }

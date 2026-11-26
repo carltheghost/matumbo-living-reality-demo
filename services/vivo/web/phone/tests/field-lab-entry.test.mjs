@@ -143,6 +143,12 @@ test('real Chromium integrated route: 11D edit, save/reload, tools, source priva
     await evaluate("document.querySelector('#panel').close();document.querySelector('#createD').value='11';document.querySelector('#enterPhoneLocal').click()");
     await until(()=>evaluate('Boolean(window.VivaPhoneEngine?.active)'),'local engine');
     await until(()=>evaluate("document.querySelector('#phoneEconomyNav')?.hidden===false"),'mounted local economy');
+    await until(()=>evaluate("Boolean(document.querySelector('#vivoAIButton') && document.querySelector('#vivo-ai-accounts'))"),'mounted native AI controls');
+    await evaluate("document.querySelector('#vivoAIButton').click(); [...document.querySelectorAll('#vivo-ai-accounts button')].find(b=>b.textContent==='Load synthetic example').click(); [...document.querySelectorAll('#vivo-ai-accounts button')].find(b=>b.textContent==='Compile and save these weights').click()");
+    await until(()=>evaluate("document.querySelector('#vivoMemoryResult').textContent.includes('vivo.constructed-memory/1')"),'memory checkpoint saved');
+    await evaluate("[...document.querySelectorAll('#vivo-ai-accounts button')].find(b=>b.textContent==='Recall through the network').click()");
+    assert.equal(await evaluate("JSON.parse(document.querySelector('#vivoMemoryResult').textContent).value"),7);
+    await evaluate("document.querySelector('#panel').close()");
     await evaluate("document.querySelector('#fieldLabTools').click()");
     assert.equal(await evaluate("document.querySelector('[data-lab-action=move]').disabled"),false);
     assert.ok((await evaluate("document.querySelector('#fieldLabRuntime').textContent")).includes('Local world active'));
@@ -162,6 +168,11 @@ test('real Chromium integrated route: 11D edit, save/reload, tools, source priva
     const restored=await evaluate(snapshot);
     assert.equal(restored.world,after.world);assert.equal(restored.eye,after.eye);
     assert.ok(Math.abs(restored.entity.q[10]-after.entity.q[10])<.001);
+    await evaluate("document.querySelector('#vivoAIButton').click(); [...document.querySelectorAll('#vivo-ai-accounts button')].find(b=>b.textContent==='Restore this world’s memory').click()");
+    await until(()=>evaluate("document.querySelector('#vivoMemoryResult').textContent.includes('vivo.constructed-memory/1')"),'same-world memory restored');
+    await evaluate("[...document.querySelectorAll('#vivo-ai-accounts button')].find(b=>b.textContent==='Recall through the network').click()");
+    assert.equal(await evaluate("JSON.parse(document.querySelector('#vivoMemoryResult').textContent).value"),7);
+    await evaluate("document.querySelector('#panel').close()");
     await evaluate("document.querySelector('#fieldLabTools').click();document.querySelector('[data-lab-action=agents]').click()");
     assert.equal(await evaluate("document.querySelector('[data-sheet=phone]').classList.contains('active')"),true);
     assert.equal(await evaluate("document.querySelectorAll('[data-local-cap]:checked').length"),0);
