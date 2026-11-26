@@ -528,3 +528,35 @@ test('scenario validates exact task selection and fences world changes during st
   f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();release();
   await assert.rejects(pending,{code:'SCENARIO_SCOPE_STALE'});assert.equal(f.calls(),0);
 });
+
+test('strategy compares multiple dependency waves without completing, assigning or editing tasks',async()=>{
+  const f=fixture();eligible(f,'a');eligible(f,'b');
+  const p=await f.bridge.admin.previewPlan(planSpec()),saved=await f.bridge.admin.commitPlan(p.token),ids=saved.created.map(x=>x.taskId);
+  const before=await f.bridge.admin.inspect(),r=await f.bridge.admin.compareStrategy({taskIds:ids,unavailableSourceIds:['muse']});
+  assert.equal(r.structuralDependencyDepth,2);assert.equal(r.baseline.roundCount,2);assert.equal(r.alternative.roundCount,3);assert.equal(r.roundDifference,1);
+  assert.equal(r.baseline.simulatedScheduled,3);assert.equal(r.alternative.simulatedScheduled,3);
+  assert.equal(r.authorizesAction,false);assert.equal(r.predictsCompletion,false);assert.equal(r.optimalScheduleProven,false);
+  assert.equal((await f.bridge.admin.recommend(ids[2])).reason,'TASK_PREREQUISITES_INCOMPLETE');
+  assert.deepEqual(await f.bridge.admin.inspect(),before);assert.equal(f.calls(),0);
+  assert(!f.bridge.tools.listFor('a').some(t=>/strategy/i.test(t.name)));
+});
+test('strategy cannot assume an unselected prerequisite or uncertain attached work has finished',async()=>{
+  const f=fixture();eligible(f,'a');eligible(f,'b');
+  const root=await attach(f);f.mode('missing');await run(f);
+  const child=await f.bridge.admin.create('b','Child',[root.taskId]);f.bridge.admin.pause('b');
+  const only=await f.bridge.admin.compareStrategy({taskIds:[child.taskId]});
+  assert.deepEqual(only.baseline.unscheduled[0].externalPrerequisiteIds,[root.taskId]);assert.equal(only.baseline.simulatedScheduled,0);
+  const both=await f.bridge.admin.compareStrategy({taskIds:[root.taskId,child.taskId]});
+  assert.equal(both.baseline.simulatedScheduled,0);
+  assert.equal(both.baseline.unscheduled.find(t=>t.taskId===root.taskId).reason,'TASK_RECONCILIATION_REQUIRED');
+  assert.deepEqual(both.baseline.unscheduled.find(t=>t.taskId===child.taskId).unmetPrerequisiteIds,[root.taskId]);assert.equal(f.calls(),1);
+});
+test('strategy uses current native eligibility even for future waves and rejects stale scope',async()=>{
+  const f=fixture();eligible(f,'a');eligible(f,'b');
+  const p=await f.bridge.admin.previewPlan(planSpec()),saved=await f.bridge.admin.commitPlan(p.token),ids=saved.created.map(x=>x.taskId);
+  const none=await f.bridge.admin.compareStrategy({taskIds:ids,unavailableSourceIds:['muse','codex']});
+  assert.equal(none.alternative.simulatedScheduled,0);assert.equal(none.alternative.allRemainingScheduled,false);assert.equal(none.roundDifference,null);
+  const release=f.store.hold(),pending=f.bridge.admin.compareStrategy({taskIds:ids});await release.entered;
+  f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();release();
+  await assert.rejects(pending,{code:'STRATEGY_SCOPE_STALE'});assert.equal(f.calls(),0);
+});

@@ -139,33 +139,6 @@ def exercise(page, route, label):
     prediction=page.evaluate("agent=>window.VivaAgentTools.invokeFor(agent,'neural.missionForecast',{spaceId:'root',entityId:'relic'})",setup["c"])
     assert prediction["status"]=="abstain" and prediction["suggestion"] is None,prediction
     assert prediction["counts"]["matchingTasks"]==1,prediction
-    sources=[]
-    for i in range(3):
-        historical=page.evaluate("agent=>window.VivaPhoneAgentAdmin.taskAccess.create(agent,'Forecast example')",setup["b"])
-        cue=page.evaluate(edit,{"agent":setup["b"],"operationId":"forecast:cue:"+str(i),"amount":0,"entityId":"relic"})
-        nxt=page.evaluate(edit,{"agent":setup["b"],"operationId":"forecast:next:"+str(i),"amount":0,"entityId":"workpiece"})
-        assert cue["result"]["status"]=="accepted" and nxt["result"]["status"]=="accepted",(cue,nxt)
-        page.evaluate("""async ({agent,task})=>window.VivaPhoneAgentAdmin.taskAccess.complete(agent,{taskId:task.id,epoch:task.epoch})""",
-                      {"agent":setup["b"],"task":nxt["progress"]["task"]})
-        sources.append(historical["taskId"])
-    panel.get_by_role("button",name="Refresh saved tasks").click()
-    idle()
-    panel.get_by_role("combobox",name="Saved task in this world and branch").select_option(future["taskId"])
-    panel.locator("#vivoMemoryAgent").select_option(setup["c"]["sessionId"])
-    panel.get_by_role("listbox",name="Completed mission evidence sources").select_option(sources)
-    panel.get_by_role("button",name="Grant selected mission evidence").click()
-    idle()
-    panel.get_by_role("textbox",name="Recall space ID").fill("root")
-    panel.get_by_role("textbox",name="Recall entity ID").fill("relic")
-    panel.get_by_role("button",name="Forecast next object").click()
-    idle()
-    forecast_text=panel.locator("#vivoMissionRecall").inner_text()
-    assert "Suggest inspecting root / workpiece" in forecast_text and "3 distinct tasks" in forecast_text,forecast_text
-    prediction=page.evaluate("agent=>window.VivaAgentTools.invokeFor(agent,'neural.missionForecast',{spaceId:'root',entityId:'relic'})",setup["c"])
-    assert prediction["status"]=="suggested" and prediction["suggestion"]["supportingTasks"]==3,prediction
-    assert prediction["counts"]["matchingTasks"]==3 and prediction["retrospective"]["evaluated"]==0,prediction
-    assert prediction["retrospective"]["observedAccuracy"] is None and not prediction["calibratedProbability"] and not prediction["authorizesAction"],prediction
-    assert sorted(w["taskId"] for w in prediction["candidates"][0]["witnesses"])==sorted(sources),prediction
     completed=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
     assert len(completed["missionRecallGrants"])==1,completed
     enter_local(page,route,world_id)
@@ -178,12 +151,67 @@ def exercise(page, route, label):
     assert restored["tasks"]==completed["tasks"] and restored["attachments"]==[],restored
     assert restored["experience"]==completed["experience"] and restored["grants"]==[],restored
     assert restored["branchId"]==second["branchId"] and sorted(restored["receipts"])==["recovery:after","recovery:before","recovery:linked"],restored
+    # Use a fresh world for the repeated no-op forecast sequences. The earlier
+    # nonzero recovery edit intentionally activated the root spring solver.
+    # Never retry an uncertain journaled operation or weaken native CAS.
+    forecast_world=world_id+"-forecast"
+    enter_local(page,route,forecast_world)
+    open_agent_panel(page)
+    forecast_agents=page.evaluate("""async()=>{
+      const admin=window.VivaPhoneAgentAdmin;
+      const source=admin.register({sourceId:'forecast-source',capabilities:['world.read','world.edit']});
+      const target=admin.register({sourceId:'forecast-target',capabilities:['world.read','world.edit']});
+      return {source,target};
+    }""")
+    future=page.evaluate("agent=>window.VivaPhoneAgentAdmin.taskAccess.create(agent,'Forecast target')",forecast_agents["target"])
+    panel=page.locator("#vivo-ai-accounts")
+    sources=[]
+    for i in range(3):
+        historical=page.evaluate("agent=>window.VivaPhoneAgentAdmin.taskAccess.create(agent,'Forecast example')",forecast_agents["source"])
+        cue=page.evaluate(edit,{"agent":forecast_agents["source"],"operationId":"forecast:cue:"+str(i),"amount":0,"entityId":"relic"})
+        nxt=page.evaluate(edit,{"agent":forecast_agents["source"],"operationId":"forecast:next:"+str(i),"amount":0,"entityId":"workpiece"})
+        assert cue["result"]["status"]=="accepted" and nxt["result"]["status"]=="accepted",(cue,nxt)
+        assert cue["result"]["result"]["changed"] is False and nxt["result"]["result"]["changed"] is False,(cue,nxt)
+        page.evaluate("""async ({agent,task})=>window.VivaPhoneAgentAdmin.taskAccess.complete(agent,{taskId:task.id,epoch:task.epoch})""",
+                      {"agent":forecast_agents["source"],"task":nxt["progress"]["task"]})
+        sources.append(historical["taskId"])
+    panel.get_by_role("button",name="Refresh saved tasks").click()
+    idle()
+    panel.get_by_role("combobox",name="Saved task in this world and branch").select_option(future["taskId"])
+    panel.locator("#vivoMemoryAgent").select_option(forecast_agents["target"]["sessionId"])
+    panel.get_by_role("listbox",name="Completed mission evidence sources").select_option(sources)
+    panel.get_by_role("button",name="Grant selected mission evidence").click()
+    idle()
+    panel.get_by_role("textbox",name="Recall space ID").fill("root")
+    panel.get_by_role("textbox",name="Recall entity ID").fill("relic")
+    panel.get_by_role("button",name="Forecast next object").click()
+    idle()
+    forecast_text=panel.locator("#vivoMissionRecall").inner_text()
+    assert "Suggest inspecting root / workpiece" in forecast_text and "3 distinct tasks" in forecast_text,forecast_text
+    prediction=page.evaluate("agent=>window.VivaAgentTools.invokeFor(agent,'neural.missionForecast',{spaceId:'root',entityId:'relic'})",forecast_agents["target"])
+    assert prediction["status"]=="suggested" and prediction["suggestion"]["supportingTasks"]==3,prediction
+    assert prediction["counts"]["matchingTasks"]==3 and prediction["retrospective"]["evaluated"]==0,prediction
+    assert prediction["retrospective"]["observedAccuracy"] is None and not prediction["calibratedProbability"] and not prediction["authorizesAction"],prediction
+    assert sorted(w["taskId"] for w in prediction["candidates"][0]["witnesses"])==sorted(sources),prediction
+    forecast_saved=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
+    assert len(forecast_saved["tasks"])==4 and len(forecast_saved["missionRecallGrants"])==1,forecast_saved
+    assert sum(len(t["steps"]) for t in forecast_saved["tasks"])==6,forecast_saved
+    enter_local(page,route,forecast_world)
+    open_agent_panel(page)
+    forecast_restored=page.evaluate("""async()=>{
+      const state=await window.VivaPhoneAgentAdmin.taskAccess.inspect(),e=await window.VivaPhoneEngine.snapshot();
+      return {tasks:state.tasks,experience:state.experience,attachments:state.attachments,grants:state.missionRecallGrants,
+        receipts:e.snapshot.localOperationResults.filter(r=>r.operationId.startsWith('forecast:')).map(r=>r.operationId)};
+    }""")
+    assert forecast_restored["tasks"]==forecast_saved["tasks"] and forecast_restored["experience"]==forecast_saved["experience"],forecast_restored
+    assert forecast_restored["attachments"]==[] and forecast_restored["grants"]==[],forecast_restored
+    assert sorted(forecast_restored["receipts"])==sorted(["forecast:"+kind+":"+str(i) for kind in ["cue","next"] for i in range(3)]),forecast_restored
     return {"rootDiagnosed":True,"reopened":True,"replacementRecommended":True,"originalReceiptPreserved":True,
             "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":9,
             "collectiveExperiencePreserved":True,"originalSourceCredited":True,"scopedAgentExperience":True,
             "exactNeuralRecall":True,"grantNotRestored":True,"crossMissionReuse":True,
             "multiHopAssociation":True,"unsharedPathRejected":True,"causalClaim":False,
-            "historicalForecast":True,"sparseEvidenceAbstained":True,"calibratedProbability":False}
+            "historicalForecast":True,"sparseEvidenceAbstained":True,"calibratedProbability":False,"stationaryForecastFixture":True,"forecastReload":True}
 
 
 def main(base):

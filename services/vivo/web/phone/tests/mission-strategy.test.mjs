@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {compareMissionStrategies} from '../mission-strategy.mjs';
+import {compareMissionScenarios} from '../mission-scenarios.mjs';
+const task=(id,dependsOn=[],extra={})=>({id,title:id,dependsOn,...extra});
+const a=sourceId=>({sourceId,sessionId:'s-'+sourceId,generation:1,eligible:true,relatedCompletedTasks:0});
+const rank=(candidates,reason=null)=>({candidates,reason});
+const run=(tasks,rankings,unavailableSourceIds=[],taskIds=tasks.map(t=>t.id))=>compareMissionStrategies({tasks,taskIds,rankings:new Map(rankings),unavailableSourceIds},compareMissionScenarios);
+const diamond=[task('left'),task('right'),task('finish',['left','right'])],two=diamond.map(t=>[t.id,rank([a('a'),a('b')])]);
+test('dependency waves serialize after hypothetical loss of one source',()=>{const r=run(diamond,two,['a']);assert.deepEqual([r.baseline.roundCount,r.alternative.roundCount,r.roundDifference,r.structuralDependencyDepth],[2,3,1,2]);assert.deepEqual(r.alternative.waves.map(w=>w.assignments.length),[1,1,1]);});
+test('incomplete external prerequisite is never silently simulated',()=>{const rows=[task('external'),task('target',['external'])];const r=run(rows,[['target',rank([a('a')])]],[],['target']);assert.equal(r.baseline.simulatedScheduled,0);assert.deepEqual(r.baseline.unscheduled[0].externalPrerequisiteIds,['external']);});
+test('completed external dependency is recognized',()=>{assert.equal(run([task('external',[],{completed:true}),task('target',['external'])],[['target',rank([a('a')])]],[],['target']).baseline.roundCount,1);});
+test('unresolved evidence keeps descendants blocked',()=>{const r=run(diamond,[['left',rank([],'TASK_RECONCILIATION_REQUIRED')],['right',rank([a('b')])],['finish',rank([a('a')])]]);assert.equal(r.baseline.simulatedScheduled,1);assert.deepEqual(r.baseline.unscheduled.map(t=>[t.taskId,t.reason]),[['finish','UNMET_PREREQUISITES'],['left','TASK_RECONCILIATION_REQUIRED']]);});
+test('loss of all sources cannot predict completion',()=>{const r=run(diamond,two,['a','b']);assert.equal(r.alternative.simulatedScheduled,0);assert.equal(r.roundDifference,null);assert.equal(r.additionalUnscheduled,3);assert.equal(r.authorizesAction,false);assert.equal(r.predictsCompletion,false);});
+test('already completed tasks do not consume hypothetical rounds',()=>{const r=run([task('a',[],{completed:true}),task('b',['a'])],[['b',rank([a('a')])]]);assert.deepEqual([r.alreadyCompleted,r.remainingTasks,r.structuralDependencyDepth,r.baseline.roundCount],[1,1,1,1]);});
+test('sixteen-task serial graph has bounded critical path',()=>{const rows=Array.from({length:16},(_,i)=>task('t'+i,i?['t'+(i-1)]:[]));const r=run(rows,rows.map(t=>[t.id,rank([a('a')])]));assert.deepEqual([r.structuralDependencyDepth,r.baseline.roundCount,r.baseline.simulatedScheduled],[16,16,16]);});
+test('stable and immutable; duplicate sessions cannot occupy distinct source slots',()=>{const before=JSON.stringify(diamond);assert.deepEqual(run(diamond,two,['a']),run(diamond.slice().reverse(),two,['a']));assert.equal(JSON.stringify(diamond),before);const rows=[task('x'),task('y')],rankings=rows.map(t=>[t.id,rank([a('a'),{...a('a'),sessionId:'duplicate'}])]);assert.equal(run(rows,rankings).baseline.roundCount,2);});
+test('cycles fail closed',()=>{assert.throws(()=>run([task('a',['b']),task('b',['a'])],[]),{code:'STRATEGY_CYCLE'});});

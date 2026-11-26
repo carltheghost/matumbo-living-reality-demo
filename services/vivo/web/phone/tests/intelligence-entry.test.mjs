@@ -13,7 +13,7 @@ test('new module assets and native Field Lab entry are in the versioned shell',a
  const versions=[...upgrade.matchAll(/^V(\d+)_CACHE = "([^"]+)"/gm)].sort((a,b)=>Number(b[1])-Number(a[1]));
  assert(versions.length,'The offline upgrade suite must declare its target cache');
  assert.equal(cache[1],versions[0][2],'Current shell and real offline upgrade target must agree');
- for(const f of ['ai-accounts-panel.mjs','constructive-memory.mjs','constructive-memory-agent.mjs','convergence-adapter.mjs','task-continuity.mjs','mission-graph.mjs','mission-orchestrator.mjs','mission-planner.mjs','mission-recovery.mjs','mission-experience.mjs','mission-recall.mjs','mission-associations.mjs','mission-forecast.mjs','mission-scenarios.mjs','field-lab.html','social-room.mjs','social-room-panel.mjs'])assert(sw.includes(`'phone/${f}'`));
+ for(const f of ['ai-accounts-panel.mjs','constructive-memory.mjs','constructive-memory-agent.mjs','convergence-adapter.mjs','task-continuity.mjs','mission-graph.mjs','mission-orchestrator.mjs','mission-planner.mjs','mission-recovery.mjs','mission-experience.mjs','mission-recall.mjs','mission-associations.mjs','mission-forecast.mjs','mission-scenarios.mjs','mission-strategy.mjs','field-lab.html','social-room.mjs','social-room-panel.mjs'])assert(sw.includes(`'phone/${f}'`));
 });
 test('callback and local session endpoints bypass the service worker cache',async()=>{
  const sw=await file('../../vivo-sw.js');assert(sw.includes('readyz|healthz|api|ws|auth|vivo-session'));

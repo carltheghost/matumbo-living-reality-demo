@@ -8,6 +8,7 @@ import {selectMissionEvidence,normalizeMissionRecall,recallMissionEvidence} from
 import {normalizeMissionTrace,traceMissionEvidence} from './mission-associations.mjs';
 import {normalizeMissionForecast,forecastMissionEvidence} from './mission-forecast.mjs';
 import {validateScenario,compareMissionScenarios} from './mission-scenarios.mjs';
+import {compareMissionStrategies} from './mission-strategy.mjs';
 const TOOL='task.progress',RECALL='neural.missionRecall',TRACE='neural.missionTrace',FORECAST='neural.missionForecast',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
@@ -106,7 +107,7 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       });
     }finally{if(planDraft===draft)planDraft=null;}
   }
-  function recommendationFor(j,task,ignorePending=null){
+  function recommendationFor(j,task,ignorePending=null,simulateReadiness=false){
     const attachments=[];
     for(const b of bindings.values()){
       const t=j.tasks.find(t=>t.id===b.taskId);
@@ -118,7 +119,10 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       try{if(sameAgent(active(a),a))tools=downstream.listFor(a).map(t=>t.name);else status='inactive';}catch{status='inactive';}
       return {...a,status,tools,attachmentPending:a.sessionId!==ignorePending&&attaching.has(a.sessionId)};
     });
-    return rankMissionAgents({tasks:j.tasks,task,agents,attachments,mission:missionView(j,task)});
+    const mission=missionView(j,task);
+    // Only the read-only strategy analyzer may request a hypothetical readiness
+    // view. Historical prerequisite evidence and all other eligibility gates stay real.
+    return rankMissionAgents({tasks:j.tasks,task,agents,attachments,mission:simulateReadiness?{...mission,readyForJournaledEdits:true}:mission});
   }
   function assertRecoveryCurrent(draft){
     need(syncScope()===draft.key&&scopeEpoch===draft.epoch&&recoveryDraft===draft,'RECOVERY_PREVIEW_STALE');
@@ -165,6 +169,17 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
         return {taskId:task.id,epoch:task.epoch,sourceId:task.sourceId,record,authorizesAction:false};
       });
     }finally{if(recoveryDraft===draft)recoveryDraft=null;}
+  }
+  async function compareStrategy(input){
+    const query=validateScenario(input),key=scopeKey(),epoch=scopeEpoch;
+    const assertCurrent=()=>need(syncScope()===key&&scopeEpoch===epoch,'STRATEGY_SCOPE_STALE');
+    const result=await tx(key,j=>{
+      assertCurrent();
+      const tasks=query.taskIds.map(taskId=>find(j,taskId));
+      const rankings=new Map(tasks.filter(t=>t.completed!==true).map(t=>[t.id,recommendationFor(j,t,null,true)]));
+      return {...compareMissionStrategies({tasks:j.tasks,taskIds:query.taskIds,rankings,unavailableSourceIds:query.unavailableSourceIds},compareMissionScenarios),scopeKey:key,scopeEpoch:epoch};
+    });
+    assertCurrent();return result;
   }
   async function compareScenario(input){
     const query=validateScenario(input),key=scopeKey(),epoch=scopeEpoch;
@@ -303,5 +318,5 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       try{if(syncScope()===b.key)await reconcile();}catch{lastWarning='Task evidence could not be refreshed. Review the existing operation before retrying.';}
     }
   }
-  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,compareScenario,approveRecommendation,previewPlan,commitPlan,discardPlan,diagnose,commitRecovery,discardRecovery,grantMissionRecall,revokeMissionRecall,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
+  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,compareScenario,compareStrategy,approveRecommendation,previewPlan,commitPlan,discardPlan,diagnose,commitRecovery,discardRecovery,grantMissionRecall,revokeMissionRecall,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
 }
