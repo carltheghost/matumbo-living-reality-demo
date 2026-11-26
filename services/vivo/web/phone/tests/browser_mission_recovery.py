@@ -199,15 +199,21 @@ def exercise(page, route, label):
     panel.get_by_role("textbox",name="Experiment cue object ID").fill("relic")
     panel.get_by_role("textbox",name="Experiment hypotheses").fill("root | workpiece\nroot | portal")
     panel.get_by_role("checkbox",name="Preserve current forecast summary").check()
+    panel.get_by_role("checkbox",name="Compare forecast policy versions").check()
     panel.get_by_role("button",name="Register experiment before work").click()
     idle()
     experiment_text=panel.locator("#vivoMissionExperiment").inner_text()
     assert "Primary: root / workpiece" in experiment_text and "Alternative: root / portal" in experiment_text,experiment_text
     assert "Primary outcome: pending" in experiment_text,experiment_text
+    policy_text=panel.locator("#vivoMissionPolicyReview").inner_text()
+    assert "1 registered policy trials · 0 evaluated · 1 pending" in policy_text,policy_text
+    assert "selective/1 · no suggestion · pending" in policy_text,policy_text
     forecast_saved=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
     assert len(forecast_saved["tasks"])==4 and len(forecast_saved["missionRecallGrants"])==1,forecast_saved
     assert sum(len(t["steps"]) for t in forecast_saved["tasks"])==6,forecast_saved
     assert forecast_saved["experiments"]["counts"]["pending"]==1,forecast_saved
+    assert forecast_saved["policyReview"]["counts"]["pending"]==1,forecast_saved
+    assert forecast_saved["policyReview"]["reviewCandidate"] is None,forecast_saved
     registered=forecast_saved["experiments"]["reports"][0]["registration"]
     assert registered["forecast"]["suggestion"]["entityId"]=="workpiece",registered
     assert registered["forecast"]["suggestion"]["supportingTasks"]==3,registered
@@ -216,12 +222,13 @@ def exercise(page, route, label):
     open_agent_panel(page)
     forecast_restored=page.evaluate("""async()=>{
       const state=await window.VivaPhoneAgentAdmin.taskAccess.inspect(),e=await window.VivaPhoneEngine.snapshot();
-      return {tasks:state.tasks,experience:state.experience,experiments:state.experiments,attachments:state.attachments,grants:state.missionRecallGrants,
+      return {tasks:state.tasks,experience:state.experience,experiments:state.experiments,policyReview:state.policyReview,attachments:state.attachments,grants:state.missionRecallGrants,
         receipts:e.snapshot.localOperationResults.filter(r=>r.operationId.startsWith('forecast:')).map(r=>r.operationId)};
     }""")
     assert forecast_restored["tasks"]==forecast_saved["tasks"] and forecast_restored["experience"]==forecast_saved["experience"],forecast_restored
     assert forecast_restored["attachments"]==[] and forecast_restored["grants"]==[],forecast_restored
     assert forecast_restored["experiments"]==forecast_saved["experiments"],forecast_restored
+    assert forecast_restored["policyReview"]==forecast_saved["policyReview"],forecast_restored
     assert sorted(forecast_restored["receipts"])==sorted(["forecast:"+kind+":"+str(i) for kind in ["cue","next"] for i in range(3)]),forecast_restored
     resumed=page.evaluate("""async taskId=>{
       const admin=window.VivaPhoneAgentAdmin;
@@ -239,23 +246,31 @@ def exercise(page, route, label):
     assert report["registration"]==registered and report["primaryOutcome"]=="incorrect" and report["forecastOutcome"]=="incorrect",report
     assert [h["result"] for h in report["hypotheses"]]==["contradicted","supported"],report
     assert report["observation"]["to"]["operationId"]=="experiment:alternative",report
+    policy=evaluated["policyReview"]
+    assert policy["counts"]["evaluated"]==1 and policy["reviewCandidate"] is None,policy
+    assert [r["outcome"] for r in policy["reports"][0]["results"]]==["incorrect","incorrect","abstained"],policy
+    assert policy["policies"][2]["paired"]["avoidedIncorrect"]==1 and policy["activePolicyId"]=="baseline/1",policy
     panel=page.locator("#vivo-ai-accounts")
     panel.get_by_role("button",name="Refresh saved tasks").click()
     idle()
     panel.get_by_role("combobox",name="Saved task in this world and branch").select_option(future["taskId"])
     experiment_text=panel.locator("#vivoMissionExperiment").inner_text()
     assert "Primary outcome: incorrect" in experiment_text and "Alternative: root / portal · supported" in experiment_text,experiment_text
+    policy_text=panel.locator("#vivoMissionPolicyReview").inner_text()
+    assert "baseline/1 · 0 correct · 1 incorrect" in policy_text and "selective/1 · 0 correct · 0 incorrect · 1 abstained" in policy_text,policy_text
+    assert "insufficient-evaluated-trials" in policy_text,policy_text
     enter_local(page,route,forecast_world)
     open_agent_panel(page)
     final_state=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
     assert final_state["tasks"]==evaluated["tasks"] and final_state["experiments"]==evaluated["experiments"],final_state
     assert final_state["attachments"]==[] and final_state["missionRecallGrants"]==[],final_state
+    assert final_state["policyReview"]==evaluated["policyReview"],final_state
     return {"rootDiagnosed":True,"reopened":True,"replacementRecommended":True,"originalReceiptPreserved":True,
             "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":11,
             "collectiveExperiencePreserved":True,"originalSourceCredited":True,"scopedAgentExperience":True,
             "exactNeuralRecall":True,"grantNotRestored":True,"crossMissionReuse":True,
             "multiHopAssociation":True,"unsharedPathRejected":True,"causalClaim":False,
-            "historicalForecast":True,"sparseEvidenceAbstained":True,"calibratedProbability":False,"stationaryForecastFixture":True,"forecastReload":True,"prospectiveExperiment":True,"incorrectForecastPreserved":True,"experimentReload":True}
+            "historicalForecast":True,"sparseEvidenceAbstained":True,"calibratedProbability":False,"stationaryForecastFixture":True,"forecastReload":True,"prospectiveExperiment":True,"incorrectForecastPreserved":True,"experimentReload":True,"pairedPolicyTrial":True,"selectiveAbstention":True,"noPolicyPromotion":True}
 
 
 def main(base):
