@@ -107,6 +107,14 @@ export class PhoneMaterialInputRuntime {
       sessionId: source?.sessionId || this.sessionId,
       generation: Number(source?.generation) || this.nextGeneration(source),
     };
+    // Keep the same record object throughout asynchronous admission. Callers
+    // awaiting ready must observe the accepted queue, not an orphaned placeholder.
+    const record = {
+      contactId: id, source: clone(inputSource), nodeId: nodeId || null,
+      ready: null, latestPoint: [...point], ended: false, endPromise: null,
+      cancelRequested: false, admissionTargetResult: null,
+    };
+    this.contacts.set(id, record);
     const ready = (async () => {
       const envelope = await this.envelope();
       const body = envelope?.snapshot?.materialBodies?.[PHONE_MATERIAL_ENTITY_ID];
@@ -126,11 +134,11 @@ export class PhoneMaterialInputRuntime {
         identity, attachment, actuator: actuator || { maxForce: 2, stiffness: 3, damping: 0.4 },
         observedAt: this.now(), receivedAt: this.now(), gesture,
       });
-      const record = {
-        contactId: id, source: inputSource, nodeId: hit.nodeId, identity,
-        attachment, actuator: actuator || { maxForce: 2, stiffness: 3, damping: 0.4 },
-        targetSeq: 0, latestPoint: [...point], ended: false, ready: Promise.resolve(result),
-      };
+      Object.assign(record, {
+        nodeId: hit.nodeId, identity, attachment,
+        actuator: actuator || { maxForce: 2, stiffness: 3, damping: 0.4 },
+        targetSeq: 0,
+      });
       record.queue = new MaterialContactQueue({
         submit: target => this.engine.materialTarget(target),
         release: reason => this.engine.materialEnd({
@@ -145,17 +153,21 @@ export class PhoneMaterialInputRuntime {
         }),
         reconcile: error => this.engine.materialReconcileOperation(String(error?.operationId || id)),
       });
-      this.contacts.set(id, record);
       this.onState({ type: 'material-begin', contactId: id, nodeId: hit.nodeId, source: clone(inputSource), result });
-      if (record.latestPoint) await this.update(id, record.latestPoint, { queueOnly: true });
+      // A release drains the newest pre-admission point. A cancellation
+      // fences unsent work: do not submit an initial target after it arrives.
+      if (!record.cancelRequested) {
+        record.admissionTargetResult = await record.queue.offer(this.makeTarget(record, record.latestPoint));
+      }
       return result;
     })();
-    // Keep the source identity visible while the worker begin is in flight;
-    // callers can distinguish a queued contact from an absent contact without
-    // observing an undefined/null source record.
-    const pending = { contactId: id, source: clone(inputSource), nodeId: nodeId || null, ready, latestPoint: [...point] };
-    this.contacts.set(id, pending);
-    try { return await ready; } catch (error) { if (this.contacts.get(id) === pending) this.contacts.delete(id); throw error; }
+    record.ready = ready;
+    try { return await ready; } catch (error) {
+      // If begin reached the worker and created a queue, retain it for
+      // reconciliation/terminal cleanup rather than forgetting a live contact.
+      if (this.contacts.get(id) === record && !record.queue) this.contacts.delete(id);
+      throw error;
+    }
   }
 
   makeTarget(record, point) {
@@ -173,18 +185,21 @@ export class PhoneMaterialInputRuntime {
   async update(contactId, point, { queueOnly = false } = {}) {
     const record = this.contacts.get(contactId);
     if (!record) return { status: 'unknown-contact' };
+    if (record.ended) return { status: 'fenced', submitted: false };
     record.latestPoint = [...point];
-    if (record.ready && !(record.nodeId && record.queue)) {
+    if (!record.queue) {
+      // Begin publishes the newest buffered point once. Do not replay each
+      // earlier caller's point after admission and regress the contact.
       await record.ready;
-      return this.update(contactId, point, { queueOnly });
+      if (record.ended || this.contacts.get(contactId) !== record) return { status: 'fenced', submitted: false };
+      return record.admissionTargetResult;
     }
-    if (!record.queue) return record.ready.then(() => this.update(contactId, point, { queueOnly }));
     const target = this.makeTarget(record, point);
     const submitted = record.queue.offer(target);
     if (!queueOnly) {
       try {
         const preview = await this.engine.materialPreview({ target });
-        this.onPreview(preview, record);
+        if (!record.ended && this.contacts.get(contactId) === record) this.onPreview(preview, record);
       } catch (error) {
         this.onState({ type: 'material-preview-error', contactId, error });
       }
@@ -195,10 +210,13 @@ export class PhoneMaterialInputRuntime {
   async preview(contactId, point) {
     const record = this.contacts.get(contactId);
     if (!record) return { status: 'unknown-contact' };
+    if (record.ended) return { status: 'fenced', submitted: false };
     if (!record.queue) await record.ready;
+    if (record.ended || this.contacts.get(contactId) !== record) return { status: 'fenced', submitted: false };
     if (!record.queue) return { status: 'begin-failed' };
     const target = this.makeTarget(record, point);
     const result = await this.engine.materialPreview({ target });
+    if (record.ended || this.contacts.get(contactId) !== record) return { status: 'fenced', submitted: false };
     this.onPreview(result, record);
     return result;
   }
@@ -206,14 +224,26 @@ export class PhoneMaterialInputRuntime {
   async end(contactId, reason = 'release', { cancel = false } = {}) {
     const record = this.contacts.get(contactId);
     if (!record) return { status: 'unknown-contact' };
-    if (!record.queue) await record.ready;
-    if (!record.queue) return { status: 'begin-failed' };
+    if (record.endPromise) return record.endPromise;
+    // Fence new updates immediately, even if the worker is still admitting
+    // the contact. Duplicate terminal events share the same operation.
     record.ended = true;
-    const result = cancel ? await record.queue.cancel(reason) : await record.queue.release(reason);
-    this.contacts.delete(contactId);
-    this.onPreview(null, record);
-    this.onState({ type: cancel ? 'material-cancel' : 'material-end', contactId, result });
-    return result;
+    record.cancelRequested = cancel;
+    record.endPromise = (async () => {
+      if (!record.queue) {
+        try { await record.ready; }
+        catch (error) { if (!record.queue) throw error; }
+      }
+      if (!record.queue) return { status: 'begin-failed' };
+      const result = cancel ? await record.queue.cancel(reason) : await record.queue.release(reason);
+      if (this.contacts.get(contactId) === record) {
+        this.contacts.delete(contactId);
+        this.onPreview(null, record);
+      }
+      this.onState({ type: cancel ? 'material-cancel' : 'material-end', contactId, result });
+      return result;
+    })();
+    return record.endPromise;
   }
 
   async stopSource(source, reason = 'source-stop') {
