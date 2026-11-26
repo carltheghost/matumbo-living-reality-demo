@@ -61,6 +61,27 @@ shareMemoryId.setAttribute('aria-label','Evidence to share');shareInvite.setAttr
 const loadShares=element('button',{type:'button',textContent:'Load invitations and grants'});
 const grantMemory=element('button',{type:'button',textContent:'Grant recall access'});
 const revokeMemory=element('button',{type:'button',textContent:'Revoke recall access'});
+let loadedShareMemoryId=null;
+function updateShareActions(){
+  loadShares.disabled=role!=='owner'||!shareMemoryId.value;
+  const ready=role==='owner'&&Boolean(shareMemoryId.value)&&
+    loadedShareMemoryId===shareMemoryId.value&&Boolean(shareInvite.value);
+  grantMemory.disabled=!ready;revokeMemory.disabled=!ready;
+}
+function resetInviteSelection(){
+  loadedShareMemoryId=null;
+  shareInvite.replaceChildren(element('option',{value:'',textContent:'Select a collaborator'}));
+  shareInvite.value='';updateShareActions();
+}
+function resetSharing(){
+  shareMemoryId.replaceChildren(element('option',{value:'',textContent:'Select evidence to share'}));
+  shareMemoryId.value='';resetInviteSelection();
+}
+shareMemoryId.addEventListener('change',()=>{
+  memoryEpoch++;resetInviteSelection();
+  memoryStatus.textContent='Evidence changed. Load invitations and grants for this report.';
+});
+shareInvite.addEventListener('change',updateShareActions);
 memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory);
 const agentContext=element('details');
 agentContext.append(element('summary',{textContent:'Prepare agent evidence context'}),
@@ -80,15 +101,16 @@ const reasoningResult=element('section');reasoningResult.setAttribute('aria-labe
 agentContext.append(taskScope,modeScope,providerScope,prepareEvidence,reasonEvidence,reasoningResult);
 function clearReasoning(){reasoningResult.replaceChildren();}
 for(const control of [taskScope,modeScope,providerScope])control.addEventListener('change',()=>{
-  memoryEpoch++;clearReasoning();memoryResults.replaceChildren();shareMemoryId.replaceChildren();shareInvite.replaceChildren();
+  memoryEpoch++;clearReasoning();memoryResults.replaceChildren();resetSharing();
   memoryCursor=null;memoryMore.hidden=true;
   reasonEvidence.disabled=taskScope.value!=='route-constraint-v1';
   memoryStatus.textContent='Scope changed. Recall or reason using this selection.';
 });
 memorySheet.append(memoryOwner,memoryQuery,memoryRecall,memoryMore,agentContext,memoryStatus,memoryResults);
 let memoryEpoch=0,memoryCursor=null;
+resetSharing();
 function clearMemoryView(){
-  memoryEpoch++;memoryCursor=null;clearReasoning();memoryResults.replaceChildren();shareMemoryId.replaceChildren();shareInvite.replaceChildren();
+  memoryEpoch++;memoryCursor=null;clearReasoning();memoryResults.replaceChildren();resetSharing();
   memoryFile.value='';memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
   taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;reasonEvidence.disabled=false;
   memoryStatus.textContent='Connect to recall evidence.';
@@ -100,7 +122,7 @@ const memoryAction=fn=>async()=>{
   memoryStatus.textContent='Reading private memory…';
   try{await fn(client,current);}catch(e){if(current()){
     if(['AUTH_REQUIRED','FORBIDDEN','NOT_FOUND'].includes(e.code)){
-      memoryResults.replaceChildren();shareMemoryId.replaceChildren();shareInvite.replaceChildren();memoryCursor=null;memoryMore.hidden=true;
+      memoryResults.replaceChildren();resetSharing();memoryCursor=null;memoryMore.hidden=true;
     }
     memoryStatus.textContent=e.code||e.message||'Memory request failed.';
   }}
@@ -120,7 +142,7 @@ function recallMemory(older=false){
   return memoryAction(async(client,current)=>{
     const page=await client.memoryRequest('search',{query:memoryQuery.value,limit:16,before:older?memoryCursor:null});
     if(!current())return;
-    if(!older){memoryResults.replaceChildren();shareMemoryId.replaceChildren();shareInvite.replaceChildren();}
+    if(!older){memoryResults.replaceChildren();resetSharing();}
     page.records.forEach(addMemoryRecord);memoryCursor=page.nextBefore;memoryMore.hidden=memoryCursor===null;
     memoryStatus.textContent=memoryResults.children.length+' accessible reports · private server evidence';
   })();
@@ -128,7 +150,7 @@ function recallMemory(older=false){
 memoryRecall.onclick=()=>void recallMemory();
 memoryMore.onclick=()=>void recallMemory(true);
 prepareEvidence.onclick=memoryAction(async(client,current)=>{
-  memoryResults.replaceChildren();shareMemoryId.replaceChildren();shareInvite.replaceChildren();
+  memoryResults.replaceChildren();resetSharing();
   memoryCursor=null;memoryMore.hidden=true;
   const packet=await client.prepareAgentContext({task:taskScope.value,mode:modeScope.value,
     providers:providerScope.value?[providerScope.value]:[],limit:4});
@@ -138,7 +160,7 @@ prepareEvidence.onclick=memoryAction(async(client,current)=>{
     'Prepared '+packet.records.length+' evidence reports · advisory only'+(packet.truncated?' · more matches exist':'');
 });
 reasonEvidence.onclick=memoryAction(async(client,current)=>{
-  memoryResults.replaceChildren();shareMemoryId.replaceChildren();shareInvite.replaceChildren();
+  memoryResults.replaceChildren();resetSharing();
   memoryCursor=null;memoryMore.hidden=true;
   const result=await client.reasonAgentMission({task:taskScope.value,mode:modeScope.value,
     providers:providerScope.value?[providerScope.value]:[],limit:4});
@@ -171,19 +193,33 @@ archiveMemory.onclick=memoryAction(async(client,current)=>{
   memoryFile.value='';memoryStatus.textContent=result.status==='duplicate'?'Already archived.':'Report archived on private server. Select Recall evidence to inspect.';
 });
 loadShares.onclick=memoryAction(async(client,current)=>{
-  if(!shareMemoryId.value)throw Error('Recall and select a report first.');
-  const [invites,grants]=await Promise.all([client.listInvites(),client.memoryRequest('grants',{memoryId:shareMemoryId.value})]);
-  if(!current())return;
+  const memoryId=shareMemoryId.value;
+  if(!memoryId)throw Error('Recall and select a report first.');
+  resetInviteSelection();
+  const [invites,grants]=await Promise.all([client.listInvites(),client.memoryRequest('grants',{memoryId})]);
+  if(!current()||shareMemoryId.value!==memoryId)return;
+  if(grants.memoryId!==memoryId)throw Error('Grant response belongs to another report.');
   const byId=new Map(grants.grants.map(g=>[g.invitationId,g]));
-  shareInvite.replaceChildren(...invites.filter(i=>!i.revoked&&i.expiresAt>Date.now()/1000).map(i=>
-    element('option',{value:i.id,textContent:i.actorId+(byId.has(i.id)?' · shared':' · private')})));
+  shareInvite.replaceChildren(element('option',{value:'',textContent:'Select a collaborator'}),
+    ...invites.filter(i=>!i.revoked&&i.expiresAt>Date.now()/1000).map(i=>
+      element('option',{value:i.id,textContent:i.actorId+(byId.has(i.id)?' · shared':' · private')})));
+  shareInvite.value='';loadedShareMemoryId=memoryId;updateShareActions();
   memoryStatus.textContent='Select a collaborator. Grant and revoke affect only the selected report.';
 });
 function changeShare(granted){
   return memoryAction(async(client,current)=>{
-    if(!shareMemoryId.value||!shareInvite.value)throw Error('Select evidence and an active invitation.');
-    const result=await client.memoryRequest('grant',{memoryId:shareMemoryId.value,invitationId:shareInvite.value,granted});
-    if(current())memoryStatus.textContent=result.granted?'Recall access granted.':'Future recall access revoked. Previously downloaded copies cannot be revoked.';
+    const memoryId=shareMemoryId.value,invitationId=shareInvite.value;
+    if(!memoryId||!invitationId||loadedShareMemoryId!==memoryId)throw Error('Select evidence and an active invitation for that report.');
+    const actor=shareInvite.selectedOptions[0]?.textContent?.split(' · ')[0]||'selected collaborator';
+    // A grant/revoke consumes this explicit target selection. Reconcile
+    // with the server before allowing another sharing change.
+    resetInviteSelection();
+    const result=await client.memoryRequest('grant',{memoryId,invitationId,granted});
+    if(!current())return;
+    if(result.memoryId!==memoryId||result.invitationId!==invitationId||result.granted!==granted)
+      throw Error('Unexpected sharing receipt. Reload invitations and grants.');
+    memoryStatus.textContent=result.granted?'Recall access granted. Target: '+actor:
+      'Future recall access revoked. Previously downloaded copies cannot be revoked. Target: '+actor;
   })();
 }
 grantMemory.onclick=()=>void changeShare(true);revokeMemory.onclick=()=>void changeShare(false);

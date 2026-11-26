@@ -49,22 +49,27 @@ async def main():
             try:
                 await connect(owner, OWNER_TOKEN, "owner")
                 await open_panel(owner, "people")
-                await owner.click("#makeInvite")
-                # Poll the actual input, as in the existing canonical two-person
-                # acceptance. Playwright's string wait_for_function uses eval,
-                # which is intentionally prohibited by the remote page CSP.
-                deadline = asyncio.get_running_loop().time() + 10
-                invite = ""
-                while asyncio.get_running_loop().time() < deadline:
-                    invite = await owner.locator("#inviteLink").input_value()
-                    if "#token=" in invite:
-                        break
-                    await asyncio.sleep(0.1)
-                check("owner invitation created under strict CSP", "#token=" in invite)
+                async def create_invite(previous=""):
+                    await owner.click("#makeInvite")
+                    # No eval: bounded DOM-value polling under strict CSP.
+                    deadline = asyncio.get_running_loop().time() + 10
+                    while asyncio.get_running_loop().time() < deadline:
+                        value = await owner.locator("#inviteLink").input_value()
+                        if "#token=" in value and value != previous:
+                            return value
+                        await asyncio.sleep(0.1)
+                    raise AssertionError("new invitation was not produced")
+                # Keep an older active invitation so an implicit first-option
+                # grant would target the wrong actor, even in an isolated run.
+                older_invite = await create_invite()
+                invite = await create_invite(older_invite)
+                check("two distinct invitations created under strict CSP", invite != older_invite)
                 await editor.goto(invite, wait_until="domcontentloaded", timeout=60000)
                 await wait_text(editor, "#serviceReady", "REMOTE AUTHORITY READY")
                 await editor.click("#createRoom")
-                await wait_text(editor, "#connection", "REMOTE EDITOR")
+                editor_label = await wait_text(editor, "#connection", "REMOTE EDITOR")
+                editor_actor = editor_label.split(" · ")[-1]
+                check("authenticated editor identity", editor_actor.startswith("remote.invite."))
                 await editor.locator("#toolbar").wait_for(state="visible")
 
                 owner_sheet = owner.locator('[data-sheet="neural"]')
@@ -92,11 +97,29 @@ async def main():
                 await status(editor_status,"No matching authorized evidence.")
                 check("unshared evidence is absent",await editor_sheet.get_by_label("Remote Neural Memory results").locator("details").count()==0)
 
-                await owner_sheet.get_by_label("Evidence to share").select_option("council:"+digest)
-                await owner_sheet.get_by_role("button",name="Load invitations and grants").click()
+                evidence_select = owner_sheet.get_by_label("Evidence to share")
+                invite_select = owner_sheet.get_by_label("Collaborator invitation")
+                grant_button = owner_sheet.get_by_role("button",name="Grant recall access")
+                load_button = owner_sheet.get_by_role("button",name="Load invitations and grants")
+                check("no evidence implicitly selected", await evidence_select.input_value()=="" and await load_button.is_disabled())
+                await evidence_select.select_option("council:"+digest)
+                await load_button.click()
                 await status(owner_status,"Select a collaborator.")
-                await owner_sheet.get_by_role("button",name="Grant recall access").click()
-                await status(owner_status,"Recall access granted.")
+                check("multiple invitations but no implicit grant target",
+                      await invite_select.locator("option").count()>=3 and await invite_select.input_value()=="" and await grant_button.is_disabled())
+                await invite_select.select_option(label=editor_actor+" · private")
+                check("explicit editor target enables grant", not await grant_button.is_disabled())
+                # Changing the report must invalidate the loaded invitation
+                # target, even if the same actor is still active.
+                await evidence_select.select_option("council:"+reports[1]["reportSha256"])
+                check("changing evidence invalidates the selected grant target",
+                      await invite_select.input_value()=="" and await grant_button.is_disabled())
+                await evidence_select.select_option("council:"+digest)
+                await load_button.click()
+                await status(owner_status,"Select a collaborator.")
+                await invite_select.select_option(label=editor_actor+" · private")
+                await grant_button.click()
+                await status(owner_status,"Recall access granted. Target: "+editor_actor)
                 await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
                 await status(editor_status,"Prepared 1 evidence reports")
                 result = editor_sheet.get_by_label("Remote Neural Memory results")
@@ -118,6 +141,9 @@ async def main():
                 await status(editor_status,"No matching authorized evidence.")
                 check("fixture never promoted to live context",await result.locator("details").count()==0)
                 await editor_sheet.get_by_label("Agent evidence provenance").select_option("fixture")
+                await load_button.click()
+                await status(owner_status,"Select a collaborator.")
+                await invite_select.select_option(label=editor_actor+" · shared")
                 await owner_sheet.get_by_role("button",name="Revoke recall access").click()
                 await status(owner_status,"Future recall access revoked.")
                 await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
