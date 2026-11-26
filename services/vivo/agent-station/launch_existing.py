@@ -53,8 +53,10 @@ def check_origin(value):
     require(p.scheme in ('http', 'https') and not p.username and not p.password
             and not p.path and not p.query and not p.fragment and value == f'{p.scheme}://{p.netloc}',
             'Enter an exact trusted browser origin, without a path or trailing slash')
-    require(value == PUBLIC_ORIGIN or (p.hostname == '127.0.0.1' and p.scheme == 'http' and p.port is not None),
-            'Only the canonical published HTTPS origin or explicit local 127.0.0.1 origin is supported')
+    require(value == PUBLIC_ORIGIN or (p.scheme == 'http' and p.hostname in ('127.0.0.1', 'localhost')
+            and p.port is not None and 1 <= p.port <= 65535
+            and p.netloc == f'{p.hostname}:{p.port}'),
+            'Only the canonical HTTPS origin or an exact local localhost/127.0.0.1 origin is supported')
     return value
 
 

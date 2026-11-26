@@ -22,7 +22,7 @@ Without memory binding, omit all four memory options. Only use an existing, revi
 
 ## Activate the existing private runtime safely
 
-The source checkout includes the same `upgrade_v012.py` exact-hash guard from the verified v0.12 archive. Use the existing private installed Station directory, not a replacement database or world. Stop the old broker and any other writers, consistently checkpoint its SQLite WAL, and keep byte-identical private backups of the SQLite and Apollo files **outside the public repository and web tree**. Never copy secrets or databases into the repository. Inspect the installed directory using the guard's default dry-run first:
+The source checkout includes the same `upgrade_v012.py` exact-hash guard from the verified v0.12 archive. The Station directory pins exact source bytes against Git line-ending conversion; an older Windows checkout with converted or modified runtime files must be reconciled rather than force-upgraded. Use the existing private installed Station directory, not a replacement database or world. Stop the old broker and any other writers, consistently checkpoint its SQLite WAL, and keep byte-identical private backups of the SQLite and Apollo files **outside the public repository and web tree**. Never copy secrets or databases into the repository. Inspect the installed directory using the guard's default dry-run first:
 
 ```powershell
 python .\upgrade_v012.py "<existing Station directory>"
@@ -30,7 +30,7 @@ python .\upgrade_v012.py "<existing Station directory>"
 
 Only after a supported exact base is reported, backups are verified by the operator, and the broker remains stopped, use the same command with `--apply`. Do not force unknown hashes, replace an independently modified UI, or delete journal files to pass a check. The guard does not discover all databases, take a process lock, or back up the owner's stores automatically.
 
-The owner-operated `launch_existing.py` defaults to a read-only preflight. Use the exact existing database path, native world ID, and trusted browser origin from the original deployment. For the GitHub Pages route the origin is `https://carltheghost.github.io` (an origin does not include the repository path). For a local route use its exact `http://127.0.0.1:PORT` origin. Switching origins may select a different browser-local world; do not invent a new world to satisfy this check.
+The owner-operated `launch_existing.py` defaults to a read-only preflight. Use the exact existing database path, native world ID, and trusted browser origin from the original deployment. For the GitHub Pages route the origin is `https://carltheghost.github.io` (an origin does not include the repository path). For a local route use its existing exact `http://127.0.0.1:PORT` or `http://localhost:PORT` origin. Switching origins may select a different browser-local world; do not invent a new world to satisfy this check.
 
 ```powershell
 python .\launch_existing.py --station-dir "<existing Station directory>" --db "<existing station.sqlite>" --world "<exact enrolled world ID>" --origin "https://carltheghost.github.io" --confirm-stopped --db-backup "<private stopped SQLite backup>"

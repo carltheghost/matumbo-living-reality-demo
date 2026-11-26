@@ -64,10 +64,11 @@ class GuardTests(unittest.TestCase):
         self.mutate_db("UPDATE principals SET active=0 WHERE role='owner'")
         with self.assertRaisesRegex(ValueError,'active enrolled owner'):self.run_check()
     def test_exact_origin(self):
-        for bad in ('*','https://evil.example','https://carltheghost.github.io/path','https://carltheghost.github.io/','http://localhost:8765','http://127.0.0.1:8765/path','http://user@127.0.0.1:8765'):
+        for bad in ('*','https://evil.example','https://carltheghost.github.io/path','https://carltheghost.github.io/','http://localhost:0','http://LOCALHOST:8765','http://localhost:8765/path','http://localhost.example:8765','http://127.0.0.1:8765/path','http://user@127.0.0.1:8765'):
             self.args.origin=bad
             with self.subTest(origin=bad),self.assertRaises(ValueError):self.run_check()
-        self.args.origin='http://127.0.0.1:8765';self.run_check()
+        for good in ('http://127.0.0.1:8765','http://localhost:8765'):
+            self.args.origin=good;self.run_check()
     def test_stop_confirmation(self):
         self.args.confirm_stopped=False
         with self.assertRaisesRegex(ValueError,'Stop the original'):self.run_check()
