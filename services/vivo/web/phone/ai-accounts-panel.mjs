@@ -215,10 +215,54 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     out.textContent=JSON.stringify(memory.query({scope,start:Number(start.value),path:path.value.split(',').map(Number)}),null,2);
   })),out,node('h4','Agent access to this memory'),node('p','Grants are per active local agent session. Recall is read-only and does not authorize actions. Compiling, restoring or changing worlds clears grants.'),
     agentPicker,button('Refresh active agents',memrun(refreshMemoryAgents)),grantMemory,revokeMemory,revokeEveryMemory,accessStatus);
+  // Task history is owner-controlled and remains on the existing native agent face.
+  const taskTitle=node('input');taskTitle.maxLength=100;taskTitle.placeholder='Task title';taskTitle.setAttribute('aria-label','New task title');
+  const taskPicker=node('select');taskPicker.setAttribute('aria-label','Saved task in this world and branch');
+  const taskStatus=node('p','Refresh to inspect saved tasks for the open world.');taskStatus.setAttribute('aria-live','polite');
+  const taskDetail=node('pre','No task selected.');taskDetail.style.whiteSpace='pre-wrap';taskDetail.style.overflowWrap='anywhere';
+  let journal=null,taskBusy=false,taskScope=null;
+  const taskScopeNow=()=>{const host=globalThis.VivaPhoneEngine,e=host?.publishedSnapshot?.();return host?.active&&e?.snapshot?.worldId&&e?.branchId?JSON.stringify([e.snapshot.worldId,e.branchId]):null;};
+  const taskAdmin=()=>{const access=globalThis.VivaPhoneAgentAdmin?.taskAccess;if(!access)throw Error('Native task continuity is unavailable.');return access;};
+  const selectedAgent=()=>{if(!agentPicker.value)throw Error('Choose an active agent session first.');return agentPicker.value;};
+  const selectedTask=()=>{if(!taskPicker.value)throw Error('Select a saved task first.');return taskPicker.value;};
+  function drawTask(){
+    const task=journal?.tasks.find(t=>t.id===taskPicker.value);
+    if(!task){taskDetail.textContent='No task selected.';return;}
+    const attached=journal.attachments.some(a=>a.taskId===task.id);
+    const count=state=>task.steps.filter(s=>s.state===state).length;
+    taskDetail.textContent=task.title+' · '+task.sourceId+' · '+(task.closed?'closed':attached?'attached':'detached')+'\n'
+      +'Confirmed '+count('confirmed')+' · unresolved '+count('pending')+' · conflicts '+count('conflict')+' · not dispatched '+count('not-dispatched')+'\n'
+      +task.steps.map(s=>s.state+' · '+s.entityId+' · '+s.operationId+(s.state==='confirmed'?' · revision '+s.revision:'')).join('\n');
+  }
+  function invalidateTaskScope(){
+    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;journal=null;
+    taskPicker.replaceChildren();taskDetail.textContent='No task selected.';taskStatus.textContent='World changed. Refresh to inspect the current world’s journal.';
+  }
+  async function refreshTasks(preferred){
+    invalidateTaskScope();const expected=taskScopeNow();if(!expected)throw Error('Open a local world first.');
+    const result=await taskAdmin().inspect();if(disposed||expected!==taskScopeNow())return;
+    const old=preferred||taskPicker.value;journal=result;taskScope=expected;taskPicker.replaceChildren();
+    const placeholder=node('option','Choose a saved task');placeholder.value='';taskPicker.append(placeholder);
+    for(const t of journal.tasks){const option=node('option',t.title+' · '+t.sourceId+(t.closed?' · closed':''));option.value=t.id;taskPicker.append(option);}
+    if(journal.tasks.some(t=>t.id===old))taskPicker.value=old;
+    taskStatus.textContent=journal.warning||journal.tasks.length+' saved task(s) in this world/branch. Grants never resume automatically.';drawTask();
+  }
+  const taskRun=fn=>async()=>{if(taskBusy||disposed)return;taskBusy=true;try{refreshMemoryAgents();await fn();}catch(e){if(!disposed)taskStatus.textContent=message(e);}finally{taskBusy=false;}};
+  taskPicker.addEventListener('change',drawTask);
+  const refreshTaskButton=button('Refresh saved tasks',taskRun(()=>refreshTasks()));
+  const createTaskButton=button('Create and attach task',taskRun(async()=>{const result=await taskAdmin().create(selectedAgent(),taskTitle.value);taskTitle.value='';await refreshTasks(result.taskId);}));
+  const resumeTaskButton=button('Resume selected task explicitly',taskRun(async()=>{const id=selectedTask();await taskAdmin().resume(selectedAgent(),id);await refreshTasks(id);}));
+  const reconcileTaskButton=button('Reconcile native receipts',taskRun(async()=>{await taskAdmin().reconcile();await refreshTasks();}));
+  const pauseTaskButton=button('Detach selected agent from task',taskRun(async()=>{taskAdmin().pause(selectedAgent());await refreshTasks();}));
+  const closeTaskButton=button('Close attached task journal',taskRun(async()=>{await taskAdmin().finish(selectedAgent());await refreshTasks();}));
+  section.append(node('h4','Persistent agent task journal'),node('p','Use the active agent selector above. Only attached native world edits are journaled. Reconcile unresolved receipts before continuing; detaching does not revoke native action permissions. No automatic replay or cloud sync.'),
+    taskTitle,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,reconcileTaskButton,pauseTaskButton,closeTaskButton,taskStatus,taskDetail);
+  for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])globalThis.addEventListener(event,invalidateTaskScope);
+  invalidateTaskScope();
   refreshMemoryAgents();
   root.prepend(section);
   if(resumeSignIn)run(render)();
-  return {section,refresh:render,openProviders:()=>{clearSelection();search.value='';renderProviders();search.focus();},dispose:()=>{disposed=true;selectionEpoch++;memoryAccess()?.clear();section.remove();}};
+  return {section,refresh:render,openProviders:()=>{clearSelection();search.value='';renderProviders();search.focus();},dispose:()=>{disposed=true;selectionEpoch++;memoryAccess()?.clear();globalThis.VivaPhoneAgentAdmin?.taskAccess?.clear();for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])globalThis.removeEventListener(event,invalidateTaskScope);section.remove();}};
 }
 export function installIntelligenceControls() {
   let mounted,observer;

@@ -12,7 +12,8 @@ import { FieldWorldController, drawFieldAtlas } from './field-world.mjs';
 import { SpatialInteractionFabric, mapRendererPointToCanonical } from './spatial-fabric.mjs';
 import { LocalOperationIdFactory } from './local-operation.mjs';
 import { LocalEditQueue } from './local-edit-queue.mjs';
-import { LocalAgentController } from './agent-control.mjs';
+import { LocalAgentController, validateAgentEditPayload } from './agent-control.mjs';
+import { createTaskContinuity } from './task-continuity.mjs';
 import { mountPhoneEconomyContext } from './economy-entry.mjs';
 import { PhoneMaterialInputRuntime } from './material-input-runtime.mjs';
 import { PHONE_MATERIAL_ENTITY_ID } from './material-contract.mjs';
@@ -1544,25 +1545,30 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.
     if(!host?.active||!e?.snapshot?.worldId)return null;
     return {worldId:e.snapshot.worldId,projectId:e.branchId||'local'};
   }});
-  for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])window.addEventListener(event,memoryBridge.syncScope);
+  const taskBridge=createTaskContinuity({registry,downstream:memoryBridge.tools,validateEdit:validateAgentEditPayload,
+    getEnvelope:()=>window.VivaPhoneEngine?.active?window.VivaPhoneEngine.publishedSnapshot():null});
+  for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])window.addEventListener(event,()=>{
+    memoryBridge.syncScope();taskBridge.syncScope();
+  });
   window.VivaAgentTools = Object.freeze({
     list: () => registry.list(),
-    listFor: memoryBridge.tools.listFor,
-    invoke: (name, args, context) => name==='neural.predict'
-      ? memoryBridge.tools.invokeFor(context?.session||context?.sessionId,name,args)
+    listFor: taskBridge.tools.listFor,
+    invoke: (name, args, context) => ['neural.predict','task.progress','vivo.world.edit'].includes(name)
+      ? taskBridge.tools.invokeFor(context?.session||context?.sessionId,name,args)
       : registry.invoke(name,args,context),
-    invokeFor: memoryBridge.tools.invokeFor,
+    invokeFor: taskBridge.tools.invokeFor,
   });
   window.VivaPhoneAgentAdmin = Object.freeze({
     register: spec => registry.registerAgent(spec),
-    stop: (session, reason) => {memoryBridge.admin.revoke(session);return registry.stopAgent(session,reason);},
+    stop: (session, reason) => {taskBridge.admin.pause(session);memoryBridge.admin.revoke(session);return registry.stopAgent(session,reason);},
     reenable: sourceOrSession => registry.reenableAgent(sourceOrSession),
     beginContact: (session, values) => registry.beginContact(session, values),
     updateContact: (session, contactId, values) => registry.updateContact(session, contactId, values),
     endContact: (session, contactId, reason) => registry.endContact(session, contactId, reason),
     agents: () => registry.agents(),
     memoryAccess: memoryBridge.admin,
-    revokeAll: () => {memoryBridge.admin.revokeAll();return registry.revokeAll();},
+    taskAccess: taskBridge.admin,
+    revokeAll: () => {taskBridge.admin.clear();memoryBridge.admin.revokeAll();return registry.revokeAll();},
     audit: () => structuredClone(registry.audit),
   });
 window.VivaPhoneEngine = Object.freeze({
