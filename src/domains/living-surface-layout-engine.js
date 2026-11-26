@@ -1,4 +1,4 @@
-import {REALITY_TAB_FORMS, realityTabRadius} from './reality-tab-layout.js';
+import {REALITY_TAB_FORMS, realityTabRadius, waveTabContour, waveTabEnvelopeHeight} from './reality-tab-layout.js';
 
 /**
  * Geometry and layout rules for Reality Lens living objects.
@@ -57,18 +57,10 @@ function makeFace(id,width,height,position,rotation,{kind='plane',curvature=0,re
 }
 
 const percent=value=>`${round(value)}%`;
-function waveSurfaceClipPath(steps=24){
-  const amplitude=.075,half=.5+amplitude,points=[];
-  for(let index=0;index<=steps;index++){
-    const t=index/steps,sine=Math.sin(t*Math.PI*4);
-    const y=(half-(.5+amplitude*sine))/(half*2)*100;
-    points.push(`${percent(t*100)} ${percent(y)}`);
-  }
-  for(let index=steps;index>=0;index--){
-    const t=index/steps,sine=Math.sin(t*Math.PI*4);
-    const y=(half-(-.5-amplitude*sine))/(half*2)*100;
-    points.push(`${percent(t*100)} ${percent(y)}`);
-  }
+function waveSurfaceClipPath(){
+  const height=waveTabEnvelopeHeight(1);
+  const points=waveTabContour(1,1).map(([x,y])=>
+    `${percent((x+.5)*100)} ${percent((.5-y/height)*100)}`);
   return `polygon(${points.join(',')})`;
 }
 
@@ -91,7 +83,7 @@ function planarSurfaceLayout(shape,{clearance=.018,depthRatio=.42}={}){
   const z=depth+clearance;
   // The readable skin IS the front of the body, not a smaller browser card
   // pasted inside it. A wave includes the crest/trough envelope of its mesh.
-  const frontWidth=width,frontHeight=shape==='wave'?height*1.15:height;
+  const frontWidth=width,frontHeight=shape==='wave'?waveTabEnvelopeHeight(height):height;
   return [
     makeFace('front',frontWidth,frontHeight,[0,0,z],[0,0,0],{kind:'front'}),
     makeFace('back',width*.82,height*.82,[0,0,-z],[0,Math.PI,0],{kind:'back',readable:false}),
