@@ -33,6 +33,17 @@ def exercise(page, route, label):
     assert initial["plans"][0]["ready"]==2 and initial["plans"][0]["blocked"]==1,initial
     ids={t["plan"]["stepKey"]:t["id"] for t in initial["tasks"]}
     assert initial["tasks"][2]["dependsOn"]==[ids["left"],ids["right"]],initial
+    panel.get_by_role("listbox",name="Hypothetically unavailable agent sources").select_option(["planner-a","planner-b"])
+    panel.get_by_role("button",name="Compare mission assignment scenarios").click()
+    idle()
+    scenario_text=panel.locator("#vivoMissionScenario").inner_text()
+    assert "Current availability · 2/3 assignable now" in scenario_text and "Hypothetical availability · 1/3 assignable now" in scenario_text,scenario_text
+    result=page.evaluate("taskIds=>window.VivaPhoneAgentAdmin.taskAccess.compareScenario({taskIds,unavailableSourceIds:['planner-a','planner-b']})",list(ids.values()))
+    assert result["baseline"]["assignable"]==2 and result["alternative"]["assignable"]==1 and result["lostCapacity"]==1,result
+    assert result["authorizesAction"] is False and result["predictsCompletion"] is False,result
+    assert next(r for r in result["alternative"]["rows"] if r["taskId"]==ids["finish"])["status"]=="TASK_PREREQUISITES_INCOMPLETE",result
+    unchanged=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
+    assert unchanged["tasks"]==initial["tasks"] and unchanged["attachments"]==[],unchanged
     stale=page.evaluate("""async()=>{
       const admin=window.VivaPhoneAgentAdmin,agent=admin.agents().find(a=>a.sourceId==='planner-c');
       const preview=await admin.taskAccess.previewPlan({objective:'Stale plan',steps:[{key:'one',title:'Test',sourceId:'planner-c'}]});
@@ -79,7 +90,7 @@ def exercise(page, route, label):
     assert restored["branchId"]==third["branchId"] and restored["plans"]==completed["plans"],restored
     assert restored["tasks"]==completed["tasks"] and restored["attachments"]==[],restored
     assert sorted(restored["receipts"])==["plan:finish","plan:left","plan:right"],restored
-    return {"created":3,"completed":3,"parallelPrerequisites":2,"staleReviewRejected":True,"reload":True,"autoGrant":False}
+    return {"created":3,"completed":3,"parallelPrerequisites":2,"staleReviewRejected":True,"reload":True,"autoGrant":False,"scenarioComparison":True,"hypotheticalOutageCapacity":1,"scenarioReadOnly":True}
 
 
 def main(base):
