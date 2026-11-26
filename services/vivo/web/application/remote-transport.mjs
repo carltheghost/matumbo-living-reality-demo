@@ -207,12 +207,16 @@ export class RemoteTransport {
     await Promise.all(providers.map(provider=>provider.close().catch(()=>{})));
   }
   async memoryRequest(op,args={},fetchImpl=globalThis.fetch){
+    return this._memoryRequest('/api/neural-memory',op,args,fetchImpl);
+  }
+  async _memoryRequest(path,op,args,fetchImpl){
+    if(!['/api/neural-memory','/api/neural-memory/capsule'].includes(path))throw Error('MEMORY_PATH_INVALID');
     if(this.closed||!this.session)throw Object.assign(new Error('REMOTE_ADMISSION_REQUIRED'),{code:'REMOTE_ADMISSION_REQUIRED'});
     const origin=new URL(this.url).origin.replace(/^ws/,'http');
     if(globalThis.location?.origin&&globalThis.location.origin!==origin)throw Error('MEMORY_ORIGIN_INVALID');
     const socket=this.socket,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),this.timeoutMs);
     try{
-      const response=await fetchImpl(origin+'/api/neural-memory',{method:'POST',redirect:'error',cache:'no-store',
+      const response=await fetchImpl(origin+path,{method:'POST',redirect:'error',cache:'no-store',
         credentials:'omit',signal:controller.signal,headers:{'Content-Type':'application/json',
           Authorization:'Bearer '+this.invitationToken},body:JSON.stringify({op,args})});
       const body=await response.json();
@@ -221,6 +225,31 @@ export class RemoteTransport {
       if(!response.ok)throw Object.assign(new Error(/^[A-Z][A-Z0-9_]{1,63}$/.test(body.error)?body.error:'MEMORY_REQUEST_FAILED'),{code:body.error});
       return body.result;
     }finally{clearTimeout(timer);}
+  }
+  async reviewMemoryCapsule(capsule,fetchImpl=globalThis.fetch){
+    if(this.role!=='owner')throw Error('MEMORY_OWNER_REQUIRED');
+    const snapshot=structuredClone(capsule);
+    const result=await this._memoryRequest('/api/neural-memory/capsule','preview',{capsule:snapshot},fetchImpl);
+    const count=n=>Number.isInteger(n)&&n>=0&&n<=128;
+    if(result?.schema!=='vivo.memory-capsule-review/1'||result.capsuleDigest!==snapshot.journalSha256||
+      !reasoningDigest(result.baseRevision)||!reasoningDigest(result.capsuleDigest)||result.newReportsPrivate!==true||
+      !['current','incoming','added','duplicates','resulting','fixture','liveClaims'].every(k=>count(result[k]))||
+      result.added+result.duplicates!==result.incoming||result.current+result.added!==result.resulting||
+      result.fixture+result.liveClaims!==result.incoming)throw Error('MEMORY_CAPSULE_REVIEW_INVALID');
+    return result;
+  }
+  async restoreMemoryCapsule(capsule,review,fetchImpl=globalThis.fetch){
+    if(this.role!=='owner')throw Error('MEMORY_OWNER_REQUIRED');
+    const snapshot=structuredClone(capsule);
+    if(review?.capsuleDigest!==snapshot.journalSha256||!reasoningDigest(review?.baseRevision))throw Error('MEMORY_CAPSULE_REVIEW_REQUIRED');
+    const expected=structuredClone(review);
+    const result=await this._memoryRequest('/api/neural-memory/capsule','restore',
+      {capsule:snapshot,review:{capsuleDigest:expected.capsuleDigest,baseRevision:expected.baseRevision}},fetchImpl);
+    if(result?.schema!=='vivo.memory-capsule-restore/1'||result.capsuleDigest!==expected.capsuleDigest||
+      result.newReportsPrivate!==true||result.added!==expected.added||result.duplicates!==expected.duplicates||
+      result.total!==expected.resulting||result.status!==(expected.added?'restored':'unchanged'))
+      throw Error('MEMORY_CAPSULE_RECEIPT_INVALID');
+    return result;
   }
   async prepareAgentContext(selection,fetchImpl=globalThis.fetch){
     const packet=await this.memoryRequest('context',selection,fetchImpl);
@@ -233,6 +262,31 @@ export class RemoteTransport {
       !['evidence-found','no-matching-evidence'].includes(packet.status)||
       (packet.status==='evidence-found')!==(packet.records.length>0))throw Error('MEMORY_CONTEXT_INVALID');
     return packet;
+  }
+  async prepareCouncilEvidenceDownload(memoryId,fetchImpl=globalThis.fetch){
+    if(typeof memoryId!=='string'||!/^council:[0-9a-f]{64}$/.test(memoryId))throw Error('MEMORY_EVIDENCE_ID_INVALID');
+    const socket=this.socket,digest=memoryId.slice(8);
+    // Fresh server-side get rechecks the caller and grant; do not reuse a
+    // previously recalled record as authority for a new download.
+    const result=await this.memoryRequest('get',{memoryId},fetchImpl);
+    const envelope=result?.envelope,record=result?.record;
+    if(!reasoningKeys(envelope,['schema','reportJson','reportSha256'])||
+      envelope.schema!=='matumbo.provider-council-export/1'||envelope.reportSha256!==digest||
+      typeof envelope.reportJson!=='string'||envelope.reportJson.length>32000||
+      record?.memoryId!==memoryId||record?.evidenceDigest!==digest||record?.authority!=='evidence-only'||
+      record?.providerAuthenticated!==false||record?.worldActionExecuted!==false||record?.postedChargesUsd!==null)
+      throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');
+    const actual=Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(envelope.reportJson))),byte=>byte.toString(16).padStart(2,'0')).join('');
+    let report;try{report=JSON.parse(envelope.reportJson);}catch{throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');}
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    if(actual!==digest||JSON.stringify(report)!==envelope.reportJson||
+      !['matumbo.provider-council/1','matumbo.provider-council/2'].includes(report?.schema)||
+      !['fixture','live'].includes(report.mode)||report.mode!==record.mode||report.runId!==record.runId||
+      report.worldActionExecuted!==false||report.postedChargesUsd!==null)
+      throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');
+    return Object.freeze({filename:'council-'+report.mode+'-'+digest.slice(0,12)+'.json',
+      text:JSON.stringify(envelope,null,2)+'\n',digest});
   }
   async reasonAgentMission(selection,fetchImpl=globalThis.fetch){
     const scope=structuredClone(selection),socket=this.socket;

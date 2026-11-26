@@ -1,4 +1,5 @@
 import { createCouncilMemory } from "../domains/council-memory.js";
+import { prepareCouncilDownload, requestCouncilDownload } from "./council-download.js";
 import { createJevUsageJournal } from "../domains/jev-advice-receipt.js";
 import { parseCouncilReport, summarizeCouncilMission, COUNCIL_MISSION_SCHEMA, COUNCIL_STORAGE_KEY } from "../domains/provider-council-evidence.js";
 /**
@@ -628,18 +629,37 @@ export function createWebAiConsole({
   let acceptedCouncilEnvelope=null;
   const rememberCouncil=el(doc,"button","web-ai-btn","Remember in Neural Mesh");
   rememberCouncil.type="button";rememberCouncil.disabled=true;councilSection.appendChild(rememberCouncil);
+  const downloadCouncil=el(doc,"button","web-ai-btn","Download Council report");
+  downloadCouncil.type="button";downloadCouncil.disabled=true;councilSection.appendChild(downloadCouncil);
+  const downloadNotice=el(doc,"p","web-ai-economy-statusline","Optional file transfer. A downloaded copy is outside server sharing controls; nothing is uploaded.");
+  downloadNotice.setAttribute("aria-live","polite");downloadNotice.setAttribute("aria-label","Council download status");
+  councilSection.appendChild(downloadNotice);
+  let downloadBusy=false;
+  function updateCouncilDownload(){downloadCouncil.disabled=downloadBusy||councilFile.disabled||!acceptedCouncilEnvelope;}
+  downloadCouncil.addEventListener("click",async()=>{
+    if(downloadCouncil.disabled||!acceptedCouncilEnvelope)return;
+    const envelope=acceptedCouncilEnvelope,epoch=councilEpoch;
+    downloadBusy=true;updateCouncilDownload();
+    try{
+      const prepared=await prepareCouncilDownload(envelope,{expectedDigest:envelope.reportSha256});
+      if(epoch!==councilEpoch||acceptedCouncilEnvelope!==envelope)return;
+      requestCouncilDownload(doc,prepared);
+      downloadNotice.textContent="Download requested. The original report digest is unchanged.";
+    }catch(error){if(epoch===councilEpoch)downloadNotice.textContent=error.message;}
+    finally{downloadBusy=false;updateCouncilDownload();}
+  });
   const memoryNotice=el(doc,"p","web-ai-economy-statusline","Optional: archive this validated report for later recall on Neural Mesh in this tab.");
   memoryNotice.setAttribute("aria-live","polite");memoryNotice.setAttribute("aria-label","Council memory status");
   councilSection.appendChild(memoryNotice);
   rememberCouncil.addEventListener("click",async()=>{
     if(!acceptedCouncilEnvelope||rememberCouncil.disabled)return;
     const envelope=acceptedCouncilEnvelope;
-    rememberCouncil.disabled=true;councilFile.disabled=true;
+    rememberCouncil.disabled=true;councilFile.disabled=true;updateCouncilDownload();
     try{
       const result=await councilMemory.archive(envelope);
       memoryNotice.textContent=result.status==="duplicate"?"Already remembered in Neural Mesh.":"Evidence remembered in Neural Mesh.";
     }catch(error){memoryNotice.textContent=error.message;}
-    finally{rememberCouncil.disabled=!acceptedCouncilEnvelope;councilFile.disabled=false;}
+    finally{rememberCouncil.disabled=!acceptedCouncilEnvelope;councilFile.disabled=false;updateCouncilDownload();}
   });
   councilSection.appendChild(el(doc,"p","web-ai-economy-statusline",
     "Report contents are not provider-authenticated. Fixture results never establish live availability. Imported observations cannot execute a model, change demo credits, rewards or posted charges. Latest report only, saved in this tab when storage is available."));
@@ -675,7 +695,8 @@ export function createWebAiConsole({
     const report=await parseCouncilReport(envelope);
     if(epoch!==councilEpoch)return;
     acceptedCouncilEnvelope=JSON.parse(JSON.stringify(envelope));
-    rememberCouncil.disabled=false;
+    rememberCouncil.disabled=false;updateCouncilDownload();
+    downloadNotice.textContent="Optional file transfer. A downloaded copy is outside server sharing controls; nothing is uploaded.";
     memoryNotice.textContent="Optional: archive this validated report for later recall on Neural Mesh in this tab.";
     renderCouncil(report);
     if(!save){councilStatus.textContent="Restored latest report for this tab.";return;}
@@ -698,12 +719,12 @@ export function createWebAiConsole({
   }catch{councilStatus.textContent="Saved provider report could not be read.";}
   councilFile.addEventListener("change",async()=>{
     const file=councilFile.files?.[0];if(!file)return;
-    const epoch=++councilEpoch;councilFile.disabled=true;rememberCouncil.disabled=true;
+    const epoch=++councilEpoch;councilFile.disabled=true;rememberCouncil.disabled=true;updateCouncilDownload();
     try{
       if(file.size>65536)throw new Error("Report too large.");
       await acceptCouncil(JSON.parse(await file.text()),epoch,true);
     }catch{councilStatus.textContent="Report rejected. Existing evidence and balances were not changed.";}
-    finally{councilFile.value="";councilFile.disabled=false;rememberCouncil.disabled=!acceptedCouncilEnvelope;}
+    finally{councilFile.value="";councilFile.disabled=false;rememberCouncil.disabled=!acceptedCouncilEnvelope;updateCouncilDownload();}
   });
 
 

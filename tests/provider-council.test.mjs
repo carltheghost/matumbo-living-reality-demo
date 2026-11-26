@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { COUNCIL_PROVIDERS, COUNCIL_MISSION_TASK, COUNCIL_MISSION_SCHEMA, scoreCouncilPlan, solveCouncilMission, normalizeCouncilCandidate, summarizeCouncilMission, exportCouncilReport, parseCouncilReport, validateCouncilReport } from "../src/domains/provider-council-evidence.js";
 import { runProviderCouncil, parseCouncilArgs } from "../scripts/vivo/provider-council.mjs";
+import { prepareCouncilDownload, requestCouncilDownload } from "../src/render/council-download.js";
 const env={
   OPENAI_API_KEY:"fixture-private-openai-key",VIVO_COUNCIL_OPENAI_MODEL:"owner-model-a",
   ANTHROPIC_API_KEY:"fixture-private-claude-key",VIVO_COUNCIL_ANTHROPIC_MODEL:"owner-model-b",
@@ -133,4 +134,24 @@ test("a missing or unanimously wrong provider set cannot become a verified provi
   assert.equal(r.postedChargesUsd,null);assert.equal(r.worldActionExecuted,false);
   assert.equal(parseCouncilArgs(["--fixture","--task=route"]).task,COUNCIL_MISSION_TASK);
   assert.throws(()=>parseCouncilArgs(["--task=arbitrary"]),/Unknown council task/);
+});
+
+test("portable evidence keeps the original report bytes and rejects changed or mismatched evidence",async()=>{
+  const report=await runProviderCouncil({task:COUNCIL_MISSION_TASK});
+  const original=await exportCouncilReport(report);
+  const file=await prepareCouncilDownload(original,{expectedDigest:original.reportSha256});
+  assert.equal(file.filename,"council-fixture-"+original.reportSha256.slice(0,12)+".json");
+  const transferred=JSON.parse(file.text);
+  assert.deepEqual(transferred,original);
+  assert.equal(transferred.reportJson,original.reportJson);
+  assert.deepEqual(await parseCouncilReport(transferred),report);
+  await assert.rejects(prepareCouncilDownload(original,{expectedDigest:"0".repeat(64)}),/identity changed/);
+  await assert.rejects(prepareCouncilDownload({...original,reportJson:original.reportJson+" "}),/Invalid/);
+  const events=[],link={click(){events.push("clicked");},remove(){events.push("removed");}};
+  const doc={body:{appendChild(a){assert.equal(a,link);events.push("appended");}},createElement:()=>link,
+    defaultView:{Blob,URL:{createObjectURL:blob=>{assert.equal(blob.type,"application/json");events.push("blob");return "blob:fixture";},
+      revokeObjectURL:url=>{assert.equal(url,"blob:fixture");events.push("revoked");}},setTimeout:fn=>fn()}};
+  requestCouncilDownload(doc,file);
+  assert.equal(link.download,file.filename);
+  assert.deepEqual(events,["blob","appended","clicked","removed","revoked"]);
 });

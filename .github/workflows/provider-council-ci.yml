@@ -6,6 +6,7 @@ on:
       - 'src/domains/provider-council-evidence.js'
       - 'src/domains/council-memory.js'
       - 'src/render/neural-mesh.js'
+      - 'src/render/council-download.js'
       - 'tests/council-memory.test.mjs'
       - 'src/render/web-ai.js'
       - 'tests/provider-council.test.mjs'

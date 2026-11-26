@@ -1,4 +1,5 @@
-import { createCouncilMemory, filterCouncilMemory } from "../domains/council-memory.js";
+import { createCouncilMemory, filterCouncilMemory, COUNCIL_CAPSULE_MAX_BYTES } from "../domains/council-memory.js";
+import { prepareCouncilDownload, requestCouncilDownload } from "./council-download.js";
 import { NEURAL_MESH_SOURCE } from "../domains/neural-mesh.js?v=20260922-cache2";
 
 /**
@@ -307,7 +308,60 @@ export function createNeuralMeshConsole({
   memoryStatus.setAttribute("role","status");memoryStatus.setAttribute("aria-label","Neural Memory status");
   const memoryResults=documentRoot.createElement("div");
   memoryResults.setAttribute("aria-label","Neural Memory results");
-  memoryRegion.append(memoryQuery,memoryMode,recallButton,memoryStatus,memoryResults);
+  const capsuleArea=documentRoot.createElement("details");
+  capsuleArea.appendChild(createText(documentRoot,"summary","","Back up or restore Neural Memory"));
+  capsuleArea.appendChild(createText(documentRoot,"p","","Back up all reports in this tab, not only the search results. Restore merges validated evidence without replacing existing reports. Files stay local unless you explicitly transfer them."));
+  const backupButton=createText(documentRoot,"button","","Download memory capsule");backupButton.type="button";
+  const capsuleLabel=createText(documentRoot,"label","","Import a Neural Memory capsule");
+  const capsuleFile=documentRoot.createElement("input");capsuleFile.type="file";capsuleFile.accept=".json,application/json";
+  capsuleFile.setAttribute("aria-label","Import a Neural Memory capsule");capsuleLabel.appendChild(capsuleFile);
+  const restoreButton=createText(documentRoot,"button","","Restore reviewed capsule");restoreButton.type="button";restoreButton.disabled=true;
+  const capsuleStatus=createText(documentRoot,"p","","No capsule selected.");
+  capsuleStatus.setAttribute("role","status");capsuleStatus.setAttribute("aria-label","Memory capsule status");
+  capsuleArea.append(backupButton,capsuleLabel,restoreButton,capsuleStatus);
+  let capsuleEpoch=0,capsuleBusy=false,stagedCapsule=null;
+  function updateCapsuleControls(){
+    backupButton.disabled=capsuleBusy;capsuleFile.disabled=capsuleBusy;restoreButton.disabled=capsuleBusy||!stagedCapsule;
+  }
+  backupButton.addEventListener("click",async()=>{
+    if(capsuleBusy)return;
+    const epoch=++capsuleEpoch;capsuleBusy=true;stagedCapsule=null;updateCapsuleControls();
+    try{
+      const capsule=await memory.exportCapsule();
+      if(epoch!==capsuleEpoch||!opened)return;
+      requestCouncilDownload(documentRoot,{filename:"neural-memory-"+capsule.journalSha256.slice(0,12)+".json",
+        text:JSON.stringify(capsule,null,2)+"\n"});
+      capsuleStatus.textContent="Backup download requested. All original evidence digests are preserved.";
+    }catch(error){if(epoch===capsuleEpoch)capsuleStatus.textContent=error.message;}
+    finally{capsuleBusy=false;updateCapsuleControls();}
+  });
+  capsuleFile.addEventListener("change",async()=>{
+    if(capsuleBusy)return;
+    const file=capsuleFile.files?.[0];if(!file)return;
+    const epoch=++capsuleEpoch;capsuleBusy=true;stagedCapsule=null;updateCapsuleControls();
+    capsuleStatus.textContent="Validating capsule; no memory has changed.";
+    try{
+      if(file.size>COUNCIL_CAPSULE_MAX_BYTES)throw Error("Neural Memory capsule is too large.");
+      const capsule=JSON.parse(await file.text()),review=await memory.previewCapsule(capsule);
+      if(epoch!==capsuleEpoch||!opened)return;
+      stagedCapsule={capsule,review};
+      capsuleStatus.textContent="Preview: "+review.added+" new · "+review.duplicates+" duplicates · "+review.current+" existing. "+
+        review.fixture+" fixture / "+review.liveClaims+" host-reported live claims. Restore explicitly.";
+    }catch(error){if(epoch===capsuleEpoch)capsuleStatus.textContent=error.message;}
+    finally{capsuleBusy=false;capsuleFile.value="";updateCapsuleControls();}
+  });
+  restoreButton.addEventListener("click",async()=>{
+    if(capsuleBusy||!stagedCapsule)return;
+    const epoch=++capsuleEpoch,staged=stagedCapsule;stagedCapsule=null;capsuleBusy=true;updateCapsuleControls();
+    try{
+      const result=await memory.restoreCapsule(staged.capsule,staged.review);
+      if(epoch!==capsuleEpoch||!opened)return;
+      capsuleStatus.textContent="Restored "+result.added+" new reports · "+result.duplicates+" duplicates skipped · "+result.total+" remembered.";
+      await recallEvidence();
+    }catch(error){if(epoch===capsuleEpoch)capsuleStatus.textContent=error.message;}
+    finally{capsuleBusy=false;updateCapsuleControls();}
+  });
+  memoryRegion.append(memoryQuery,memoryMode,recallButton,memoryStatus,capsuleArea,memoryResults);
   if(typeof panel.insertBefore==="function")panel.insertBefore(memoryRegion,currentEl);
   else panel.appendChild(memoryRegion);
   let recallEpoch=0;
@@ -329,6 +383,23 @@ export function createNeuralMeshConsole({
         for(const row of record.rows)card.appendChild(createText(documentRoot,"p","",row.provider+" · "+row.verdict+
           (row.candidate?" · "+row.candidate:"")));
         card.appendChild(createText(documentRoot,"p","","Advisory evidence only. Actual charges unknown."));
+        const download=createText(documentRoot,"button","","Download remembered report");download.type="button";
+        const exportStatus=createText(documentRoot,"p","","A downloaded copy is outside sharing controls; nothing is uploaded.");
+        exportStatus.setAttribute("aria-live","polite");
+        download.addEventListener("click",async()=>{
+          if(download.disabled)return;
+          const exportEpoch=recallEpoch;download.disabled=true;
+          try{
+            const original=await memory.getEvidence(record.memoryId);
+            if(!original)throw Error("Remembered evidence is unavailable.");
+            const prepared=await prepareCouncilDownload(original,{expectedDigest:record.evidenceDigest});
+            if(exportEpoch!==recallEpoch||!opened)return;
+            requestCouncilDownload(documentRoot,prepared);
+            exportStatus.textContent="Download requested. The original report digest is unchanged.";
+          }catch(error){if(exportEpoch===recallEpoch)exportStatus.textContent=error.message;}
+          finally{download.disabled=false;}
+        });
+        card.append(download,exportStatus);
         memoryResults.appendChild(card);
       }
     }catch(error){
@@ -352,7 +423,10 @@ export function createNeuralMeshConsole({
     panel.classList?.toggle?.("visible", opened);
     panel.setAttribute?.("aria-hidden", String(!opened));
     if(opened)void recallEvidence();
-    else recallEpoch++;
+    else {
+      recallEpoch++;capsuleEpoch++;stagedCapsule=null;capsuleFile.value="";
+      capsuleStatus.textContent="No capsule selected.";updateCapsuleControls();
+    }
   }
 
   function pushTrace(entry) {

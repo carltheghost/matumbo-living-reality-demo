@@ -6,6 +6,7 @@ SQLite persists original report bytes; independent validation is repeated on rec
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from datetime import datetime
 import hashlib
@@ -22,6 +23,10 @@ SCHEMA = "vivo.neural-memory/1"
 MAX_REPORTS = 128
 MAX_BYTES = 2 * 1024 * 1024
 MAX_REQUEST = 64 * 1024
+CAPSULE_SCHEMA = "matumbo.neural-memory-capsule/1"
+CAPSULE_MAX_REPORTS = 64
+CAPSULE_MAX_JOURNAL = 512 * 1024
+CAPSULE_MAX_REQUEST = 2 * CAPSULE_MAX_JOURNAL + 8192
 MAX_SAFE = 2**53 - 1
 PROVIDERS = {"openai", "anthropic", "google", "deepseek", "kimi", "nvidia", "xai"}
 JOBS = {"A": (3, 5), "B": (4, 7), "C": (5, 9), "D": (2, 4)}
@@ -193,6 +198,33 @@ def validate_envelope(envelope):
             "localOptimum": best, "rows": projected}
 
 
+def validate_capsule(capsule):
+    """Read the exact local-journal capsule format, never grants or credentials."""
+    need(exact(capsule, {"schema", "journalJson", "journalSha256"}), "CAPSULE_INVALID")
+    need(capsule["schema"] == CAPSULE_SCHEMA, "CAPSULE_INVALID")
+    raw, claimed = capsule["journalJson"], capsule["journalSha256"]
+    need(isinstance(raw, str) and raw.isascii() and len(raw) <= CAPSULE_MAX_JOURNAL
+         and matches(DIGEST, claimed), "CAPSULE_INVALID")
+    need(hmac.compare_digest(hashlib.sha256(raw.encode("utf-8")).hexdigest(), claimed),
+         "CAPSULE_DIGEST_MISMATCH")
+    try:
+        envelopes = strict_json(raw)
+        need(isinstance(envelopes, list) and len(envelopes) <= CAPSULE_MAX_REPORTS
+             and canonical(envelopes) == raw)
+        seen, entries = set(), []
+        for envelope in envelopes:
+            record = validate_envelope(envelope)
+            need(record["runId"] not in seen)
+            seen.add(record["runId"])
+            encoded = canonical(envelope)
+            size = len(encoded.encode("utf-8"))
+            need(size <= MAX_REQUEST)
+            entries.append((record, encoded, size))
+        return entries
+    except (MemoryError, ValueError, TypeError, UnicodeError, RecursionError):
+        raise MemoryError("CAPSULE_INVALID") from None
+
+
 class EvidenceVault:
     """One owner namespace per existing private remote data directory."""
     def __init__(self, path):
@@ -256,6 +288,67 @@ class EvidenceVault:
             row = self.db.execute("SELECT * FROM evidence WHERE seq=?", (cursor.lastrowid,)).fetchone()
             saved, _ = self.decode(row)
             return {"status": "recorded", "record": saved}
+
+    def capsule_plan(self, incoming):
+        """Must run inside the caller's transaction. Include exact current
+        evidence and grants in the revision; never restore grants from a file."""
+        rows = self.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall()
+        grants = self.db.execute(
+            "SELECT memory_id,invitation_id FROM grants ORDER BY memory_id,invitation_id").fetchall()
+        known, revision_rows = {}, []
+        total_bytes = 0
+        for row in rows:
+            record, _ = self.decode(row)
+            known[record["runId"]] = record["memoryId"]
+            total_bytes += row[4]
+            revision_rows.append([row[0], row[1], hashlib.sha256(row[3].encode("utf-8")).hexdigest(),
+                                  row[4], row[5]])
+        revision = hashlib.sha256(canonical({"rows": revision_rows, "grants": grants}).encode("utf-8")).hexdigest()
+        added, duplicates = [], 0
+        for record, raw, size in incoming:
+            prior = known.get(record["runId"])
+            if prior is not None:
+                need(prior == record["memoryId"], "RUN_CONFLICT", 409)
+                duplicates += 1
+            else:
+                added.append((record, raw, size))
+        need(len(rows) + len(added) <= MAX_REPORTS
+             and total_bytes + sum(item[2] for item in added) <= MAX_BYTES, "MEMORY_CAPACITY", 409)
+        return revision, len(rows), added, duplicates
+
+    def capsule_dispatch(self, principal, body):
+        need(principal.role == "owner", "FORBIDDEN", 403)
+        need(exact(body, {"op", "args"}) and isinstance(body["args"], dict), "REQUEST_INVALID")
+        op, args = body["op"], body["args"]
+        need(op in ("preview", "restore"), "REQUEST_INVALID")
+        need(exact(args, {"capsule"} if op == "preview" else {"capsule", "review"}), "REQUEST_INVALID")
+        capsule = args["capsule"]
+        incoming = validate_capsule(capsule)
+        if op == "restore":
+            review = args["review"]
+            need(exact(review, {"capsuleDigest", "baseRevision"}) and
+                 matches(DIGEST, review["baseRevision"]) and
+                 review["capsuleDigest"] == capsule["journalSha256"], "CAPSULE_REVIEW_REQUIRED", 409)
+        with self.transaction():
+            revision, current, added, duplicates = self.capsule_plan(incoming)
+            if op == "preview":
+                return {"schema": "vivo.memory-capsule-review/1",
+                        "capsuleDigest": capsule["journalSha256"], "baseRevision": revision,
+                        "current": current, "incoming": len(incoming), "added": len(added),
+                        "duplicates": duplicates, "resulting": current + len(added),
+                        "fixture": sum(record["mode"] == "fixture" for record, _, _ in incoming),
+                        "liveClaims": sum(record["mode"] == "live" for record, _, _ in incoming),
+                        "newReportsPrivate": True}
+            need(hmac.compare_digest(review["baseRevision"], revision), "CAPSULE_REVIEW_STALE", 409)
+            now = int(time.time())
+            # One SQLite transaction; no per-record archive() commits.
+            # Existing evidence rows and grants are never modified.
+            self.db.executemany(
+                "INSERT INTO evidence(memory_id,run_id,envelope,bytes,archived_at) VALUES(?,?,?,?,?)",
+                [(record["memoryId"], record["runId"], raw, size, now) for record, raw, size in added])
+            return {"schema": "vivo.memory-capsule-restore/1", "capsuleDigest": capsule["journalSha256"],
+                    "status": "restored" if added else "unchanged", "added": len(added),
+                    "duplicates": duplicates, "total": current + len(added), "newReportsPrivate": True}
 
     def visible_rows(self, principal):
         if principal.role == "owner":
@@ -487,4 +580,43 @@ def attach_memory_routes(app, *, vault, origin, authenticate, invitations):
         except sqlite3.Error:
             return reply({"error": "MEMORY_STORAGE_UNAVAILABLE"}, 503)
 
+    async def capsule_dispatch(request):
+        # A separate bounded owner-only route keeps the ordinary 64 KiB API
+        # limit unchanged. Recheck admission after the asynchronous upload.
+        if request.headers.get("Origin") != origin:
+            return reply({"error": "ORIGIN_NOT_ALLOWED"}, 403)
+        header = request.headers.get("Authorization", "")
+        if not header.startswith("Bearer ") or not 20 <= len(header[7:]) <= 256:
+            return reply({"error": "AUTH_REQUIRED"}, 401)
+        try:
+            principal = authenticate(header[7:])
+        except Exception:
+            return reply({"error": "AUTH_REQUIRED"}, 401)
+        if principal.role != "owner":
+            return reply({"error": "FORBIDDEN"}, 403)
+        try:
+            need(request.content_type == "application/json", "REQUEST_INVALID")
+            need(request.headers.get("Content-Encoding", "identity").lower() == "identity", "REQUEST_INVALID")
+            need(request.content_length is None or request.content_length <= CAPSULE_MAX_REQUEST,
+                 "REQUEST_TOO_LARGE", 413)
+            raw = bytearray()
+            async with asyncio.timeout(15):
+                async for chunk in request.content.iter_chunked(16384):
+                    need(len(raw) + len(chunk) <= CAPSULE_MAX_REQUEST, "REQUEST_TOO_LARGE", 413)
+                    raw.extend(chunk)
+            try:
+                principal = authenticate(header[7:])
+            except Exception:
+                return reply({"error": "AUTH_REQUIRED"}, 401)
+            return reply({"result": vault.capsule_dispatch(principal, strict_json(raw.decode("utf-8")))})
+        except MemoryError as error:
+            return reply({"error": error.code}, error.status)
+        except TimeoutError:
+            return reply({"error": "CAPSULE_UPLOAD_TIMEOUT"}, 408)
+        except (UnicodeError, RecursionError, TypeError, ValueError):
+            return reply({"error": "REQUEST_INVALID"}, 400)
+        except sqlite3.Error:
+            return reply({"error": "MEMORY_STORAGE_UNAVAILABLE"}, 503)
+
     app.router.add_post("/api/neural-memory", dispatch)
+    app.router.add_post("/api/neural-memory/capsule", capsule_dispatch)

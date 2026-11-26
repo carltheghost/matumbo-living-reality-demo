@@ -1,14 +1,14 @@
 // Fixture-only full-app browser regression. No provider credentials or calls.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { livingReadingProjection } from "../src/domains/living-surface-layout-engine.js";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { JEV_HISTORY_KEY, parseJevAdviceReceipt } from "../src/domains/jev-advice-receipt.js";
 import { COUNCIL_STORAGE_KEY, COUNCIL_MISSION_TASK, exportCouncilReport } from "../src/domains/provider-council-evidence.js";
 import { runProviderCouncil } from "../scripts/vivo/provider-council.mjs";
-import { COUNCIL_MEMORY_KEY } from "../src/domains/council-memory.js";
+import { COUNCIL_MEMORY_KEY, COUNCIL_CAPSULE_SCHEMA } from "../src/domains/council-memory.js";
 const require = createRequire(process.env.MATUMBO_NODE_DEPENDENCIES ?? new URL("../package.json", import.meta.url));
 const { chromium } = require("playwright");
 const base = new URL(process.env.MATUMBO_PREVIEW_URL ?? "http://127.0.0.1:8123/index.html?feature=web-ai");
@@ -420,7 +420,18 @@ async function runDevice(browser, device) {
       await activate(region().getByRole("button",{name:"Remember in Neural Mesh",exact:true}));
       await page.waitForFunction(message=>document.querySelector('[aria-label="Council memory status"]')?.textContent===message,message);
     }
+    async function verifyDownloaded(button,expected,label){
+      stage=label;
+      const pending=page.waitForEvent("download",{timeout:15000});
+      const [download]=await Promise.all([pending,activate(button)]);
+      const path=await download.path();
+      assert.ok(path);
+      assert.equal(download.suggestedFilename(),"council-fixture-"+expected.reportSha256.slice(0,12)+".json");
+      assert.deepEqual(JSON.parse(await readFile(path,"utf8")),expected);
+      await recordCheckpoint({label,digest:expected.reportSha256});
+    }
     await importReport(mission);
+    await verifyDownloaded(region().getByRole("button",{name:"Download Council report",exact:true}),mission,"Compute exports exact original Council evidence");
     assert.equal((await readMemory()).journal,null,"import alone must not write Neural Memory");
     await remember("Evidence remembered in Neural Mesh.");
     const original=await readMemory();
@@ -450,6 +461,7 @@ async function runDevice(browser, device) {
       assert.match(await results.textContent(),new RegExp(mission.reportSha256));
       assert.match(await results.textContent(),/kimi · over-budget · A,C/);
       assert.match(await results.textContent(),/Fixture · not live/);
+      await verifyDownloaded(results.getByRole("button",{name:"Download remembered report",exact:true}),mission,"Neural Mesh exports exact remembered evidence");
       assert.deepEqual(await readMemory(),both);
       await recordCheckpoint({label:"native Neural Mesh recalls exact mission digest and dissent",digest:mission.reportSha256});
       // Clear search before leaving, so the next opening starts at all evidence.
@@ -462,11 +474,53 @@ async function runDevice(browser, device) {
     assert.deepEqual(await readMemory(),both);balances(restored,fresh);
     await inspectMemory();
     await page.screenshot({path:resolve(out,device.name+"-neural-memory.png")});
+    stage="download full Neural Memory capsule";
+    await activate(recallRegion().getByText("Back up or restore Neural Memory",{exact:true}));
+    const capsuleDownload=page.waitForEvent("download",{timeout:15000});
+    const [capsuleFile]=await Promise.all([capsuleDownload,activate(recallRegion().getByRole("button",{name:"Download memory capsule",exact:true}))]);
+    const capsulePath=await capsuleFile.path();assert.ok(capsulePath);
+    const capsuleBytes=await readFile(capsulePath,"utf8"),capsule=JSON.parse(capsuleBytes);
+    assert.equal(capsule.schema,COUNCIL_CAPSULE_SCHEMA);
+    assert.equal(capsule.journalSha256,hash(capsule.journalJson));
+    assert.equal(capsuleFile.suggestedFilename(),"neural-memory-"+capsule.journalSha256.slice(0,12)+".json");
+    assert.deepEqual(JSON.parse(capsule.journalJson),[mission,arithmetic]);
+    await recordCheckpoint({label:"full journal backup preserves both original reports",digest:capsule.journalSha256});
     const firstPage=page;
     page=await newPage(firstPage.context());await page.goto(base.href,{waitUntil:"domcontentloaded"});await compute();
     await select("neural-mesh");await waitRecall("0 matching / 0 remembered reports · this tab");
     assert.equal((await readMemory()).journal,null);
     await recordCheckpoint({label:"memory survives reload and remains isolated from independently opened tab"});
+    stage="preview and restore capsule in independent tab";
+    await activate(recallRegion().getByText("Back up or restore Neural Memory",{exact:true}));
+    const capsuleInput=recallRegion().getByLabel("Import a Neural Memory capsule",{exact:true});
+    const restore=recallRegion().getByRole("button",{name:"Restore reviewed capsule",exact:true});
+    const waitCapsule=message=>page.waitForFunction(message=>document.querySelector('[aria-label="Memory capsule status"]')?.textContent===message,message);
+    async function uploadCapsule(value){
+      await capsuleInput.scrollIntoViewIfNeeded();
+      await (device.mobile?capsuleInput.tap({trial:true}):capsuleInput.click({trial:true}));
+      await capsuleInput.setInputFiles({name:"memory-capsule.json",mimeType:"application/json",buffer:Buffer.from(value)});
+    }
+    await uploadCapsule(JSON.stringify({...capsule,journalJson:capsule.journalJson+" "}));
+    await waitCapsule("Neural Memory capsule digest mismatch.");
+    assert.equal(await restore.isDisabled(),true);
+    assert.equal((await readMemory()).journal,null);
+    await uploadCapsule(capsuleBytes);
+    await waitCapsule("Preview: 2 new · 0 duplicates · 0 existing. 2 fixture / 0 host-reported live claims. Restore explicitly.");
+    assert.equal((await readMemory()).journal,null,"preview must not restore automatically");
+    await activate(restore);
+    await waitCapsule("Restored 2 new reports · 0 duplicates skipped · 2 remembered.");
+    await waitRecall("2 matching / 2 remembered reports · this tab");
+    assert.deepEqual(JSON.parse((await readMemory()).journal),[mission,arithmetic]);
+    assert.equal((await readMemory()).local,null);
+    await uploadCapsule(capsuleBytes);
+    await waitCapsule("Preview: 0 new · 2 duplicates · 2 existing. 2 fixture / 0 host-reported live claims. Restore explicitly.");
+    await activate(restore);
+    await waitCapsule("Restored 0 new reports · 2 duplicates skipped · 2 remembered.");
+    assert.deepEqual(JSON.parse((await readMemory()).journal),[mission,arithmetic]);
+    await select("web-ai");await compute();
+    const afterCapsule=await read(page);balances(afterCapsule,fresh);
+    assert.equal(afterCapsule.journal,fresh.journal);
+    await recordCheckpoint({label:"tampered capsule rejected, reviewed capsule restored once without changing accounting",digest:capsule.journalSha256});
   }
   async function verifyOrientation(fresh){
     const funded=await fund();
