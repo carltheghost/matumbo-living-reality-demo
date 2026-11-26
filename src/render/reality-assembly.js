@@ -160,7 +160,36 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const cssSurfaceHost=document.createElement('div');cssSurfaceHost.className='assembly-css3d-host';cssSurfaceHost.setAttribute('aria-label','Interactive surfaces attached to selected object');root.prepend(cssSurfaceHost);
   document.body.append(root);
   let css3dRenderer=null,CSS3DObject=null,mountedSurface=null,css3dFailed=false,destroyed=false;
-  const resizeCss3d=()=>{if(!css3dRenderer)return;css3dRenderer.setSize(innerWidth,innerHeight);if(active&&mountedSurface)focus();};
+  // A resize changes only the projection. Retain the user's currently
+  // focused control on the same mounted skin, not a screen-coordinate scroll
+  // offset that is meaningless once the object has reflowed.
+  const resizeCss3d=()=>{
+    if(!css3dRenderer)return;
+    if(active&&mountedSurface){
+      const control=document.activeElement;
+      mountedSurface.resizeAnchor=mountedSurface.livePanel&&mountedSurface.front.contains(control)
+        &&control?.matches?.('input,textarea,select,button,summary,a[href],[contenteditable="true"]')
+        ?{control,composition:null,until:performance.now()+1800}:null;
+    }
+    css3dRenderer.setSize(innerWidth,innerHeight);
+    if(active&&mountedSurface)focus();
+  };
+  function keepFocusedReadingControl(record){
+    const anchor=record?.resizeAnchor;
+    if(!anchor)return;
+    if(document.activeElement!==anchor.control||!record.front.contains(anchor.control)){
+      record.resizeAnchor=null;return;
+    }
+    const settled=performance.now()>=anchor.until;
+    if(anchor.composition!==record.composition||settled){
+      // Do not focus, remount, change selection, or replay an input event.
+      // Only scroll the existing focused control into the reflowed surface.
+      anchor.control.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
+      anchor.composition=record.composition;
+    }
+    if(settled)record.resizeAnchor=null;
+  }
+  function cancelReadingAnchor(){if(mountedSurface)mountedSurface.resizeAnchor=null;}
   import('three/addons/renderers/CSS3DRenderer.js').then(module=>{
     if(destroyed)return;
     CSS3DObject=module.CSS3DObject;
@@ -197,7 +226,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   let activeInputMode=globalThis.matchMedia?.('(pointer: coarse)').matches?'touch':'mouse';
   const updateInputGuidance=(pointerType=activeInputMode, label=null)=>{const guidance=assemblyInputGuidance(pointerType);activeInputMode=guidance.mode;const text=label?`${label} · ${guidance.text}`:guidance.text;root.dataset.inputMode=guidance.mode;inputHint.textContent=text;inputHint.setAttribute('aria-label',text);};
   updateInputGuidance(activeInputMode);
-  const inputPointer=event=>{if(!root.hidden)updateInputGuidance(event.pointerType);};
+  const inputPointer=event=>{if(!root.hidden){cancelReadingAnchor();updateInputGuidance(event.pointerType);}};
   globalThis.addEventListener?.('pointerdown',inputPointer,{passive:true,capture:true});
   find('.assembly-inspector .assembly-eyebrow').textContent='Oculus Realitatis · instrumentum apertum';
   find('.assembly-tab-controls h3').textContent='Mutabilitas';
@@ -643,6 +672,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   inspectorToggle.onclick=()=>foldInspector(!inspectorFolded);
   const locate=event=>{const rect=renderer.domElement.getBoundingClientRect();point.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(point,camera);return ray.intersectObjects(targets,false).find(hit=>{const id=spatial.resolve(hit.object);return id&&spatial.nodes.get(id)?.root.visible&&hit.object.visible;})??null;};
   const resizeOnScroll=guard(event=>{
+    if(active)cancelReadingAnchor();
     if(!active||event.ctrlKey||event.target?.closest?.('.assembly-inspector'))return;
     const overFeatureSurface=event.target?.closest?.('.reality-lens-feature-panel[data-lens-surface-attached=true],.assembly-wrap-face');
     if(overFeatureSurface&&!event.shiftKey)return;
@@ -691,6 +721,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(event.type==='pointerup'&&previous.objectId&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<7){if(interaction!=='move')activateObjectTab(previous.objectId);else select(previous.objectId,{approach:false});}
   });
   const keys=guard(event=>{
+    if(active)cancelReadingAnchor();
     if(active&&event.key==='Escape'&&root.classList.contains('assembly-directory-open')){setDirectory(false,{restoreFocus:true});event.preventDefault();return;}
     if(!active||/input|textarea|select/i.test(event.target?.tagName))return;
     if(event.target?.closest?.('button,a,summary,[contenteditable="true"]')&&event.key==='Enter')return;
@@ -745,7 +776,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       const cameraDistance=camera.position.distanceTo(controls.target);
       spatial.update(dt,time,{reducedMotion,cameraDistance,cameraPosition:camera.position});spatial.layer.updateMatrixWorld(true);camera.updateMatrixWorld();
       cssSurfaceHost.hidden=Boolean(renderer.xr?.isPresenting);
-      if(mountedSurface&&!cssSurfaceHost.hidden){materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);css3dRenderer?.render(scene,camera);}
+      if(mountedSurface&&!cssSurfaceHost.hidden){materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);css3dRenderer?.render(scene,camera);keepFocusedReadingControl(mountedSurface);}
       onPanelFrame(owner.getSnapshot().selectedId);
       const overlaps=(a,b)=>a.left<b.right+4&&a.right>b.left-4&&a.top<b.bottom+4&&a.bottom>b.top-4;
       const occupied=[...all('.assembly-header,.assembly-directory,.assembly-inspector,.assembly-toolbar,.assembly-branches,.assembly-selection-hint,.assembly-world-label,.assembly-status'),...document.querySelectorAll('body.assembly-mode #immersive-toolbar')].filter(element=>!element.hidden&&getComputedStyle(element).display!=='none'&&getComputedStyle(element).visibility!=='hidden').map(element=>element.getBoundingClientRect());
