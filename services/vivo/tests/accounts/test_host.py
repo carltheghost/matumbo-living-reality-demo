@@ -11,6 +11,7 @@ from urllib.parse import urlsplit, urlencode
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'server/accounts'))
 from host import AccountHost, API, PHONE
 from oauth import AccountManager,PrivateStore
+from github_agent import GitHubReadBroker
 from test_oauth import FakeHTTP, KEY, ISSUER
 import jwt,time
 class HostTests(unittest.TestCase):
@@ -73,4 +74,32 @@ class HostTests(unittest.TestCase):
         self.login_local();self.assertEqual(self.req('GET','/auth/callback?state=a&state=b&code=x')[0],400)
     def test_unsupported_provider_endpoint_is_not_faked(self):
         self.login_local();self.assertEqual(self.req('POST',API+'/claude-login',{})[0],404)
+    def test_github_endpoints_are_local_session_and_origin_guarded(self):
+        self.assertEqual(self.req('GET',API+'/github')[0],401)
+        self.login_local()
+        status,_,body=self.req('GET',API+'/github')
+        self.assertEqual(status,200);self.assertFalse(json.loads(body)['configured'])
+        payload={'repository':'owner/repo','pullNumber':7}
+        self.assertEqual(self.req('POST',API+'/github/inspect',payload,{'Origin':'https://evil.invalid'})[0],403)
+        self.assertEqual(self.req('POST',API+'/github/inspect',payload,{'X-Vivo-Action':''})[0],403)
+        status,_,body=self.req('POST',API+'/github/inspect',payload)
+        self.assertEqual(status,400);self.assertEqual(json.loads(body)['error'],'GITHUB_REPOSITORY_NOT_ALLOWED')
+    def test_github_review_and_file_via_loopback_without_provider_credentials(self):
+        import base64
+        class Fixture:
+            def get(self,path):
+                if '/pulls/' in path:return {'number':7,'head':{'sha':'a'*40,'repo':{'full_name':'owner/repo'}},'base':{'repo':{'full_name':'owner/repo'}},'title':'Fixture','state':'open'}
+                if '/actions/runs?' in path:return {'total_count':1,'workflow_runs':[{'id':11,'name':'Checks','head_sha':'a'*40,'status':'completed','conclusion':'success'}]}
+                if '/contents/' in path:return {'type':'file','path':'src/main.py','size':8,'encoding':'base64','content':base64.b64encode(b'print(1)').decode(),'sha':'b'*40}
+                raise AssertionError(path)
+        self.server.github=GitHubReadBroker(['owner/repo'],http=Fixture())
+        self.login_local();status,_,body=self.req('GET',API+'/github')
+        self.assertEqual(status,200);self.assertTrue(json.loads(body)['configured']);self.assertFalse(json.loads(body)['liveAccessVerified'])
+        payload={'repository':'owner/repo','pullNumber':7}
+        status,_,body=self.req('POST',API+'/github/inspect',payload)
+        self.assertEqual(status,200);r=json.loads(body);self.assertEqual(r['headSha'],'a'*40);self.assertEqual(r['workflows'][0]['conclusion'],'success')
+        status,_,body=self.req('POST',API+'/github/file',{**payload,'expectedHeadSha':'a'*40,'path':'src/main.py'})
+        self.assertEqual(status,200);self.assertEqual(json.loads(body)['content'],'print(1)')
+        self.assertEqual(self.req('POST',API+'/github/file',{**payload,'expectedHeadSha':'c'*40,'path':'src/main.py'})[0],400)
+        self.assertEqual(self.req('POST',API+'/github/inspect',{'repository':'other/repo','pullNumber':7})[0],400)
 if __name__=='__main__':unittest.main()

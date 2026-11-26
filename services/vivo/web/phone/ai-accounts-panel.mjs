@@ -17,6 +17,7 @@ export const AI_PROVIDERS=Object.freeze([
   {id:'grok-api',group:'Popular',name:'Grok / xAI',method:'API key',description:'An xAI API connection is separate from a persistent Grok Bot.',action:null,help:'https://docs.x.ai/docs/overview'},
   {id:'hermes',group:'Local & self-hosted',name:'Hermes agent',method:'Agent runtime',description:'Connect your running Hermes session and its configured provider.',action:null,help:'https://hermes-agent.nousresearch.com/docs/developer-guide/programmatic-integration'},
   {id:'local-model',group:'Local & self-hosted',name:'Local model',method:'Local runtime',description:'Use an authorized desktop or device runtime. No NPU support is assumed.',action:null,help:null},
+  {id:'github-agent',group:'Advanced',name:'GitHub repository agent',method:'Local read-only connector',description:'Inspect a reviewed pull request, its commit-specific CI and one optional source file. Requires a configured local account host.',action:'github',help:'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens'},
   {id:'council',group:'Advanced',name:'Agent council',method:'Multiple connections',description:'Bring connected agents together. Requires working provider adapters.',action:null,help:null},
   {id:'persistent-agents',group:'Advanced',name:'Muse & matumbo dot',method:'Persistent agents',description:'Existing agents need their own supported session connector, not a renamed model.',action:null,help:null},
 ].map(p=>Object.freeze(p)));
@@ -81,8 +82,9 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   picker.append(search,groups,empty);
   const detail=node('div');detail.className='provider-detail';detail.id='vivoProviderDetail';detail.hidden=true;detail.tabIndex=-1;
   const label=node('input');label.placeholder='Name this account, e.g. Personal or Work';label.maxLength=60;label.id='vivoAccountLabel';label.setAttribute('aria-label','Account label');
-  const loginArea=node('div');loginArea.id='vivoLoginArea';let busy=false,selected=null,selectionEpoch=0,disposed=false;
-  const clearSelection=()=>{selected=null;selectionEpoch++;loginArea.replaceChildren();detail.hidden=true;renderProviders();};
+  const loginArea=node('div');loginArea.id='vivoLoginArea';let busy=false,selected=null,selectionEpoch=0,disposed=false,githubReview=null,resetGitHubView=null;
+  function discardGitHubReview(){if(githubReview)globalThis.VivaPhoneAgentAdmin?.githubAccess?.discard(githubReview.token);githubReview=null;}
+  const clearSelection=()=>{discardGitHubReview();resetGitHubView=null;selected=null;selectionEpoch++;loginArea.replaceChildren();detail.hidden=true;renderProviders();};
   const renderProviders=()=>{
     const providers=findAIProviders(search.value);groups.replaceChildren();empty.hidden=providers.length!==0;
     for(const groupName of ['Popular','Local & self-hosted','Advanced']) {
@@ -99,11 +101,13 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     }
   };
   const selectProvider=p=>{
-    selected=p;selectionEpoch++;loginArea.replaceChildren();detail.replaceChildren();detail.hidden=false;
+    discardGitHubReview();resetGitHubView=null;selected=p;selectionEpoch++;loginArea.replaceChildren();detail.replaceChildren();detail.hidden=false;
     detail.append(node('h4',p.name),node('p',p.description));
     if(p.action==='chatgpt'){
       detail.append(node('p','Continue through your Vivo account host. Adding an account does not replace an existing one.'),label,
         button('Sign in with ChatGPT',run(()=>offerLogin(null))));
+    }else if(p.action==='github'){
+      renderGitHubProvider();
     }else{
       const note=node('p',p.id==='claude-native'
         ? 'Claude subscription sign-in stays in the native Claude Code application. Vivo does not collect or reuse Claude.ai login tokens. A native session connector is not installed in this build.'
@@ -112,7 +116,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
       if(p.help){const help=node('a','Read provider setup instructions');help.href=p.help;help.target='_blank';help.rel='noopener noreferrer';detail.append(help);}
     }
     detail.append(button('Back to providers',()=>{clearSelection();search.focus();}));
-    state.textContent=p.action==='chatgpt'?'Ready to start provider sign-in. Your account is not connected yet.':'Connector required. Existing accounts and tasks are unchanged.';
+    state.textContent=p.action==='chatgpt'?'Ready to start provider sign-in. Your account is not connected yet.':p.action==='github'?'GitHub is not verified yet. Check the local connector and review a pull request.':'Connector required. Existing accounts and tasks are unchanged.';
     renderProviders();detail.focus({preventScroll:true});detail.scrollIntoView({block:'nearest'});
   };
   search.addEventListener('input',renderProviders);
@@ -123,6 +127,76 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     if(!response.ok)throw Error(data.error||'Account operation failed');return data;
   };
   const run=fn=>async()=>{if(busy||disposed)return;busy=true;state.textContent='Working…';try{await fn();}catch(e){if(!disposed)state.textContent=message(e);}finally{busy=false;}};
+  function renderGitHubProvider(){
+    const repository=node('input');repository.setAttribute('aria-label','GitHub repository');repository.placeholder='owner/repository';repository.maxLength=140;
+    const pull=node('input');pull.type='number';pull.min='1';pull.max='2147483647';pull.setAttribute('aria-label','GitHub pull request number');pull.placeholder='Pull request number';
+    const file=node('input');file.maxLength=512;file.setAttribute('aria-label','Optional GitHub file path');file.placeholder='Optional exact path, e.g. src/main.py';
+    const output=node('pre','No GitHub access has been verified.');output.id='vivoGitHubReview';output.setAttribute('aria-live','polite');output.style.whiteSpace='pre-wrap';output.style.overflowWrap='anywhere';
+    const agent=node('select');agent.setAttribute('aria-label','GitHub review agent session');
+    const name='github-repository-reader';
+    const access=()=>{const admin=globalThis.VivaPhoneAgentAdmin;if(!admin?.githubAccess)throw Error('Enter the native Vivo world and open the configured local account host first.');return admin;};
+    const refreshAgents=()=>{
+      const admin=globalThis.VivaPhoneAgentAdmin,old=agent.value;agent.replaceChildren();
+      const empty=node('option','Choose an existing active agent');empty.value='';agent.append(empty);
+      for(const a of admin?.agents?.()||[]){if(a.status!=='active')continue;const option=node('option',a.label+' · generation '+a.generation);option.value=a.sessionId;agent.append(option);}
+      if([...agent.options].some(o=>o.value===old))agent.value=old;
+    };
+    const show=s=>s.repository+' · PR #'+s.pullNumber+' · '+(s.title||'')+'\nReviewed head: '+s.headSha+'\n'+s.state+(s.draft?' · draft':'')+(s.merged?' · merged':'')+'\n'
+      +s.workflows.length+'/'+s.workflowTotal+' workflow runs'+(s.workflowPageComplete?'':' (first page only)')+'\n'
+      +s.workflows.map(w=>(w.name||'Workflow')+' · '+w.status+(w.conclusion?' · '+w.conclusion:'')).join('\n');
+    let inputEpoch=0;
+    const reset=()=>{inputEpoch++;discardGitHubReview();grantButton.disabled=true;createButton.disabled=true;output.textContent='Review the repository, PR and optional file before sharing.';};
+    resetGitHubView=()=>{reset();repository.value='';pull.value='';file.value='';agent.value='';output.textContent='World changed. Review the GitHub scope again.';};
+    const current=epoch=>!disposed&&selectionEpoch===epoch&&selected?.id==='github-agent';
+    const configureButton=button('Check GitHub connector',run(async()=>{
+      const epoch=selectionEpoch,result=await api('/github');if(!current(epoch))return;
+      if(result?.schema!=='vivo.github-connector/1')throw Error('GitHub connector unavailable on this host.');
+      output.textContent=result.configured?'Configured repositories: '+result.repositories.join(', ')+'\nConfiguration is not proof of live access. Verify a PR next.':'GitHub connector not configured. Start the local account host with an explicit repository allowlist and a read-only token.';
+      if(result.repositories?.length===1){repository.value=result.repositories[0];inputEpoch++;discardGitHubReview();grantButton.disabled=true;createButton.disabled=true;}
+      state.textContent=result.configured?'Configuration found; live access not yet verified.':'No GitHub credentials configured.';
+    }));
+    const reviewButton=button('Verify GitHub pull request',run(async()=>{
+      reset();const epoch=selectionEpoch,view=inputEpoch,admin=access();
+      const preview=await admin.githubAccess.preview({repository:repository.value.trim(),pullNumber:Number(pull.value),filePath:file.value.trim()||null});
+      if(!current(epoch)||view!==inputEpoch){admin.githubAccess.discard(preview.token);return;}
+      githubReview=preview;output.textContent=show(preview.snapshot)+'\nApproved file: '+(preview.reviewed.filePath||'none')+'\nReview this exact commit before granting an agent read access.';
+      grantButton.disabled=false;createButton.disabled=false;state.textContent='GitHub PR read verified. No agent access granted yet.';refreshAgents();
+    }));
+    function finishGrant(admin,session){
+      if(!githubReview)throw Error('Verify and review the PR first.');
+      const grant=admin.githubAccess.grant(session,githubReview.token);
+      githubReview=null;grantButton.disabled=true;createButton.disabled=true;refreshAgents();agent.value=grant.sessionId;
+      output.textContent='Read-only grant: '+grant.repository+' · PR #'+grant.pullNumber+'\nCommit '+grant.headSha+'\nAgent '+grant.sourceId+'\nFile: '+(grant.filePath||'none')+'\nNo write access or Copilot execution.';
+      state.textContent='GitHub reader grant active for this native session.';refreshMemoryAgents();
+    }
+    const grantButton=button('Grant reviewed GitHub access to selected agent',run(async()=>{const admin=access();if(!agent.value)throw Error('Select an active agent first.');finishGrant(admin,agent.value);}));
+    grantButton.disabled=true;
+    const createButton=button('Create GitHub review agent and grant',run(async()=>{
+      const admin=access();if(!githubReview)throw Error('Verify and review the PR first.');
+      const existing=admin.agents().find(a=>a.sourceId===name&&a.status==='active');
+      if(existing&&existing.capabilities?.length)throw Error('Existing GitHub reader has other native capabilities. Choose it explicitly instead.');
+      const session=admin.register({sourceId:name,label:'GitHub repository agent',capabilities:[]});finishGrant(admin,session);
+    }));
+    createButton.disabled=true;
+    const read=async tool=>{
+      const epoch=selectionEpoch,view=inputEpoch,session=agent.value,admin=access();
+      if(!session)throw Error('Select a granted agent first.');
+      const value=await globalThis.VivaAgentTools.invokeFor(session,tool,{});
+      if(!current(epoch)||view!==inputEpoch||agent.value!==session)return;
+      output.textContent=tool==='github.pull.read'?show(value):value.path+' · '+value.headSha+'\n'+value.size+' bytes\n\n'+value.content;
+      state.textContent='Read-only GitHub evidence received.';
+    };
+    for(const input of [repository,pull,file])input.addEventListener('input',reset);
+    agent.addEventListener('change',()=>{output.textContent='Select a granted session and request a fresh read.';});
+    refreshAgents();
+    detail.append(node('p','Local host only. Configure a repository-restricted read-only GitHub token outside the web page. This is a repository tool, not a GitHub Copilot model or coding-agent sign-in.'),
+      configureButton,repository,pull,file,reviewButton,agent,grantButton,createButton,
+      button('Refresh GitHub agent sessions',()=>refreshAgents()),button('Read reviewed pull request',run(()=>read('github.pull.read'))),
+      button('Read approved GitHub file',run(()=>read('github.file.read'))),
+      button('Revoke selected GitHub agent access',run(async()=>{if(!agent.value)throw Error('Select an agent first.');access().githubAccess.revoke(agent.value);output.textContent='GitHub access revoked for selected session.';state.textContent='Local GitHub agent grant revoked. Host credentials unchanged.';})),
+      output);
+    const help=node('a','GitHub token setup');help.href='https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens';help.target='_blank';help.rel='noopener noreferrer';detail.append(help);
+  }
   const offerLogin=async connectionId=>{
     if(selected?.action!=='chatgpt'&&!connectionId)throw Error('Choose a supported provider sign-in first.');
     const epoch=selectionEpoch;loginArea.replaceChildren();
@@ -323,7 +397,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
       +mission.dependencies.map(d=>'\nPrerequisite · '+d.title+' · '+d.status+' · '+d.receipts.length+' confirmed receipt(s)').join('');
   }
   function invalidateTaskScope(){
-    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;resetRecommendation();resetPlanPreview();resetRecovery();planSummary.textContent='Refresh saved tasks to see mission progress.';experienceDetail.textContent='Refresh saved tasks to inspect collective experience.';
+    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;resetGitHubView?.();journal=null;resetRecommendation();resetPlanPreview();resetRecovery();planSummary.textContent='Refresh saved tasks to see mission progress.';experienceDetail.textContent='Refresh saved tasks to inspect collective experience.';
     taskPicker.replaceChildren();prerequisitePicker.replaceChildren();evidencePicker.replaceChildren();scenarioSources.replaceChildren();resetRecallView();resetScenario();resetExperimentDraft();drawExperiment();taskDetail.textContent='No task selected.';taskStatus.textContent='World changed. Refresh to inspect the current world’s journal.';
   }
   async function refreshTasks(preferred){
@@ -515,7 +589,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   refreshMemoryAgents();
   root.prepend(section);
   if(resumeSignIn)run(render)();
-  return {section,refresh:render,openProviders:()=>{clearSelection();search.value='';renderProviders();search.focus();},dispose:()=>{disposed=true;selectionEpoch++;taskScopeEpoch++;memoryAccess()?.clear();globalThis.VivaPhoneAgentAdmin?.taskAccess?.clear();for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])worldEvents?.removeEventListener?.(event,invalidateTaskScope);section.remove();}};
+  return {section,refresh:render,openProviders:()=>{clearSelection();search.value='';renderProviders();search.focus();},dispose:()=>{disposed=true;selectionEpoch++;taskScopeEpoch++;memoryAccess()?.clear();globalThis.VivaPhoneAgentAdmin?.taskAccess?.clear();discardGitHubReview();globalThis.VivaPhoneAgentAdmin?.githubAccess?.clear();for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])worldEvents?.removeEventListener?.(event,invalidateTaskScope);section.remove();}};
 }
 export function installIntelligenceControls() {
   let mounted,observer;

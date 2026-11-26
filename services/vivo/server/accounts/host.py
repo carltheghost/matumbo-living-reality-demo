@@ -17,6 +17,7 @@ import time
 from urllib.parse import urlsplit, parse_qs, unquote
 import webbrowser
 from oauth import AccountManager, AccountError, PrivateStore
+from github_agent import GitHubReadBroker
 
 PHONE='/services/vivo/web/phone/index.html'
 API='/api/vivo/accounts'
@@ -25,8 +26,8 @@ ALLOWED_SUFFIXES={'.html','.css','.js','.mjs','.json','.png','.jpg','.svg','.web
 
 class AccountHost(ThreadingHTTPServer):
     daemon_threads=True
-    def __init__(self,repo,manager,port=0):
-        self.repo=Path(repo).resolve(strict=True);self.manager=manager
+    def __init__(self,repo,manager,port=0,github=None):
+        self.repo=Path(repo).resolve(strict=True);self.manager=manager;self.github=github if github is not None else GitHubReadBroker()
         self.launch=secrets.token_urlsafe(32);self.cookie=secrets.token_urlsafe(32);self.launch_expires=time.monotonic()+300
         super().__init__(('127.0.0.1',port),Handler)
         self.origin=f'http://127.0.0.1:{self.server_port}'
@@ -69,6 +70,9 @@ class Handler(BaseHTTPRequestHandler):
             except AccountError as e:
                 return self.send(400,('Sign-in was not accepted: '+e.code+'. Return to Vivo and start a fresh attempt.').encode(),'text/plain; charset=utf-8')
             except Exception:return self.fail('SIGN_IN_FAILED')
+        if parts.path==API+'/github':
+            if not self.authorized():return self.fail('LOCAL_SESSION_REQUIRED',401)
+            return self.send(200,self.server.github.status())
         if parts.path==API:
             if not self.authorized():return self.fail('LOCAL_SESSION_REQUIRED',401)
             return self.send(200,self.server.manager.public())
@@ -92,7 +96,9 @@ class Handler(BaseHTTPRequestHandler):
             data=json.loads(self.rfile.read(size))
             if not isinstance(data,dict):raise AccountError('INVALID_REQUEST')
             path=urlsplit(self.path).path;manager=self.server.manager
-            if path==API+'/login':
+            if path==API+'/github/inspect':result=self.server.github.inspect(data)
+            elif path==API+'/github/file':result=self.server.github.read_file(data)
+            elif path==API+'/login':
                 result=manager.begin(self.server.origin+'/auth/callback',data.get('label'),data.get('connectionId'))
             elif path==API+'/default':
                 manager.select_default(data.get('connectionId'));result=manager.public()
@@ -110,12 +116,13 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--repo',type=Path,default=Path(__file__).resolve().parents[4])
     p.add_argument('--state',type=Path,default=Path.home()/'.vivo-account-host');p.add_argument('--port',type=int,default=0)
-    p.add_argument('--no-open',action='store_true');args=p.parse_args()
+    p.add_argument('--no-open',action='store_true');p.add_argument('--github-repository',action='append',default=[],metavar='OWNER/REPO',help='Explicit read-only GitHub repository allowlist; up to eight entries. Requires VIVO_GITHUB_TOKEN.');args=p.parse_args()
     repo=args.repo.resolve(strict=True);state=args.state.absolute()
     if state.resolve().is_relative_to(repo):raise AccountError('CREDENTIALS_MUST_BE_OUTSIDE_WEB_REPOSITORY')
     store=PrivateStore(state)
     try:
-        manager=AccountManager(store);server=AccountHost(repo,manager,args.port)
+        github=GitHubReadBroker(args.github_repository,os.environ.get('VIVO_GITHUB_TOKEN') if args.github_repository else None)
+        manager=AccountManager(store);server=AccountHost(repo,manager,args.port,github=github)
         print('Vivo local accounts host. User sign-in remains on the official provider page.')
         print('Open this one-time local session link in your browser (do not share it):',server.launch_url,flush=True)
         if not args.no_open:webbrowser.open(server.launch_url)

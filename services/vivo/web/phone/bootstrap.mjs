@@ -14,6 +14,7 @@ import { LocalOperationIdFactory } from './local-operation.mjs';
 import { LocalEditQueue } from './local-edit-queue.mjs';
 import { LocalAgentController, validateAgentEditPayload } from './agent-control.mjs';
 import { createTaskContinuity } from './task-continuity.mjs';
+import { createGitHubAgentBridge } from './github-agent.mjs';
 import { mountPhoneEconomyContext } from './economy-entry.mjs';
 import { PhoneMaterialInputRuntime } from './material-input-runtime.mjs';
 import { PHONE_MATERIAL_ENTITY_ID } from './material-contract.mjs';
@@ -1547,24 +1548,28 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.
   }});
   const taskBridge=createTaskContinuity({registry,downstream:memoryBridge.tools,validateEdit:validateAgentEditPayload,
     getEnvelope:()=>window.VivaPhoneEngine?.active?window.VivaPhoneEngine.publishedSnapshot():null});
+  const githubBridge=createGitHubAgentBridge({registry,downstream:taskBridge.tools,getScope:()=>{
+    const host=window.VivaPhoneEngine,e=host?.publishedSnapshot?.();
+    return host?.active&&e?.snapshot?.worldId&&e?.branchId?{worldId:e.snapshot.worldId,projectId:e.branchId}:null;
+  }});
   for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])window.addEventListener(event,()=>{
-    memoryBridge.syncScope();taskBridge.syncScope();
+    memoryBridge.syncScope();taskBridge.syncScope();githubBridge.syncScope();
   });
   window.VivaAgentTools = Object.freeze({
     list: () => registry.list(),
-    listFor: taskBridge.tools.listFor,
+    listFor: githubBridge.tools.listFor,
     invoke: (name, args, context) => {
       const session=context?.session||context?.sessionId;
       if(name==='vivo.world.edit'&&!session)return registry.invoke(name,args,context);
-      return ['neural.predict','neural.missionRecall','neural.missionTrace','neural.missionForecast','task.progress','vivo.world.edit'].includes(name)
-        ? taskBridge.tools.invokeFor(session,name,args)
+      return ['neural.predict','neural.missionRecall','neural.missionTrace','neural.missionForecast','task.progress','vivo.world.edit','github.pull.read','github.file.read'].includes(name)
+        ? githubBridge.tools.invokeFor(session,name,args)
         : registry.invoke(name,args,context);
     },
-    invokeFor: taskBridge.tools.invokeFor,
+    invokeFor: githubBridge.tools.invokeFor,
   });
   window.VivaPhoneAgentAdmin = Object.freeze({
     register: spec => registry.registerAgent(spec),
-    stop: (session, reason) => {taskBridge.admin.pause(session);memoryBridge.admin.revoke(session);return registry.stopAgent(session,reason);},
+    stop: (session, reason) => {taskBridge.admin.pause(session);memoryBridge.admin.revoke(session);githubBridge.admin.revoke(session);return registry.stopAgent(session,reason);},
     reenable: sourceOrSession => registry.reenableAgent(sourceOrSession),
     beginContact: (session, values) => registry.beginContact(session, values),
     updateContact: (session, contactId, values) => registry.updateContact(session, contactId, values),
@@ -1572,7 +1577,8 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.
     agents: () => registry.agents(),
     memoryAccess: memoryBridge.admin,
     taskAccess: taskBridge.admin,
-    revokeAll: () => {taskBridge.admin.clear();memoryBridge.admin.revokeAll();return registry.revokeAll();},
+    githubAccess: githubBridge.admin,
+    revokeAll: () => {taskBridge.admin.clear();memoryBridge.admin.revokeAll();githubBridge.admin.clear();return registry.revokeAll();},
     audit: () => structuredClone(registry.audit),
   });
 window.VivaPhoneEngine = Object.freeze({
