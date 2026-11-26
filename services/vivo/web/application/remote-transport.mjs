@@ -106,6 +106,77 @@ export async function verifyAgentReasoningReceipt(packet,selection,{cryptoApi=gl
   return packet;
 }
 
+// A complete export is a collection of existing recovery capsules, not a
+// server clone. Its manifest covers ordered part boundaries and all digests.
+export const MEMORY_BACKUP_SET_MAX_BYTES=5*1024*1024;
+const BACKUP_SET_SCHEMA='vivo.memory-backup-set/1';
+const BACKUP_MANIFEST_SCHEMA='vivo.memory-backup-manifest/1';
+const backupCheck=condition=>{if(!condition)throw Error('MEMORY_BACKUP_SET_INVALID');};
+const backupCount=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
+const backupBytes=text=>new TextEncoder().encode(text);
+const backupHash=async(text,cryptoApi=globalThis.crypto)=>{
+  backupCheck(Boolean(cryptoApi?.subtle));
+  return Array.from(new Uint8Array(await cryptoApi.subtle.digest('SHA-256',backupBytes(text))),b=>b.toString(16).padStart(2,'0')).join('');
+};
+async function validateBackupCapsule(capsule,expectedCount,cryptoApi){
+  backupCheck(reasoningKeys(capsule,['schema','journalJson','journalSha256'])&&capsule.schema==='matumbo.neural-memory-capsule/1'&&
+    typeof capsule.journalJson==='string'&&capsule.journalJson.length<=524288&&reasoningDigest(capsule.journalSha256));
+  const bytes=backupBytes(capsule.journalJson);
+  backupCheck(bytes.length<=524288&&await backupHash(capsule.journalJson,cryptoApi)===capsule.journalSha256);
+  let envelopes;try{envelopes=JSON.parse(capsule.journalJson);}catch{backupCheck(false);}
+  backupCheck(Array.isArray(envelopes)&&envelopes.length===expectedCount&&JSON.stringify(envelopes)===capsule.journalJson);
+  const ids=[],seen=new Set();
+  for(const envelope of envelopes){
+    backupCheck(reasoningKeys(envelope,['schema','reportJson','reportSha256'])&&envelope.schema==='matumbo.provider-council-export/1'&&
+      typeof envelope.reportJson==='string'&&envelope.reportJson.length<=32000&&reasoningDigest(envelope.reportSha256)&&
+      await backupHash(envelope.reportJson,cryptoApi)===envelope.reportSha256);
+    let report;try{report=JSON.parse(envelope.reportJson);}catch{backupCheck(false);}
+    backupCheck(['matumbo.provider-council/1','matumbo.provider-council/2'].includes(report?.schema)&&
+      ['fixture','live'].includes(report.mode)&&typeof report.runId==='string'&&/^[a-zA-Z0-9-]{1,80}$/.test(report.runId)&&
+      !seen.has(report.runId)&&report.worldActionExecuted===false&&report.postedChargesUsd===null&&JSON.stringify(report)===envelope.reportJson);
+    seen.add(report.runId);ids.push(report.runId);
+  }
+  return {ids,bytes:bytes.length};
+}
+
+/** Offline integrity/coverage verification. The digest is not a signature;
+ * an internally consistent manufactured history is not provider-authenticated. */
+export async function verifyMemoryBackupSet(bundle,{cryptoApi=globalThis.crypto}={}){
+  backupCheck(reasoningKeys(bundle,['schema','manifestJson','manifestSha256','capsules'])&&bundle.schema===BACKUP_SET_SCHEMA&&
+    typeof bundle.manifestJson==='string'&&bundle.manifestJson.length<=32768&&reasoningDigest(bundle.manifestSha256)&&
+    Array.isArray(bundle.capsules)&&bundle.capsules.length>=1&&bundle.capsules.length<=128);
+  // Snapshot only bounded expected fields before the first await.
+  for(const capsule of bundle.capsules)backupCheck(reasoningKeys(capsule,['schema','journalJson','journalSha256'])&&
+    capsule.schema==='matumbo.neural-memory-capsule/1'&&typeof capsule.journalJson==='string'&&
+    capsule.journalJson.length<=524288&&reasoningDigest(capsule.journalSha256));
+  const innerChars=bundle.capsules.reduce((sum,c)=>sum+c.journalJson.length,0);
+  backupCheck(innerChars<=2*1024*1024+384);
+  const copy=structuredClone(bundle);
+  backupCheck(backupBytes(JSON.stringify(copy)).length<=MEMORY_BACKUP_SET_MAX_BYTES);
+  const raw=copy.manifestJson;
+  backupCheck(await backupHash(raw,cryptoApi)===copy.manifestSha256);
+  let manifest;try{manifest=JSON.parse(raw);}catch{backupCheck(false);}
+  backupCheck(reasoningKeys(manifest,['schema','revision','total','parts','includesGrants','includesRestoreReceipts'])&&
+    manifest.schema===BACKUP_MANIFEST_SCHEMA&&reasoningDigest(manifest.revision)&&backupCount(manifest.total,0,128)&&
+    manifest.includesGrants===false&&manifest.includesRestoreReceipts===false&&Array.isArray(manifest.parts)&&
+    manifest.parts.length===copy.capsules.length&&JSON.stringify(manifest)===raw);
+  let offset=0,journalBytes=0;
+  const seen=new Set(),parts=[];
+  for(let i=0;i<manifest.parts.length;i++){
+    const part=manifest.parts[i],capsule=copy.capsules[i];
+    backupCheck(reasoningKeys(part,['offset','count','journalSha256'])&&part.offset===offset&&
+      backupCount(part.count,0,64)&&part.offset+part.count<=manifest.total&&
+      (part.count>0||(manifest.total===0&&manifest.parts.length===1))&&part.journalSha256===capsule.journalSha256);
+    const checked=await validateBackupCapsule(capsule,part.count,cryptoApi);
+    for(const id of checked.ids){backupCheck(!seen.has(id));seen.add(id);}
+    journalBytes+=checked.bytes;offset+=part.count;
+    parts.push(Object.freeze({...part,capsule:Object.freeze(capsule)}));
+  }
+  backupCheck(offset===manifest.total&&journalBytes<=2*1024*1024+384);
+  return Object.freeze({revision:manifest.revision,total:manifest.total,manifestSha256:copy.manifestSha256,
+    parts:Object.freeze(parts),includesGrants:false,includesRestoreReceipts:false});
+}
+
 export class RemoteTransport {
   constructor({url,token,WebSocket:Socket=globalThis.WebSocket,onState=()=>{},onError=()=>{},onClose=()=>{},timeoutMs=7000}={}) {
     if(typeof url!=='string'||!url.length||typeof token!=='string'||token.length<20||typeof Socket!=='function')
@@ -242,30 +313,40 @@ export class RemoteTransport {
       (result.count===0&&result.total!==0)||result.complete!==(result.offset+result.count===result.total)||
       (result.complete?result.nextAfter!==null:!integer(result.nextAfter,(key.after??0)+1,Number.MAX_SAFE_INTEGER)))fail();
     const capsule=result.capsule;
-    if(!reasoningKeys(capsule,['schema','journalJson','journalSha256'])||capsule.schema!=='matumbo.neural-memory-capsule/1'||
-      typeof capsule.journalJson!=='string'||capsule.journalJson.length>524288||!reasoningDigest(capsule.journalSha256))fail();
-    const bytes=new TextEncoder().encode(capsule.journalJson);
-    if(bytes.length>524288)fail();
-    const sha=async data=>Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256',data)),b=>b.toString(16).padStart(2,'0')).join('');
-    if(await sha(bytes)!==capsule.journalSha256)fail();
-    let envelopes;try{envelopes=JSON.parse(capsule.journalJson);}catch{fail();}
-    if(!Array.isArray(envelopes)||envelopes.length!==result.count||JSON.stringify(envelopes)!==capsule.journalJson)fail();
-    const seen=new Set();
-    for(const envelope of envelopes){
-      if(!reasoningKeys(envelope,['schema','reportJson','reportSha256'])||envelope.schema!=='matumbo.provider-council-export/1'||
-        typeof envelope.reportJson!=='string'||envelope.reportJson.length>32000||!reasoningDigest(envelope.reportSha256)||
-        await sha(new TextEncoder().encode(envelope.reportJson))!==envelope.reportSha256)fail();
-      let report;try{report=JSON.parse(envelope.reportJson);}catch{fail();}
-      if(!['matumbo.provider-council/1','matumbo.provider-council/2'].includes(report?.schema)||
-        !['fixture','live'].includes(report.mode)||typeof report.runId!=='string'||seen.has(report.runId)||
-        report.worldActionExecuted!==false||report.postedChargesUsd!==null||JSON.stringify(report)!==envelope.reportJson)fail();
-      seen.add(report.runId);
-    }
+    try{await validateBackupCapsule(capsule,result.count,globalThis.crypto);}catch{fail();}
     if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
     return Object.freeze({revision:result.revision,offset:result.offset,count:result.count,total:result.total,
       complete:result.complete,nextAfter:result.nextAfter,
       filename:'neural-memory-'+result.revision.slice(0,12)+'-'+(result.offset+1)+'-'+(result.offset+result.count)+'.json',
       text:JSON.stringify(capsule,null,2)+'\n',digest:capsule.journalSha256});
+  }
+  async prepareCompleteMemoryBackup(fetchImpl=globalThis.fetch){
+    if(this.role!=='owner')throw Error('MEMORY_OWNER_REQUIRED');
+    const socket=this.socket,parts=[],capsules=[];
+    let revision=null,total=null,after=null,offset=0,complete=false;
+    // Each nonempty part advances by at least one report. The bounded vault
+    // has at most 128 records; never loop indefinitely or mix revisions.
+    for(let i=0;i<128;i++){
+      const part=await this.prepareMemoryBackupPart({after,revision},fetchImpl);
+      if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+      if(i===0){revision=part.revision;total=part.total;}
+      backupCheck(part.revision===revision&&part.total===total&&part.offset===offset);
+      parts.push({offset,count:part.count,journalSha256:part.digest});
+      capsules.push(JSON.parse(part.text));
+      offset+=part.count;complete=part.complete;
+      if(complete)break;
+      after=part.nextAfter;
+    }
+    backupCheck(complete&&offset===total);
+    const manifestJson=JSON.stringify({schema:BACKUP_MANIFEST_SCHEMA,revision,total,parts,
+      includesGrants:false,includesRestoreReceipts:false});
+    const bundle={schema:BACKUP_SET_SCHEMA,manifestJson,manifestSha256:await backupHash(manifestJson),capsules};
+    const verified=await verifyMemoryBackupSet(bundle);
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    const text=JSON.stringify(bundle,null,2)+'\n';
+    backupCheck(backupBytes(text).length<=MEMORY_BACKUP_SET_MAX_BYTES);
+    return Object.freeze({filename:'neural-memory-backup-'+revision.slice(0,12)+'-'+total+'.json',
+      text,total,parts:verified.parts.length,manifestSha256:verified.manifestSha256});
   }
   async _verifyRestoreReceipt(receipt){
     const keys=['schema','capsuleDigest','baseRevision','committedAt','addedMemoryIds','added','duplicates',

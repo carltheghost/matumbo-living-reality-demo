@@ -133,6 +133,33 @@ async def main():
                       await owner_sheet.get_by_role("button",name="Download next backup part").is_disabled())
                 await owner_sheet.get_by_role("button",name="Recall evidence").click()
                 await status(owner_status,"2 accessible reports")
+                async with owner.expect_download(timeout=15000) as pending:
+                    await owner_sheet.get_by_role("button",name="Download complete backup file").click()
+                complete=await pending.value
+                complete_path=await complete.path()
+                bundle=json.loads(complete_path.read_text(encoding="utf-8"))
+                manifest=json.loads(bundle["manifestJson"])
+                check("complete backup binds all original parts to a manifest",
+                      bundle["schema"]=="vivo.memory-backup-set/1" and manifest["total"]==2 and
+                      bundle["capsules"]==[capsule] and
+                      hashlib.sha256(bundle["manifestJson"].encode()).hexdigest()==bundle["manifestSha256"])
+                verify_input=owner_sheet.get_by_label("Complete backup file to verify")
+                verify_status=owner_sheet.get_by_label("Backup verification status")
+                extract=owner_sheet.get_by_role("button",name="Extract verified capsule")
+                await verify_input.set_input_files({"name":"missing.json","mimeType":"application/json",
+                    "buffer":json.dumps({**bundle,"capsules":[]}).encode()})
+                await status(verify_status,"No capsule available to extract.")
+                check("incomplete backup cannot extract a capsule",await extract.is_disabled())
+                await verify_input.set_input_files(str(complete_path))
+                await status(verify_status,"Verified complete backup: 2 reports · 1 capsule parts.")
+                await owner_sheet.get_by_label("Verified recovery part").select_option("0")
+                async with owner.expect_download(timeout=15000) as pending:
+                    await extract.click()
+                extracted=await pending.value
+                extracted_path=await extracted.path()
+                check("verified backup extracts the exact original restore capsule",
+                      json.loads(extracted_path.read_text(encoding="utf-8"))==capsule)
+                check("offline verification and extraction make no server requests",len(capsule_requests)==6)
 
                 await open_panel(editor, "neural")
                 check("editor cannot see archive or grant controls", not await editor_sheet.get_by_role("button",name="Archive selected report").is_visible())

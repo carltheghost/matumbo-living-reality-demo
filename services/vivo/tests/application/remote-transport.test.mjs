@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RemoteTransport,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
+import {RemoteTransport,verifyMemoryBackupSet,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
 
 class FakeSocket {
   static instances=[];
@@ -321,5 +321,53 @@ test('owner backup validates each original digest and rejects wrong cursor, flag
   const count=calls.length;transport.role='editor';
   await assert.rejects(transport.prepareMemoryBackupPart(undefined,respond(part)),/MEMORY_OWNER_REQUIRED/);
   assert.equal(calls.length,count);
+  await shutdown(transport,socket);
+});
+
+
+test('complete backup set validates exact coverage, rejects missing and mixed parts, and verifies locally',async()=>{
+  const {transport,socket}=await admitted();
+  const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+  const capsuleFor=async runId=>{
+    const reportJson=JSON.stringify({schema:'matumbo.provider-council/1',mode:'fixture',runId,worldActionExecuted:false,postedChargesUsd:null});
+    const journalJson=JSON.stringify([{schema:'matumbo.provider-council-export/1',reportJson,reportSha256:await hash(reportJson)}]);
+    return {schema:'matumbo.neural-memory-capsule/1',journalJson,journalSha256:await hash(journalJson)};
+  };
+  const a=await capsuleFor('first'),b=await capsuleFor('second'),revision='a'.repeat(64);
+  const first={schema:'vivo.memory-backup-part/1',revision,after:null,offset:0,count:1,total:2,nextAfter:1,complete:false,
+    capsule:a,includesGrants:false,includesRestoreReceipts:false};
+  const second={...first,after:1,offset:1,nextAfter:null,complete:true,capsule:b};
+  const calls=[];
+  const serve=parts=>async(url,init)=>{
+    assert.equal(url,'http://vivo.test/api/neural-memory/capsule');
+    const body=JSON.parse(init.body);calls.push(body);
+    const part=parts[body.args.after===null?0:1];
+    return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:part})};
+  };
+  const complete=await transport.prepareCompleteMemoryBackup(serve([first,second]));
+  assert.equal(complete.total,2);assert.equal(complete.parts,2);
+  assert.deepEqual(calls,[{op:'backup',args:{after:null,revision:null}},{op:'backup',args:{after:1,revision}}]);
+  const file=JSON.parse(complete.text),verified=await verifyMemoryBackupSet(file);
+  assert.equal(verified.total,2);assert.equal(verified.revision,revision);
+  assert.deepEqual(verified.parts.map(part=>part.capsule),[a,b]);
+  const resign=async(manifest,capsules)=>{
+    const manifestJson=JSON.stringify(manifest);
+    return {...file,manifestJson,manifestSha256:await hash(manifestJson),capsules};
+  };
+  const manifest=JSON.parse(file.manifestJson);
+  for(const wrong of [
+    {...file,capsules:[a]},
+    {...file,capsules:[b,a]},
+    {...file,manifestSha256:'0'.repeat(64)},
+    await resign({...manifest,total:3},[a,b]),
+    await resign({...manifest,includesGrants:true},[a,b]),
+    await resign({...manifest,parts:[manifest.parts[0],{...manifest.parts[1],offset:0}]},[a,b]),
+    await resign({...manifest,parts:[manifest.parts[0],{...manifest.parts[1],journalSha256:a.journalSha256}]},[a,a]),
+  ])await assert.rejects(verifyMemoryBackupSet(wrong),/MEMORY_BACKUP_SET_INVALID/);
+  await assert.rejects(transport.prepareCompleteMemoryBackup(serve([first,{...second,revision:'b'.repeat(64)}])),/MEMORY_BACKUP_PART_INVALID/);
+  await assert.rejects(transport.prepareCompleteMemoryBackup(serve([first,{...second,capsule:a}])),/MEMORY_BACKUP_SET_INVALID/);
+  const before=calls.length;transport.role='editor';
+  await assert.rejects(transport.prepareCompleteMemoryBackup(serve([first,second])),/MEMORY_OWNER_REQUIRED/);
+  assert.equal(calls.length,before);
   await shutdown(transport,socket);
 });
