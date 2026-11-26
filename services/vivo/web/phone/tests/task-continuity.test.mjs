@@ -263,3 +263,67 @@ test('reload preserves completed plan membership and discards unsaved previews',
   const state=await f.bridge.admin.inspect();assert.equal(state.plans[0].planId,saved.planId);assert.equal(state.tasks.length,3);assert.deepEqual(state.attachments,[]);
   await assert.rejects(f.bridge.admin.commitPlan(pending.token),{code:'PLAN_PREVIEW_STALE'});
 });
+
+test('archived root diagnosis finds a replacement and reviewed recovery preserves its exact evidence',async()=>{
+  const f=fixture(),a=await attach(f);eligible(f,'a');eligible(f,'b');await run(f,'before-archive');
+  const before=(await progress(f)).task;await f.bridge.admin.finish('a');
+  const b=await f.bridge.admin.create('b','Dependent',[a.taskId]);
+  f.sessions.set('c',{sourceId:'dot',sessionId:'c',generation:1,allowRead:true});
+  f.sessions.set('a',{...f.sessions.get('a'),status:'stopped'});
+  const blocked=await f.bridge.admin.diagnose(b.taskId);
+  assert.equal(blocked.target.state,'waiting-prerequisites');assert.equal(blocked.reviewToken,null);
+  assert.equal(blocked.roots[0].taskId,a.taskId);assert.equal(blocked.roots[0].state,'closed-incomplete');
+  assert.equal(blocked.roots[0].assignment.sourceId,'dot');assert.equal(blocked.roots[0].assignment.afterReopen,true);
+  const review=await f.bridge.admin.diagnose(a.taskId);assert(review.reviewToken);
+  const reopened=await f.bridge.admin.commitRecovery(review.reviewToken,'Replace stopped agent');
+  assert.equal(reopened.epoch,before.epoch+1);assert.equal(reopened.authorizesAction,false);assert.equal(f.calls(),1);
+  const state=await f.bridge.admin.inspect();const task=state.tasks.find(t=>t.id===a.taskId);
+  assert.deepEqual(task.steps,before.steps);assert.equal(task.closed,false);assert.equal(task.recoveries[0].reason,'Replace stopped agent');
+  assert(!state.attachments.some(x=>x.taskId===a.taskId));
+  assert.equal((await progress(f,'b')).mission.state,'blocked');
+  const plan=await f.bridge.admin.recommend(a.taskId);assert.equal(plan.recommended.sourceId,'dot');
+  await f.bridge.admin.approveRecommendation(plan);await run(f,'after-recovery','c');await complete(f,'c',(await progress(f,'c')).task);
+  const p=await progress(f,'b');assert.equal(p.mission.state,'ready');
+  assert.deepEqual(p.mission.dependencies[0].receipts.map(r=>[r.operationId,r.sourceId]),[['before-archive','muse'],['after-recovery','dot']]);assert.equal(f.calls(),2);
+});
+test('archived uncertain receipts block recovery until native reconciliation; conflicting evidence never grants a preview',async()=>{
+  const f=fixture(),a=await attach(f);f.mode('missing');await run(f);await f.bridge.admin.finish('a');
+  let report=await f.bridge.admin.diagnose(a.taskId);assert.equal(report.target.state,'receipt-pending');assert.equal(report.reviewToken,null);
+  await assert.rejects(f.bridge.admin.commitRecovery(null,'retry'),{code:'RECOVERY_PREVIEW_STALE'});
+  f.receipt(edit());await f.bridge.admin.reconcile();report=await f.bridge.admin.diagnose(a.taskId);
+  assert(report.reviewToken);await f.bridge.admin.commitRecovery(report.reviewToken,'Receipt reconciled');assert.equal(f.calls(),1);
+  const g=fixture(),b=await attach(g);g.mode('missing');await run(g);g.receipt(edit(),'wrong');await g.bridge.admin.reconcile();await g.bridge.admin.finish('a');
+  const conflict=await g.bridge.admin.diagnose(b.taskId);assert.equal(conflict.target.state,'receipt-conflict');assert.equal(conflict.reviewToken,null);assert.equal(g.calls(),1);
+});
+test('review tokens are single-use, host-held and invalidated by new diagnosis, discard or world changes',async()=>{
+  const f=fixture(),a=await attach(f);await f.bridge.admin.finish('a');
+  const first=await f.bridge.admin.diagnose(a.taskId),second=await f.bridge.admin.diagnose(a.taskId);
+  await assert.rejects(f.bridge.admin.commitRecovery(first.reviewToken,'old'),{code:'RECOVERY_PREVIEW_STALE'});
+  f.bridge.admin.discardRecovery(second.reviewToken);await assert.rejects(f.bridge.admin.commitRecovery(second.reviewToken,'discarded'),{code:'RECOVERY_PREVIEW_STALE'});
+  const third=await f.bridge.admin.diagnose(a.taskId);f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();
+  await assert.rejects(f.bridge.admin.commitRecovery(third.reviewToken,'wrong scope'),{code:'RECOVERY_PREVIEW_STALE'});
+  assert.equal((await inspect(f))[0].closed,true);assert.equal(f.calls(),0);
+});
+test('reviewed recovery rejects a task whose epoch changed in another tab and cannot reopen it twice',async()=>{
+  const f=fixture(),a=await attach(f);await f.bridge.admin.finish('a');
+  const first=await f.bridge.admin.diagnose(a.taskId),other=f.build(),second=await other.admin.diagnose(a.taskId);
+  await other.admin.commitRecovery(second.reviewToken,'first recovery');
+  await other.admin.resume('a',a.taskId);await other.admin.finish('a');
+  await assert.rejects(f.bridge.admin.commitRecovery(first.reviewToken,'stale'),{code:'RECOVERY_PREVIEW_STALE'});
+  assert.equal((await inspect(f))[0].recoveries.length,1);assert.equal((await inspect(f))[0].closed,true);
+});
+test('concurrent recovery admits only one transaction and storage failure preserves the archive',async()=>{
+  const f=fixture(),a=await attach(f);await f.bridge.admin.finish('a');
+  const p=await f.bridge.admin.diagnose(a.taskId);f.store.fail();
+  await assert.rejects(f.bridge.admin.commitRecovery(p.reviewToken,'review'),/storage failed/);
+  assert.equal((await inspect(f))[0].closed,true);assert.equal((await inspect(f))[0].recoveries,undefined);
+  const q=await f.bridge.admin.diagnose(a.taskId),results=await Promise.allSettled([f.bridge.admin.commitRecovery(q.reviewToken,'one'),f.bridge.admin.commitRecovery(q.reviewToken,'two')]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal((await inspect(f))[0].recoveries.length,1);assert.equal(f.calls(),0);
+});
+test('recovered histories persist after reload but do not restore a task attachment or an unsaved review',async()=>{
+  const f=fixture(),a=await attach(f);await run(f);await f.bridge.admin.finish('a');const review=await f.bridge.admin.diagnose(a.taskId);
+  await f.bridge.admin.commitRecovery(review.reviewToken,'restore');const before=await f.bridge.admin.inspect();
+  f.bridge=f.build();const after=await f.bridge.admin.inspect();assert.deepEqual(after.tasks,before.tasks);assert.deepEqual(after.attachments,[]);
+  await assert.rejects(progress(f),{code:'TASK_NOT_ATTACHED'});await assert.rejects(f.bridge.admin.commitRecovery(review.reviewToken,'again'),{code:'RECOVERY_PREVIEW_STALE'});
+  assert(!f.bridge.tools.listFor('a').some(t=>/diagnose|recovery/i.test(t.name)));assert.equal(f.calls(),1);
+});
