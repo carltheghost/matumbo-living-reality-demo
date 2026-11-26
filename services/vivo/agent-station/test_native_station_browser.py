@@ -102,9 +102,20 @@ def run(native=False, executable=None):
             bound={'id':first,'epoch':m['lease_epoch'],'lease':lease}
             obs=req(a,'/v1/continuity/observe',bound|{'request_id':'browser-read'})
             import time
-            deadline=time.monotonic()+10
-            while time.monotonic()<deadline and not req(a,'/v1/actions/'+obs['id'])['confirmed']:time.sleep(.15)
-            assert req(a,'/v1/actions/'+obs['id'])['confirmed']
+            # The sync Playwright router dispatches intercepted browser requests
+            # while Playwright API calls pump its event loop. time.sleep() here
+            # starves the real host poll/result requests, causing a false timeout.
+            deadline=time.monotonic()+25
+            receipt=req(a,'/v1/actions/'+obs['id'])
+            while time.monotonic()<deadline and receipt['status'] in ('queued','running'):
+                page.wait_for_timeout(150)
+                receipt=req(a,'/v1/actions/'+obs['id'])
+            assert receipt['status']=='completed' and receipt['confirmed'] is True, (
+                'native observation did not confirm', receipt['status'],
+                (receipt.get('result') or {}).get('code'),
+                page.locator('[data-station-face] [role="status"]').first.inner_text()
+            )
+            assert receipt['result']['snapshot']['worldId']==world, 'wrong native receipt world'
             req(a,'/v1/continuity/checkpoint',bound|{'expected_revision':m['revision'],'request_id':'browser-cp','progress':'Fixture observed','next_step':'Owner review','observation':obs['id'],'ready':True})
             page.get_by_role('button',name='Refresh agents and receipts').click();page.get_by_role('button',name='Inspect mission '+first[:8]).click()
             mission=page.locator('[data-continuity-mission="'+first+'"]');note=mission.get_by_label('Owner review note');note.fill('Reviewed fixture')
