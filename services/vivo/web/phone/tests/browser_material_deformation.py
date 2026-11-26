@@ -12,8 +12,9 @@ import json
 import os
 import shutil
 import sys
+import time
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 
 def dispatch_pointer(page, kind: str, pointer_id: int, x: float, y: float) -> None:
@@ -233,6 +234,59 @@ def node_point(page, suffix: str = "r1c2") -> dict[str, float]:
     )
 
 
+def touch_material_node(page, pointer_id: int, suffix: str = "r1c2") -> dict:
+    """Resolve and hit the same actual renderer frame in one browser task."""
+    deadline = time.monotonic() + 12
+    while time.monotonic() < deadline:
+        hit = page.evaluate(
+            """
+            ({ suffix, pointerId }) => {
+              const renderer = window.VivaShared.R;
+              const p = renderer.materialNodePoints.find(point =>
+                point.visible && point.nodeId.endsWith(suffix) &&
+                renderer.at(point.x, point.y) === 'workpiece' &&
+                renderer.atMaterialNode(point.x, point.y)?.nodeId === point.nodeId);
+              if (!p) return null;
+              const hit = { x: p.x, y: p.y, nodeId: p.nodeId, frame: renderer._lastDraw };
+              document.querySelector('#world').dispatchEvent(new PointerEvent('pointerdown', {
+                bubbles: true, cancelable: true, pointerId, pointerType: 'touch',
+                isPrimary: true, clientX: hit.x, clientY: hit.y, buttons: 1,
+              }));
+              return hit;
+            }
+            """,
+            {"suffix": suffix, "pointerId": pointer_id},
+        )
+        if hit:
+            return hit
+        page.wait_for_timeout(25)
+    raise AssertionError("No visible Workpiece node resolves to the intended material hit target")
+
+
+def wait_material_admission(page, pointer_id: int, point: dict) -> None:
+    contact_id = f"touch:{pointer_id}"
+    try:
+        page.wait_for_function(
+            "({id,node}) => window.VivaPhoneEngine.materialContacts().some(c => c.contactId === id && c.nodeId === node)",
+            arg={"id": contact_id, "node": point["nodeId"]},
+        )
+        page.wait_for_function(
+            "id => window.VivaPhoneEngine.materialSnapshot().then(value => value.activeContacts.some(c => c.contactId === id))",
+            arg=contact_id,
+        )
+    except PlaywrightTimeoutError as error:
+        details = page.evaluate(
+            """async () => ({
+              status: document.querySelector('#status')?.textContent,
+              contacts: window.VivaPhoneEngine.materialContacts(),
+              rigid: window.VivaPhoneEngine.interaction()?.contacts,
+              acceptedContacts: (await window.VivaPhoneEngine.materialSnapshot()).activeContacts,
+              lastDraw: window.VivaShared.R._lastDraw,
+            })"""
+        )
+        raise AssertionError("Material contact admission failed: " + json.dumps({"hit":point,"state":details})) from error
+
+
 def pinch_hand_at(screen_x: float, screen_y: float, width: float, height: float) -> list[dict[str, float]]:
     video_width, video_height = 640.0, 480.0
     scale = max(width / video_width, height / video_height)
@@ -273,10 +327,10 @@ def run_flow(page, route: str, world_id: str, include_hand: bool) -> dict:
     before = material_snapshot(page)
     body_before = before["body"]
     geometry_scale = page.evaluate("() => window.VivaPhoneEngine.snapshot().then(value => value.snapshot.spaces.root.entities.workpiece.geometry.scale)")
-    point = node_point(page)
-    dispatch_pointer(page, "pointerdown", 701, point["x"], point["y"])
-    page.wait_for_function("() => window.VivaPhoneEngine.materialContacts().length === 1")
-    page.wait_for_function("() => window.VivaPhoneEngine.materialSnapshot().then(value => value.activeContacts.length === 1)")
+    point = touch_material_node(page, 701)
+    wait_material_admission(page, 701, point)
+    assert len(page.evaluate("() => window.VivaPhoneEngine.materialContacts()")) == 1
+    assert len(material_snapshot(page)["activeContacts"]) == 1
 
     accepted_before_preview = material_snapshot(page)
     preview = page.evaluate(
@@ -356,6 +410,7 @@ def run_flow(page, route: str, world_id: str, include_hand: bool) -> dict:
     return {
         "bodyRevision": body_after["bodyRevision"],
         "movedNode": point["nodeId"],
+        "admittedRenderFrame": point["frame"],
         "reloadedRevision": reloaded["body"]["bodyRevision"],
         "handContacts": len(hand_result or []),
         "cameraCalls": 0,
