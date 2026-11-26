@@ -37,7 +37,7 @@ export class MemoryStore {
   save(scope,value){return this.access('readwrite',JSON.stringify(scope),value);}
 }
 export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis),store=new MemoryStore(),
-  navigate=url=>globalThis.location.assign(url),resumeSignIn=false,
+  navigate=url=>globalThis.location.assign(url),resumeSignIn=false,worldEvents=globalThis,
   getScope=()=>{
     const e=globalThis.VivaPhoneEngine?.publishedSnapshot?.();
     if(!globalThis.VivaPhoneEngine?.active||!e?.snapshot?.worldId)throw Error('Enter the existing local Vivo world first.');
@@ -220,7 +220,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   const taskPicker=node('select');taskPicker.setAttribute('aria-label','Saved task in this world and branch');
   const taskStatus=node('p','Refresh to inspect saved tasks for the open world.');taskStatus.setAttribute('aria-live','polite');
   const taskDetail=node('pre','No task selected.');taskDetail.style.whiteSpace='pre-wrap';taskDetail.style.overflowWrap='anywhere';
-  let journal=null,taskBusy=false,taskScope=null;
+  let journal=null,taskBusy=false,taskScope=null,taskScopeEpoch=0;
   const taskScopeNow=()=>{const host=globalThis.VivaPhoneEngine,e=host?.publishedSnapshot?.();return host?.active&&e?.snapshot?.worldId&&e?.branchId?JSON.stringify([e.snapshot.worldId,e.branchId]):null;};
   const taskAdmin=()=>{const access=globalThis.VivaPhoneAgentAdmin?.taskAccess;if(!access)throw Error('Native task continuity is unavailable.');return access;};
   const selectedAgent=()=>{if(!agentPicker.value)throw Error('Choose an active agent session first.');return agentPicker.value;};
@@ -235,19 +235,20 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
       +task.steps.map(s=>s.state+' · '+s.entityId+' · '+s.operationId+(s.state==='confirmed'?' · revision '+s.revision:'')).join('\n');
   }
   function invalidateTaskScope(){
-    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;journal=null;
+    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;
     taskPicker.replaceChildren();taskDetail.textContent='No task selected.';taskStatus.textContent='World changed. Refresh to inspect the current world’s journal.';
   }
   async function refreshTasks(preferred){
     invalidateTaskScope();const expected=taskScopeNow();if(!expected)throw Error('Open a local world first.');
-    const result=await taskAdmin().inspect();if(disposed||expected!==taskScopeNow())return;
+    const epoch=taskScopeEpoch,result=await taskAdmin().inspect();invalidateTaskScope();
+    if(disposed||epoch!==taskScopeEpoch||expected!==taskScopeNow())return;
     const old=preferred||taskPicker.value;journal=result;taskScope=expected;taskPicker.replaceChildren();
     const placeholder=node('option','Choose a saved task');placeholder.value='';taskPicker.append(placeholder);
     for(const t of journal.tasks){const option=node('option',t.title+' · '+t.sourceId+(t.closed?' · closed':''));option.value=t.id;taskPicker.append(option);}
     if(journal.tasks.some(t=>t.id===old))taskPicker.value=old;
     taskStatus.textContent=journal.warning||journal.tasks.length+' saved task(s) in this world/branch. Grants never resume automatically.';drawTask();
   }
-  const taskRun=fn=>async()=>{if(taskBusy||disposed)return;taskBusy=true;try{refreshMemoryAgents();await fn();}catch(e){if(!disposed)taskStatus.textContent=message(e);}finally{taskBusy=false;}};
+  const taskRun=fn=>async()=>{if(taskBusy||disposed)return;invalidateTaskScope();const epoch=taskScopeEpoch;taskBusy=true;try{refreshMemoryAgents();await fn();}catch(e){if(!disposed){invalidateTaskScope();if(epoch===taskScopeEpoch)taskStatus.textContent=message(e);}}finally{taskBusy=false;}};
   taskPicker.addEventListener('change',drawTask);
   const refreshTaskButton=button('Refresh saved tasks',taskRun(()=>refreshTasks()));
   const createTaskButton=button('Create and attach task',taskRun(async()=>{const result=await taskAdmin().create(selectedAgent(),taskTitle.value);taskTitle.value='';await refreshTasks(result.taskId);}));
@@ -257,12 +258,12 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   const closeTaskButton=button('Close attached task journal',taskRun(async()=>{await taskAdmin().finish(selectedAgent());await refreshTasks();}));
   section.append(node('h4','Persistent agent task journal'),node('p','Use the active agent selector above. Only attached native world edits are journaled. Reconcile unresolved receipts before continuing; detaching does not revoke native action permissions. No automatic replay or cloud sync.'),
     taskTitle,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,reconcileTaskButton,pauseTaskButton,closeTaskButton,taskStatus,taskDetail);
-  for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])globalThis.addEventListener(event,invalidateTaskScope);
+  for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])worldEvents?.addEventListener?.(event,invalidateTaskScope);
   invalidateTaskScope();
   refreshMemoryAgents();
   root.prepend(section);
   if(resumeSignIn)run(render)();
-  return {section,refresh:render,openProviders:()=>{clearSelection();search.value='';renderProviders();search.focus();},dispose:()=>{disposed=true;selectionEpoch++;memoryAccess()?.clear();globalThis.VivaPhoneAgentAdmin?.taskAccess?.clear();for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])globalThis.removeEventListener(event,invalidateTaskScope);section.remove();}};
+  return {section,refresh:render,openProviders:()=>{clearSelection();search.value='';renderProviders();search.focus();},dispose:()=>{disposed=true;selectionEpoch++;taskScopeEpoch++;memoryAccess()?.clear();globalThis.VivaPhoneAgentAdmin?.taskAccess?.clear();for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])worldEvents?.removeEventListener?.(event,invalidateTaskScope);section.remove();}};
 }
 export function installIntelligenceControls() {
   let mounted,observer;

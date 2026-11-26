@@ -7,8 +7,13 @@ test('native entry retains original modules and adds one explicit mount',async()
  assert.equal((h.match(/id="vivoIntelligenceMount"/g)||[]).length,1);assert(h.includes("import {installIntelligenceControls} from './ai-accounts-panel.mjs'"));
 });
 test('new module assets and native Field Lab entry are in the versioned shell',async()=>{
- const sw=await file('../../vivo-sw.js');assert(sw.includes('vivo-phone-shell-2026-11-09-v25'));
- for(const f of ['ai-accounts-panel.mjs','constructive-memory.mjs','field-lab.html','social-room.mjs','social-room-panel.mjs'])assert(sw.includes(`'phone/${f}'`));
+ const [sw,upgrade]=await Promise.all([file('../../vivo-sw.js'),file('./browser_service_worker_upgrade.py')]);
+ const cache=sw.match(/const SHELL_CACHE = '(vivo-phone-shell-\d{4}-\d{2}-\d{2}-v(\d+))';/);
+ assert(cache&&Number(cache[2])>=28,'The current shell must be versioned at v28 or later');
+ const versions=[...upgrade.matchAll(/^V(\d+)_CACHE = "([^"]+)"/gm)].sort((a,b)=>Number(b[1])-Number(a[1]));
+ assert(versions.length,'The offline upgrade suite must declare its target cache');
+ assert.equal(cache[1],versions[0][2],'Current shell and real offline upgrade target must agree');
+ for(const f of ['ai-accounts-panel.mjs','constructive-memory.mjs','constructive-memory-agent.mjs','convergence-adapter.mjs','task-continuity.mjs','field-lab.html','social-room.mjs','social-room-panel.mjs'])assert(sw.includes(`'phone/${f}'`));
 });
 test('callback and local session endpoints bypass the service worker cache',async()=>{
  const sw=await file('../../vivo-sw.js');assert(sw.includes('readyz|healthz|api|ws|auth|vivo-session'));
