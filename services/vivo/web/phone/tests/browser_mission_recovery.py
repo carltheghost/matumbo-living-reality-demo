@@ -21,12 +21,12 @@ def exercise(page, route, label):
       const dependent=await admin.taskAccess.create(b,'Dependent construction',[root.taskId]);
       return {a,b,c,root,dependent};
     }""")
-    edit="""async ({agent,operationId,amount})=>{
+    edit="""async ({agent,operationId,amount,entityId='relic'})=>{
       const host=window.VivaPhoneEngine,admin=window.VivaPhoneAgentAdmin;
       const e=await host.snapshot(),spaceId=e.eyes[e.currentEyeId].spaceId;
-      const entity=e.snapshot.spaces[spaceId].entities.relic,delta=Array(entity.dimension).fill(0);delta[3]=amount;
+      const entity=e.snapshot.spaces[spaceId].entities[entityId],delta=Array(entity.dimension).fill(0);delta[3]=amount;
       const result=await window.VivaAgentTools.invokeFor(agent,'vivo.world.edit',{worldId:e.snapshot.worldId,branchId:e.branchId,
-        eyeId:e.currentEyeId,spaceId,entityId:entity.id||'relic',baseRevision:entity.revision,operationId,delta,geometry:null});
+        eyeId:e.currentEyeId,spaceId,entityId:entity.id||entityId,baseRevision:entity.revision,operationId,delta,geometry:null});
       await host.snapshot();await admin.taskAccess.reconcile();
       return {result,progress:await window.VivaAgentTools.invokeFor(agent,'task.progress'),branchId:e.branchId};
     }"""
@@ -106,6 +106,35 @@ def exercise(page, route, label):
     assert recall["total"]==2 and recall["authorizesAction"] is False and recall["learned"] is False,recall
     assert [(r["operationId"],r["sourceId"]) for r in recall["matches"]]==[("recovery:before","recovery-a"),("recovery:after","recovery-c")],recall
     assert not page.evaluate("agent=>window.VivaAgentTools.listFor(agent).some(t=>t.name==='neural.missionRecall')",setup["b"])
+    # The dependent contributes a different object; its declared prerequisite
+    # connects the two completed source tasks without inventing causality.
+    third=page.evaluate(edit,{"agent":setup["b"],"operationId":"recovery:linked","amount":0,"entityId":"workpiece"})
+    assert third["result"]["status"]=="accepted",third
+    page.evaluate("""async ({agent,task})=>window.VivaPhoneAgentAdmin.taskAccess.complete(agent,{taskId:task.id,epoch:task.epoch})""",
+                  {"agent":setup["b"],"task":third["progress"]["task"]})
+    args={"from":{"spaceId":"root","entityId":"relic"},"to":{"spaceId":"root","entityId":"workpiece"}}
+    unavailable=page.evaluate("""({agent,args})=>window.VivaAgentTools.invokeFor(agent,'neural.missionTrace',args)""",{"agent":setup["c"],"args":args})
+    assert unavailable["reason"]=="OBJECT_NOT_IN_SHARED_EVIDENCE",unavailable
+    panel.get_by_role("button",name="Refresh saved tasks").click()
+    idle()
+    panel.get_by_role("combobox",name="Saved task in this world and branch").select_option(future["taskId"])
+    panel.locator("#vivoMemoryAgent").select_option(setup["c"]["sessionId"])
+    panel.get_by_role("listbox",name="Completed mission evidence sources").select_option([setup["root"]["taskId"],setup["dependent"]["taskId"]])
+    panel.get_by_role("button",name="Grant selected mission evidence").click()
+    idle()
+    panel.get_by_role("textbox",name="Recall space ID").fill("root")
+    panel.get_by_role("textbox",name="Recall entity ID").fill("relic")
+    panel.get_by_role("textbox",name="Association destination space ID").fill("root")
+    panel.get_by_role("textbox",name="Association destination object ID").fill("workpiece")
+    panel.get_by_role("button",name="Trace object association").click()
+    idle()
+    trace_text=panel.locator("#vivoMissionRecall").inner_text()
+    assert "3 linked evidence hops" in trace_text and "association, not causal proof" in trace_text,trace_text
+    traced=page.evaluate("""({agent,args})=>window.VivaAgentTools.invokeFor(agent,'neural.missionTrace',args)""",{"agent":setup["c"],"args":args})
+    assert traced["status"]=="matched" and traced["hopCount"]==3 and not traced["causalityProven"],traced
+    assert traced["authorizesAction"] is False and [h["relation"] for h in traced["hops"]]==["observed-in","prerequisite-of","observed-object"],traced
+    assert [t["bank"] for t in traced["circuitTrace"]]==[0,2,1],traced
+    assert traced["hops"][-1]["evidence"]["operationId"]=="recovery:linked",traced
     completed=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
     assert len(completed["missionRecallGrants"])==1,completed
     enter_local(page,route,world_id)
@@ -117,11 +146,12 @@ def exercise(page, route, label):
     }""")
     assert restored["tasks"]==completed["tasks"] and restored["attachments"]==[],restored
     assert restored["experience"]==completed["experience"] and restored["grants"]==[],restored
-    assert restored["branchId"]==second["branchId"] and sorted(restored["receipts"])==["recovery:after","recovery:before"],restored
+    assert restored["branchId"]==second["branchId"] and sorted(restored["receipts"])==["recovery:after","recovery:before","recovery:linked"],restored
     return {"rootDiagnosed":True,"reopened":True,"replacementRecommended":True,"originalReceiptPreserved":True,
-            "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":2,
+            "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":3,
             "collectiveExperiencePreserved":True,"originalSourceCredited":True,"scopedAgentExperience":True,
-            "exactNeuralRecall":True,"grantNotRestored":True,"crossMissionReuse":True}
+            "exactNeuralRecall":True,"grantNotRestored":True,"crossMissionReuse":True,
+            "multiHopAssociation":True,"unsharedPathRejected":True,"causalClaim":False}
 
 
 def main(base):
