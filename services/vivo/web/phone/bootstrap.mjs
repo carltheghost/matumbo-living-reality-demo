@@ -1553,9 +1553,13 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.
   window.VivaAgentTools = Object.freeze({
     list: () => registry.list(),
     listFor: taskBridge.tools.listFor,
-    invoke: (name, args, context) => ['neural.predict','task.progress','vivo.world.edit'].includes(name)
-      ? taskBridge.tools.invokeFor(context?.session||context?.sessionId,name,args)
-      : registry.invoke(name,args,context),
+    invoke: (name, args, context) => {
+      const session=context?.session||context?.sessionId;
+      if(name==='vivo.world.edit'&&!session)return registry.invoke(name,args,context);
+      return ['neural.predict','task.progress','vivo.world.edit'].includes(name)
+        ? taskBridge.tools.invokeFor(session,name,args)
+        : registry.invoke(name,args,context);
+    },
     invokeFor: taskBridge.tools.invokeFor,
   });
   window.VivaPhoneAgentAdmin = Object.freeze({
