@@ -64,7 +64,7 @@ jobs:
           path: application-evidence/
           retention-days: 7
   browser-studio-authority-capacity:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -130,7 +130,7 @@ jobs:
       - name: Scope notice
         run: echo 'This is synthetic Chromium loopback evidence for journal-capacity write gating and race settlement; it does not certify physical camera, hand, head, AR, VR, public networking or deployment behavior.'
   browser-x4:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -198,7 +198,7 @@ jobs:
       - name: Scope notice
         run: echo 'This is a separate headless Chromium loopback regression for camera-off x4 targets and lease cleanup; existing Python discovery jobs do not cover browser behavior, cameras, physical devices, public networking or deployment.'
   browser-studio-authority:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

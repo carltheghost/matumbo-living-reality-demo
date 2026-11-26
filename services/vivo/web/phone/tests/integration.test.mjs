@@ -161,7 +161,8 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /scope\.pathname/);
   assert.match(sw, /shell\.match\(scoped\('index\.html'\)\)/);
-  assert.match(sw, /SHELL_CACHE.*v25/);
+  const cache=sw.match(/const SHELL_CACHE = 'vivo-phone-shell-\d{4}-\d{2}-\d{2}-v(\d+)';/);
+  assert(cache&&Number(cache[1])>=28,'Hand tracker must be included in the current versioned shell');
   assert.match(sw, /phone\/projection-parameters\.mjs/);
   for (const asset of ['phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'application/conversation-transport.mjs', 'phone/companion.mjs']) assert.match(sw, new RegExp(asset.replaceAll('.', '\\.')));
   assert.doesNotMatch(worker, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);

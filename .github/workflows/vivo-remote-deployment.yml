@@ -101,16 +101,27 @@ jobs:
 
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
             -keyout "$fixture_dir/ca.key" -out "$fixture_dir/ca.pem" \
-            -subj '/CN=Vivo CI CA' >/dev/null 2>&1
+            -subj '/CN=Vivo CI CA' \
+            -addext 'basicConstraints=critical,CA:TRUE,pathlen:0' \
+            -addext 'keyUsage=critical,keyCertSign,cRLSign' \
+            -addext 'subjectKeyIdentifier=hash' >/dev/null 2>&1
           openssl req -new -newkey rsa:2048 -nodes \
             -keyout "$fixture_dir/server.key" -out "$fixture_dir/server.csr" \
             -subj '/CN=vivo-remote' >/dev/null 2>&1
-          printf '%s\n' 'subjectAltName=DNS:vivo-remote,IP:127.0.0.1' \
+          printf '%s\n' \
+            'basicConstraints=critical,CA:FALSE' \
+            'keyUsage=critical,digitalSignature,keyEncipherment' \
+            'extendedKeyUsage=serverAuth' \
+            'subjectKeyIdentifier=hash' \
+            'authorityKeyIdentifier=keyid,issuer' \
+            'subjectAltName=DNS:vivo-remote,IP:127.0.0.1' \
             > "$fixture_dir/server.ext"
           openssl x509 -req -in "$fixture_dir/server.csr" \
             -CA "$fixture_dir/ca.pem" -CAkey "$fixture_dir/ca.key" -CAcreateserial \
             -out "$fixture_dir/server.pem" -days 1 -sha256 \
             -extfile "$fixture_dir/server.ext" >/dev/null 2>&1
+          openssl verify -x509_strict -purpose sslserver -verify_ip 127.0.0.1 \
+            -CAfile "$fixture_dir/ca.pem" "$fixture_dir/server.pem"
           # The image runs as UID 10001; these files are disposable CI fixtures,
           # not credentials, so the mounted key must be readable by that UID.
           chmod 0644 "$fixture_dir"/*
