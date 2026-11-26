@@ -502,3 +502,29 @@ test('stale attachment and reload do not restore forecast grants',async()=>{
   await assert.rejects(f.bridge.tools.invokeFor('b',forecastTool,recallQuery),{code:'MISSION_RECALL_NOT_GRANTED'});
   assert.equal(f.calls(),8);
 });
+
+test('scenario compares maximum simultaneous local assignments without altering tasks or grants',async()=>{
+  const f=fixture();eligible(f,'a');eligible(f,'b');
+  const p=await f.bridge.admin.previewPlan(planSpec()),saved=await f.bridge.admin.commitPlan(p.token),ids=saved.created.map(x=>x.taskId);
+  const before=await f.bridge.admin.inspect(),result=await f.bridge.admin.compareScenario({taskIds:ids,unavailableSourceIds:['muse']});
+  assert.equal(result.baseline.assignable,2);assert.equal(result.alternative.assignable,1);assert.equal(result.lostCapacity,1);
+  assert.equal(result.alternative.rows.find(r=>r.taskId===ids[2]).status,'TASK_PREREQUISITES_INCOMPLETE');
+  assert.equal(result.authorizesAction,false);assert.deepEqual(await f.bridge.admin.inspect(),before);assert.equal(f.calls(),0);
+  assert(!f.bridge.tools.listFor('a').some(t=>/scenario/i.test(t.name)));
+});
+test('scenario keeps actual attachments and unresolved operations unavailable',async()=>{
+  const f=fixture();eligible(f,'a');eligible(f,'b');
+  const first=await attach(f);f.mode('missing');await run(f);
+  const second=await f.bridge.admin.create('b','Other attached task'),third=await f.bridge.admin.create('b','Detached after pause');f.bridge.admin.pause('b');
+  const before=await f.bridge.admin.inspect(),r=await f.bridge.admin.compareScenario({taskIds:[first.taskId,second.taskId,third.taskId],unavailableSourceIds:['codex']});
+  assert.equal(r.baseline.rows.find(t=>t.taskId===first.taskId).status,'TASK_RECONCILIATION_REQUIRED');
+  assert.equal(r.baseline.assignable,1);assert.equal(r.alternative.assignable,0);
+  assert.deepEqual(await f.bridge.admin.inspect(),before);assert.equal(f.calls(),1);
+});
+test('scenario validates exact task selection and fences world changes during storage',async()=>{
+  const f=fixture(),a=await attach(f);await assert.rejects(f.bridge.admin.compareScenario({taskIds:['unknown']}),{code:'TASK_NOT_FOUND'});
+  await assert.rejects(f.bridge.admin.compareScenario({taskIds:[a.taskId,a.taskId]}),{code:'SCENARIO_TASKS_INVALID'});
+  const release=f.store.hold(),pending=f.bridge.admin.compareScenario({taskIds:[a.taskId]});await release.entered;
+  f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();release();
+  await assert.rejects(pending,{code:'SCENARIO_SCOPE_STALE'});assert.equal(f.calls(),0);
+});
