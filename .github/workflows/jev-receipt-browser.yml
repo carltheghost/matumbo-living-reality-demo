@@ -6,6 +6,7 @@ on:
       - 'src/**'
       - 'vendor/**'
       - 'tests/browser-jev-receipt-history.mjs'
+      - 'scripts/vivo/provider-council.mjs'
       - 'package.json'
       - '.github/workflows/jev-receipt-browser.yml'
   workflow_dispatch:
@@ -13,13 +14,20 @@ permissions:
   contents: read
 jobs:
   browser:
-    name: Jev receipt browser / ${{ matrix.device }}
+    name: Jev receipt browser / ${{ matrix.device }} / ${{ matrix.scenario }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        device: [desktop, mobile]
+        include:
+          - {device: desktop, scenario: core}
+          - {device: desktop, scenario: isolation}
+          - {device: mobile, scenario: core}
+          - {device: mobile, scenario: isolation}
+          - {device: mobile, scenario: orientation}
+          - {device: desktop, scenario: council}
+          - {device: mobile, scenario: council}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,6 +42,7 @@ jobs:
       - name: Run actual object and receipt regression
         env:
           MATUMBO_BROWSER_DEVICE: ${{ matrix.device }}
+          MATUMBO_BROWSER_SCENARIO: ${{ matrix.scenario }}
           MATUMBO_BROWSER_EVIDENCE_DIR: browser-evidence/jev-receipt-history
           OPENAI_API_KEY: ''
         run: |
@@ -60,6 +69,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: jev-receipt-browser-${{ matrix.device }}
+          name: jev-receipt-browser-${{ matrix.device }}-${{ matrix.scenario }}
           path: browser-evidence/
           retention-days: 7

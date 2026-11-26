@@ -26,9 +26,12 @@ jobs:
           node --check src/render/web-ai.js
           node --test tests/provider-council.test.mjs tests/compute-economy-expanded.test.mjs tests/web-ai-compute.test.mjs
           node scripts/vivo/provider-council.mjs --fixture --out=provider-council-fixture.json
+          node scripts/vivo/provider-council.mjs --fixture --task=route --out=provider-council-mission-fixture.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: provider-council-fixture
-          path: provider-council-fixture.json
+          path: |
+            provider-council-fixture.json
+            provider-council-mission-fixture.json
           retention-days: 7

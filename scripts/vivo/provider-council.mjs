@@ -5,8 +5,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { COUNCIL_PROVIDERS, COUNCIL_REPORT_SCHEMA, COUNCIL_TASK, COUNCIL_OUTPUT_LIMIT,
+  COUNCIL_MISSION_TASK, COUNCIL_MISSION_SCHEMA, COUNCIL_MISSION, solveCouncilMission, normalizeCouncilCandidate,
   validCouncilModel, exportCouncilReport, validateCouncilReport } from "../../src/domains/provider-council-evidence.js";
-const PROMPT="What is 12 + 19? Reply with only the integer.";
+const PROMPTS=Object.freeze({
+  [COUNCIL_TASK]:"What is 12 + 19? Reply with only the integer.",
+  [COUNCIL_MISSION_TASK]:"Choose a nonempty subset of jobs with total cost at most "+COUNCIL_MISSION.budget+
+    ", maximizing total value. Each job can be used once. "+COUNCIL_MISSION.jobs.map(j=>j.id+": cost "+j.cost+", value "+j.value).join("; ")+
+    ". Reply with only the selected job IDs separated by commas, in alphabetical order.",
+});
 const MAX_RESPONSE_BYTES=256*1024;
 const digest=value=>createHash("sha256").update(value).digest("hex");
 const ROSTER=Object.freeze({
@@ -21,19 +27,20 @@ const ROSTER=Object.freeze({
 const count=v=>Number.isSafeInteger(v)&&v>=0;
 const tokens=(a,b)=>count(a)&&count(b)?{inputTokens:a,outputTokens:b}:null;
 const safeModel=(v,key)=>validCouncilModel(v)&&(!key||!v.includes(key))?v:null;
-function requestFor(id,model,key){
-  const lane=ROSTER[id],headers={"content-type":"application/json"},msg=[{role:"user",content:PROMPT}];
+function requestFor(id,model,key,task){
+  const prompt=PROMPTS[task],lane=ROSTER[id],headers={"content-type":"application/json"},msg=[{role:"user",content:prompt}];
   let url=lane.url,body;
   if(lane.kind==="gemini"){
     // A bare model ID is required; it cannot change the fixed HTTPS origin.
     if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(model))throw new Error("Invalid configured model.");
     url+=encodeURIComponent(model)+":generateContent";
     headers["x-goog-api-key"]=key;
-    body={contents:[{role:"user",parts:[{text:PROMPT}]}],generationConfig:{maxOutputTokens:COUNCIL_OUTPUT_LIMIT}};
+    body={contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:COUNCIL_OUTPUT_LIMIT}};
   }else{
     headers.authorization="Bearer "+key;
     if(lane.kind==="responses")body={model,input:msg,max_output_tokens:COUNCIL_OUTPUT_LIMIT,store:false};
     else if(lane.kind==="messages"){
+      // Pin the existing response contract rather than silently migrating API versions.
       headers["anthropic-version"]="2023-06-01";
       body={model,messages:msg,max_tokens:COUNCIL_OUTPUT_LIMIT};
     }else{
@@ -69,12 +76,16 @@ function extract(id,data,key){
   }
   return result;
 }
-function fixtureResponse(id,model){
+function fixtureResponse(id,model,task){
   const kind=ROSTER[id].kind;
-  const body=kind==="responses"?{model,output:[{type:"message",role:"assistant",content:[{type:"output_text",text:"31"}]}],usage:{input_tokens:20,output_tokens:1}}:
-    kind==="messages"?{model,content:[{type:"text",text:"31"}],usage:{input_tokens:20,output_tokens:1}}:
-    kind==="gemini"?{modelVersion:model,candidates:[{content:{parts:[{text:"31"}]}}],usageMetadata:{promptTokenCount:20,candidatesTokenCount:1}}:
-    {model,choices:[{message:{role:"assistant",content:"31"}}],usage:{prompt_tokens:20,completion_tokens:1}};
+  // Deterministic, deliberately mixed responses exercise the local verifier.
+  // They are not observed provider quality or evidence of a live account.
+  const answer=task===COUNCIL_MISSION_TASK?
+    ({deepseek:"A,B",kimi:"A,C",xai:"invalid proposal"}[id]??"C,D"):"31";
+  const body=kind==="responses"?{model,output:[{type:"message",role:"assistant",content:[{type:"output_text",text:answer}]}],usage:{input_tokens:20,output_tokens:1}}:
+    kind==="messages"?{model,content:[{type:"text",text:answer}],usage:{input_tokens:20,output_tokens:1}}:
+    kind==="gemini"?{modelVersion:model,candidates:[{content:{parts:[{text:answer}]}}],usageMetadata:{promptTokenCount:20,candidatesTokenCount:1}}:
+    {model,choices:[{message:{role:"assistant",content:answer}}],usage:{prompt_tokens:20,completion_tokens:1}};
   return new Response(JSON.stringify(body),{status:200,headers:{"content-type":"application/json"}});
 }
 async function readBounded(response){
@@ -89,28 +100,29 @@ async function readBounded(response){
 function emptyRow(provider,requestedModel=null){
   return {provider,requestedModel,resolvedModel:null,status:"not-configured",attempted:false,latencyMs:null,httpStatus:null,usage:null,answerCorrect:null,responseSha256:null};
 }
-export async function runProviderCouncil({mode="fixture",providers=COUNCIL_PROVIDERS,maxAttempts=7,acknowledgeCharges=false,env=process.env,fetchImpl=globalThis.fetch,timeoutMs=20000}={}){
-  if(!["fixture","live"].includes(mode)||!Array.isArray(providers)||!providers.length||providers.length>COUNCIL_PROVIDERS.length||
+export async function runProviderCouncil({mode="fixture",task=COUNCIL_TASK,providers=COUNCIL_PROVIDERS,maxAttempts=7,acknowledgeCharges=false,env=process.env,fetchImpl=globalThis.fetch,timeoutMs=20000}={}){
+  if(!["fixture","live"].includes(mode)||!Object.hasOwn(PROMPTS,task)||!Array.isArray(providers)||!providers.length||providers.length>COUNCIL_PROVIDERS.length||
     new Set(providers).size!==providers.length||providers.some(id=>!COUNCIL_PROVIDERS.includes(id))||
     !Number.isInteger(maxAttempts)||maxAttempts<1||maxAttempts>COUNCIL_PROVIDERS.length||
     !Number.isInteger(timeoutMs)||timeoutMs<100||timeoutMs>120000)throw new Error("Invalid council options.");
   if(mode==="live"&&acknowledgeCharges!==true)throw new Error("Live probes require explicit acknowledgement of provider charges.");
+  const mission=task===COUNCIL_MISSION_TASK,optimum=mission?solveCouncilMission().candidate:null;
   const rows=[];let attempts=0;
   for(const id of providers){
     const lane=ROSTER[id];
     // Fixtures never inspect ambient provider configuration or use a network transport.
     const key=mode==="fixture"?"fixture-key":(typeof env[lane.key]==="string"?env[lane.key].trim():"");
     const model=mode==="fixture"?"fixture-"+id:safeModel(typeof env[lane.model]==="string"?env[lane.model].trim():null,key);
-    const row=emptyRow(id,model);rows.push(row);
+    const row=emptyRow(id,model);if(mission)row.candidate=null;rows.push(row);
     if(!key||!model||(id==="google"&&!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(model)))continue;
     if(attempts>=maxAttempts){row.status="skipped-limit";continue;}
-    let req;try{req=requestFor(id,model,key);}catch{continue;}
+    let req;try{req=requestFor(id,model,key,task);}catch{continue;}
     attempts++;row.attempted=true;
     const start=Date.now(),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
     try{
       let response;
       try{
-        response=mode==="fixture"?fixtureResponse(id,model):await fetchImpl(req.url,{method:"POST",headers:req.headers,
+        response=mode==="fixture"?fixtureResponse(id,model,task):await fetchImpl(req.url,{method:"POST",headers:req.headers,
           body:JSON.stringify(req.body),redirect:"error",cache:"no-store",signal:controller.signal});
       }catch{row.status="transport-uncertain";continue;}
       row.httpStatus=response.status;
@@ -121,20 +133,25 @@ export async function runProviderCouncil({mode="fixture",providers=COUNCIL_PROVI
       let value;try{value=extract(id,data,key);}catch{row.status="invalid-response";continue;}
       row.responseSha256=digest(raw);row.resolvedModel=value.model;row.usage=value.usage;
       const answer=value.text.trim();
-      row.status=answer?"response-observed":"no-usable-answer";row.answerCorrect=answer?answer==="31":null;
+      row.status=answer?"response-observed":"no-usable-answer";
+      if(mission)row.candidate=normalizeCouncilCandidate(answer);
+      row.answerCorrect=answer?(mission?row.candidate===optimum:answer==="31"):null;
     }finally{clearTimeout(timer);row.latencyMs=mode==="fixture"?0:Math.max(0,Date.now()-start);}
   }
-  return validateCouncilReport({schema:COUNCIL_REPORT_SCHEMA,runId:mode==="fixture"?"fixture-council-v1":randomUUID(),
-    createdAt:mode==="fixture"?"2026-11-25T00:00:00.000Z":new Date().toISOString(),mode,task:COUNCIL_TASK,
+  return validateCouncilReport({schema:mission?COUNCIL_MISSION_SCHEMA:COUNCIL_REPORT_SCHEMA,runId:mode==="fixture"?(mission?"fixture-council-mission-v1":"fixture-council-v1"):randomUUID(),
+    createdAt:mode==="fixture"?"2026-11-25T00:00:00.000Z":new Date().toISOString(),mode,task,
     maxAttempts,requestedOutputTokens:COUNCIL_OUTPUT_LIMIT,rows,postedChargesUsd:null,worldActionExecuted:false});
 }
 export function parseCouncilArgs(args){
-  let mode="fixture",providers=COUNCIL_PROVIDERS,maxAttempts=7,acknowledgeCharges=false,out=null,hasProviders=false,hasAttempts=false;
+  let mode="fixture",task=COUNCIL_TASK,providers=COUNCIL_PROVIDERS,maxAttempts=7,acknowledgeCharges=false,out=null,hasProviders=false,hasAttempts=false;
   const seen=new Set();
   for(const arg of args){
     const key=arg.split("=")[0];if(seen.has(key))throw new Error("Duplicate option.");seen.add(key);
     if(arg==="--live")mode="live";
     else if(arg==="--fixture")mode="fixture";
+    else if(arg.startsWith("--task=")){
+      const name=arg.slice(7);if(name==="arithmetic")task=COUNCIL_TASK;else if(name==="route")task=COUNCIL_MISSION_TASK;else throw new Error("Unknown council task.");
+    }
     else if(arg==="--accept-provider-charges")acknowledgeCharges=true;
     else if(arg.startsWith("--providers=")){const value=arg.slice(12);providers=value==="all"?COUNCIL_PROVIDERS:value.split(",");hasProviders=true;}
     else if(arg.startsWith("--max-attempts=")){maxAttempts=Number(arg.slice(15));hasAttempts=true;}
@@ -143,7 +160,7 @@ export function parseCouncilArgs(args){
   }
   if(seen.has("--live")&&seen.has("--fixture"))throw new Error("Select one mode.");
   if(mode==="live"&&(!acknowledgeCharges||!hasProviders||!hasAttempts))throw new Error("Live mode requires explicit providers, attempt limit and charge acknowledgement.");
-  return {mode,providers,maxAttempts,acknowledgeCharges,out};
+  return {mode,task,providers,maxAttempts,acknowledgeCharges,out};
 }
 async function main(){
   const options=parseCouncilArgs(process.argv.slice(2));

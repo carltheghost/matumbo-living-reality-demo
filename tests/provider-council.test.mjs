@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { COUNCIL_PROVIDERS, exportCouncilReport, parseCouncilReport, validateCouncilReport } from "../src/domains/provider-council-evidence.js";
+import { COUNCIL_PROVIDERS, COUNCIL_MISSION_TASK, COUNCIL_MISSION_SCHEMA, scoreCouncilPlan, solveCouncilMission, normalizeCouncilCandidate, summarizeCouncilMission, exportCouncilReport, parseCouncilReport, validateCouncilReport } from "../src/domains/provider-council-evidence.js";
 import { runProviderCouncil, parseCouncilArgs } from "../scripts/vivo/provider-council.mjs";
 const env={
   OPENAI_API_KEY:"fixture-private-openai-key",VIVO_COUNCIL_OPENAI_MODEL:"owner-model-a",
@@ -96,4 +96,41 @@ test("Compute object reads council evidence locally, without a billing or execut
   assert.match(region,/parseCouncilReport/);assert.match(region,/sessionStore/);
   assert.match(region,/not provider-authenticated/);assert.match(region,/Fixture report/);
   assert.doesNotMatch(region,/appendEconomicEvent|computeAccount\.|computeLedger\.|fetch\(|recordReceipt\(/);
+});
+
+test("constraint mission enumerates a unique optimal plan and scores alternatives independently",()=>{
+  assert.deepEqual(solveCouncilMission(),{candidate:"C,D",cost:7,value:13,feasible:true});
+  assert.deepEqual(scoreCouncilPlan("A,B"),{candidate:"A,B",cost:7,value:12,feasible:true});
+  assert.deepEqual(scoreCouncilPlan("A,C"),{candidate:"A,C",cost:8,value:14,feasible:false});
+  assert.equal(normalizeCouncilCandidate(" D, C "),"C,D");
+  for(const candidate of ["C,C","C,D. Run this","Z","",null,"A,B,C,D,E"])assert.equal(normalizeCouncilCandidate(candidate),null);
+  assert.equal(scoreCouncilPlan("D,C"),null);
+});
+test("mission report retains real dissent and rejects forged correctness with a valid digest",async()=>{
+  const r=await runProviderCouncil({task:COUNCIL_MISSION_TASK,env:new Proxy({},{get(){throw Error("ambient access");}}),fetchImpl:()=>{throw Error("network");}});
+  assert.equal(r.schema,COUNCIL_MISSION_SCHEMA);
+  const sum=summarizeCouncilMission(r);
+  assert.deepEqual(sum.supporting,["openai","anthropic","google","nvidia"]);
+  assert.deepEqual(sum.disagreements,["deepseek","kimi"]);
+  assert.deepEqual(sum.invalid,["xai"]);assert.deepEqual(sum.unknown,[]);
+  assert.equal(sum.authority,"evidence-only");assert.equal(sum.worldActionExecuted,false);
+  assert.deepEqual(await parseCouncilReport(await exportCouncilReport(r)),r);
+  const forged=structuredClone(r);forged.rows.find(row=>row.provider==="kimi").answerCorrect=true;
+  const reportJson=JSON.stringify(forged);
+  await assert.rejects(parseCouncilReport({schema:"matumbo.provider-council-export/1",reportJson,reportSha256:createHash("sha256").update(reportJson).digest("hex")}),/Invalid/);
+  const other=structuredClone(r);other.rows[0].candidate="A,B";
+  assert.throws(()=>validateCouncilReport(other),/Invalid/);
+});
+test("a missing or unanimously wrong provider set cannot become a verified provider proposal",async()=>{
+  const r=await runProviderCouncil({task:COUNCIL_MISSION_TASK,mode:"live",acknowledgeCharges:true,providers:["openai","anthropic","google"],env:{...env,GEMINI_API_KEY:""},fetchImpl:async(url,options)=>{
+    const body=JSON.parse(options.body);
+    assert.match(body.input?.[0]?.content??body.messages?.[0]?.content,/total cost at most 7/);
+    return new Response(JSON.stringify(url.endsWith("/responses")?{model:body.model,output:[{type:"message",role:"assistant",content:[{type:"output_text",text:"A,B"}]}]}:{model:body.model,content:[{type:"text",text:"A,B"}]}),{status:200});
+  }});
+  const sum=summarizeCouncilMission(r);
+  assert.equal(sum.outcome,"no-verified-provider-proposal");assert.deepEqual(sum.supporting,[]);
+  assert.deepEqual(sum.disagreements,["openai","anthropic"]);assert.deepEqual(sum.unknown,["google"]);
+  assert.equal(r.postedChargesUsd,null);assert.equal(r.worldActionExecuted,false);
+  assert.equal(parseCouncilArgs(["--fixture","--task=route"]).task,COUNCIL_MISSION_TASK);
+  assert.throws(()=>parseCouncilArgs(["--task=arbitrary"]),/Unknown council task/);
 });

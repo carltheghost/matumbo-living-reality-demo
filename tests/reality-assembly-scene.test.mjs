@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three-r179.1/build/three.module.js';
 import {buildRealityAssemblyScene} from '../src/render/reality-assembly-scene.js';
-import {createLivingSurfaceMap} from '../src/domains/living-surface-layout-engine.js';
+import {createLivingSurfaceMap,livingSurfaceClipPath} from '../src/domains/living-surface-layout-engine.js';
+import {REALITY_TAB_FORMS,WAVE_TAB_PROFILE,waveTabContour} from '../src/domains/reality-tab-layout.js';
 
 test('curved living objects have a flush readable facet backed by their actual volume',()=>{
   for(const shape of ['sphere','cylinder']){
@@ -107,4 +108,42 @@ test('focus fades context during approach then clears it for the selected workin
   assert.equal(snapshot.visibleGroupCount,0);
   assert.equal(snapshot.funnelGuideVisible,false);
   scene.destroy();assert.equal(parent.children.length,0);assert.equal(targets.length,0);
+});
+
+
+test('wave reading skin tracks the real extruded cap contour rather than a flat rectangle',()=>{
+  const form=REALITY_TAB_FORMS.wave,face=createLivingSurfaceMap('wave').primary;
+  assert.deepEqual(WAVE_TAB_PROFILE,{amplitude:.075,cycles:2,segments:28});
+  assert.equal(face.width,form.width);
+  assert.equal(face.height,1.288);
+  const contour=waveTabContour(form.width,form.height);
+  assert.equal(contour.length,58);
+  assert.ok(Object.isFrozen(contour)&&contour.every(Object.isFrozen));
+  assert.throws(()=>waveTabContour(0,form.height),/positive/);
+  // Recover physical coordinates from the *rendered CSS polygon*, then
+  // independently compare against the actual Three.js geometry vertices.
+  const polygon=livingSurfaceClipPath('wave');
+  const pairs=[...polygon.matchAll(/([\d.]+)% ([\d.]+)%/g)].map(([,x,y])=>[(Number(x)/100-.5)*face.width,(.5-Number(y)/100)*face.height]);
+  assert.equal(pairs.length,58);
+  const parent=new THREE.Scene(),targets=[],feature={id:'agent',assemblyTier:'tab',sources:[]};
+  const scene=buildRealityAssemblyScene({THREE,parent,features:[feature],targets});
+  try{
+    scene.apply({selectedId:'agent',mode:'present',objects:[{id:'agent',position:[0,0,0],shape:'wave',size:1,locked:false,open:true}]});
+    const node=scene.nodes.get('agent'),vertices=node.tabMesh.geometry.getAttribute('position');
+    assert.equal(node.shape,'wave');
+    assert.equal(node.tabMesh.name,'agent/spatial-tab/wave');
+    for(const [x,y] of pairs){
+      let found=false;
+      for(let i=0;i<vertices.count;i++){
+        // The unexpanded front cap lies at depth + the visual bevel rim;
+        // compare the un-beveled outline, not a bevel-expanded sidewall.
+        if(Math.abs(vertices.getX(i)-x)<.00001&&Math.abs(vertices.getY(i)-y)<.00001&&Math.abs(vertices.getZ(i)-(form.depth+.035))<.00001){found=true;break;}
+      }
+      assert.ok(found,`CSS point ${x},${y} belongs to the actual front cap`);
+    }
+    const maxY=Math.max(...pairs.map(p=>p[1])),minY=Math.min(...pairs.map(p=>p[1]));
+    assert.ok(maxY>form.height/2&&minY<-form.height/2,'crests/troughs extend beyond the nominal rectangle');
+  }finally{scene.destroy();}
+  assert.equal(parent.children.length,0);
+  assert.equal(targets.length,0);
 });

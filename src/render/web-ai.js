@@ -1,5 +1,5 @@
 import { createJevUsageJournal } from "../domains/jev-advice-receipt.js";
-import { parseCouncilReport, COUNCIL_STORAGE_KEY } from "../domains/provider-council-evidence.js";
+import { parseCouncilReport, summarizeCouncilMission, COUNCIL_MISSION_SCHEMA, COUNCIL_STORAGE_KEY } from "../domains/provider-council-evidence.js";
 /**
  * web-ai.js — Web + AI glass console renderer.
  *
@@ -634,11 +634,23 @@ export function createWebAiConsole({
     councilRows.appendChild(el(doc,"strong","web-ai-economy-title",source));
     councilRows.appendChild(el(doc,"p","web-ai-economy-statusline",
       attempted+" attempted · "+correct+" correct answers · actual charges unknown"));
+    const mission=report.schema===COUNCIL_MISSION_SCHEMA?summarizeCouncilMission(report):null;
+    if(mission){
+      councilRows.appendChild(el(doc,"strong","web-ai-economy-title","CONSTRAINED PLANNING MISSION"));
+      councilRows.appendChild(el(doc,"p","web-ai-economy-statusline",
+        "Local optimum: "+mission.optimum.candidate+" · cost "+mission.optimum.cost+" / 7 · value "+mission.optimum.value));
+      councilRows.appendChild(el(doc,"p","web-ai-economy-statusline",
+        mission.supporting.length+" optimal · "+mission.disagreements.length+" alternative · "+mission.invalid.length+" invalid · "+mission.unknown.length+" unknown"));
+      councilRows.appendChild(el(doc,"p","web-ai-economy-statusline",
+        mission.supporting.length?"Verified provider proposal observed; advisory only.":"No verified provider proposal observed; advisory only."));
+    }
     for(const row of report.rows){
       const label=row.provider+" · "+(row.resolvedModel??row.requestedModel??"no model")+" · "+row.status;
       const evidence=row.usage?row.usage.inputTokens.toLocaleString()+" input / "+row.usage.outputTokens.toLocaleString()+" output tokens":"token counts unavailable";
-      councilRows.appendChild(el(doc,"p","web-ai-economy-statusline",label+" · "+evidence+
-        (row.answerCorrect===null?"":row.answerCorrect?" · correct fixture task":" · incorrect fixture task")));
+      const judgment=mission?.rows.find(item=>item.provider===row.provider);
+      const verdict=judgment?" · "+(judgment.plan?judgment.plan.candidate+" · ":"")+judgment.verdict:
+        (row.answerCorrect===null?"":row.answerCorrect?" · correct arithmetic task":" · incorrect arithmetic task");
+      councilRows.appendChild(el(doc,"p","web-ai-economy-statusline",label+" · "+evidence+verdict));
     }
   }
   async function acceptCouncil(envelope,epoch,save){

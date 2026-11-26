@@ -34,3 +34,11 @@ Reference protocols:
 - https://docs.x.ai/developers/rest-api-reference/inference/responses
 
 Live responses require authorized existing connections; offline fixtures cannot establish which accounts have credits. The separate existing account broker must own subscription/OAuth authentication and any future task-level authorization, replay protection, budget reservations, actual billing reconciliation and production fan-out.
+
+## Version 2: independently verified planning mission
+
+The arithmetic report and export remain backward compatible. The additional route task asks providers to select a nonempty subset from four fixed synthetic jobs with budget 7, maximizing total value. Vivo enumerates all 15 nonempty subsets and determines the unique optimum C,D (cost 7, value 13). A,B is feasible but suboptimal; A,C exceeds the budget. The response parser accepts only canonicalized comma-separated IDs. Invalid answers, alternatives and unavailable lanes remain explicit. The report schema /2 requires a candidate field and verifies that answerCorrect is consistent with the independently computed optimum. The import cannot prove what a provider actually said, and a rehashed fabricated report can still lie consistently. No response is executed or used for real billing.
+
+Offline mixed evidence: `node scripts/vivo/provider-council.mjs --fixture --task=route --out=provider-council-mission-fixture.json`. Live, only on the already configured authorized provider host: add `--task=route` to the existing explicit live command. This is an additional paid probe if executed, not an automatic retry. The exact same constrained task is sent independently to each model; no private conversation history or provider reply is forwarded.
+
+The native Compute browser scenario imports a mixed mission, checks dissent and provenance labels, rejects inconsistent bytes and a rehashed invalid answer, navigates between native objects, reloads the same tab and verifies unchanged accounting and Jev state. A fresh sibling tab has no report. The three mounted application Chromium jobs use ubuntu-24.04 after actual Ubuntu 26.04 installation failures. All remaining CI must be verified before merging.
