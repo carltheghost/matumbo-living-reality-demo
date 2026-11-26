@@ -1,0 +1,17 @@
+{
+  "version": "0.12",
+  "runtime_sha256": {
+    "station.py": "088a268e6c29f0c83503d99e02d9cc06327d570e371edf3eab01f1fbcbb68229",
+    "memory_port.py": "2c3d07ae9e6ee8a4f3aa61fc01a458a2536876dab1f497c8c9a4896cfc93193f",
+    "client.py": "ac49368d695f3d12d043c43a001f65d92c13a743e88d59e7d08cd3c6c17fc12b",
+    "associative.py": "a23ed73c582f2fd5468fe260eea65db431120b7f41290ed07195437c7ee83179",
+    "experience.py": "e56336380aad340242cce5d53d2a41e98c063be555cac777339ba9b4286bdc9d",
+    "reflection.py": "76db4e7caeaf765d119c3b96b087bc40de7f23f5bbfcba705d56f50d53412d88",
+    "metacognition.py": "42b5e402acc240dbfb919c47361fe77be1f3e0d3310fdab0c69090ac72fd1591",
+    "adaptive.py": "5efd40b9176c5275e0d5583194a9320eb7e194246b2f31efc99a24ca346e44c4",
+    "collective.py": "bf0cbb2a04a7415d389b0365ad8e59289f768bca1ef70177efe5f02287bf8707",
+    "organization.py": "a704f635d2f636cc88979eb854dbd7990e1171cb7a029c82bd95c72cc47d611c",
+    "continuity.py": "b44f83ad6cf5bd06dc701cdffd6567dd76e73be609e7c5a0d1808a21356f6596",
+    "strategy.py": "6a9eae562acad89986882a2bcb48748cd77dc8e5a54072246cd0f88ac506d82a"
+  }
+}
