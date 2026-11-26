@@ -1,0 +1,37 @@
+name: Provider council offline evidence
+on:
+  pull_request:
+    paths:
+      - 'scripts/vivo/provider-council.mjs'
+      - 'src/domains/provider-council-evidence.js'
+      - 'src/render/web-ai.js'
+      - 'tests/provider-council.test.mjs'
+      - '.github/workflows/provider-council-ci.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run strict offline provider and evidence tests
+        run: |
+          node --check scripts/vivo/provider-council.mjs
+          node --check src/render/web-ai.js
+          node --test tests/provider-council.test.mjs tests/compute-economy-expanded.test.mjs tests/web-ai-compute.test.mjs
+          node scripts/vivo/provider-council.mjs --fixture --out=provider-council-fixture.json
+          node scripts/vivo/provider-council.mjs --fixture --task=route --out=provider-council-mission-fixture.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: provider-council-fixture
+          path: |
+            provider-council-fixture.json
+            provider-council-mission-fixture.json
+          retention-days: 7

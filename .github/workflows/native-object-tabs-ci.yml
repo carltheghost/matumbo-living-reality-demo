@@ -7,6 +7,8 @@ on:
       - 'src/domains/living-surface-layout-engine.js'
       - 'src/domains/reality-object-engine.js'
       - 'src/render/reality-assembly.js'
+      - 'src/render/reading-anchor.js'
+      - 'tests/reading-anchor.test.mjs'
       - 'src/render/reality-assembly-scene.js'
       - 'src/render/reality-assembly.css'
       - 'src/render/youtube-surface.js'
@@ -38,9 +40,10 @@ jobs:
           node --check src/domains/living-surface-layout-engine.js
           node --check src/domains/reality-object-engine.js
           node --check src/render/reality-assembly.js
+          node --check src/render/reading-anchor.js
           node --check src/render/reality-assembly-scene.js
           node --check src/render/youtube-surface.js
           node --check src/render/feature-navigator.js
           node --check src/main.js
       - name: Focused regressions
-        run: node --test tests/object-is-tab-wrap.test.mjs tests/youtube-surface.test.mjs tests/living-surface-layout-engine.test.mjs tests/reality-object-engine.test.mjs tests/reality-assembly-scene.test.mjs
+        run: node --test tests/object-is-tab-wrap.test.mjs tests/youtube-surface.test.mjs tests/living-surface-layout-engine.test.mjs tests/reality-object-engine.test.mjs tests/reality-assembly-scene.test.mjs tests/reading-anchor.test.mjs

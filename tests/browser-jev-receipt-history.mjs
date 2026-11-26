@@ -6,6 +6,8 @@ import { livingReadingProjection } from "../src/domains/living-surface-layout-en
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { JEV_HISTORY_KEY, parseJevAdviceReceipt } from "../src/domains/jev-advice-receipt.js";
+import { COUNCIL_STORAGE_KEY, COUNCIL_MISSION_TASK, exportCouncilReport } from "../src/domains/provider-council-evidence.js";
+import { runProviderCouncil } from "../scripts/vivo/provider-council.mjs";
 const require = createRequire(process.env.MATUMBO_NODE_DEPENDENCIES ?? new URL("../package.json", import.meta.url));
 const { chromium } = require("playwright");
 const base = new URL(process.env.MATUMBO_PREVIEW_URL ?? "http://127.0.0.1:8123/index.html?feature=web-ai");
@@ -58,8 +60,8 @@ const devices = [{ name: "desktop", viewport: { width: 1280, height: 900 }, mobi
 const selected = process.env.MATUMBO_BROWSER_DEVICE;
 assert.ok(!selected || devices.some(d => d.name === selected), "unknown browser device");
 const scenario = process.env.MATUMBO_BROWSER_SCENARIO ?? "full";
-assert.ok(["full","core","isolation","orientation"].includes(scenario),"unknown browser scenario");
-const report = { schema: "matumbo.jev-receipt-browser-regression/7", scenario, passed: false,
+assert.ok(["full","core","isolation","orientation","council"].includes(scenario),"unknown browser scenario");
+const report = { schema: "matumbo.jev-receipt-browser-regression/8", scenario, passed: false,
   preview: base.href, playwrightVersion: require("playwright/package.json").version,
   fixtures: [metered, conflict, unknown].map(f => f.envelope.receiptSha256), results: [] };
 async function read(page) {
@@ -252,7 +254,7 @@ async function runDevice(browser, device) {
     await input.setInputFiles({name:"jev-fixture.json", mimeType:"application/json",
       buffer:Buffer.from(typeof body === "string" ? body : JSON.stringify(body))});
     await page.waitForFunction(({selector,message}) => {
-      const input = document.querySelector('#web-ai-console input[type="file"]');
+      const input = document.querySelector('#web-ai-console [aria-label="Imported Jev usage — not billing"] input[type="file"]');
       return document.querySelector(selector)?.textContent === message && input && !input.disabled && input.value === "";
     }, {selector:statusSelector,message});
     assert.equal(await input.inputValue(), "");
@@ -339,6 +341,66 @@ async function runDevice(browser, device) {
     await reject(tampered,"No valid downloadable Jev advice receipt was returned.",expected);
     await reject("{bad-json","The receipt is not valid JSON.",expected);
   }
+  async function verifyCouncil(fresh){
+    const report=await runProviderCouncil({task:COUNCIL_MISSION_TASK});
+    const envelope=await exportCouncilReport(report);
+    const region=()=>panel().getByRole("region",{name:"Provider Council evidence — not billing",exact:true});
+    const rows=()=>region().getByLabel("Latest provider council report",{exact:true});
+    const councilStatus=()=>region().getByRole("status");
+    const readCouncil=()=>page.evaluate(key=>({journal:sessionStorage.getItem(key),localJournal:localStorage.getItem(key),
+      text:document.querySelector('[aria-label="Latest provider council report"]')?.textContent}),COUNCIL_STORAGE_KEY);
+    const uploadCouncil=async(body,message)=>{
+      stage="council upload: "+message;
+      const input=region().getByLabel("Import a provider council report",{exact:true});
+      assert.equal(await input.count(),1);
+      await input.scrollIntoViewIfNeeded();
+      await (device.mobile?input.tap({trial:true}):input.click({trial:true}));
+      await input.setInputFiles({name:"council.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(body))});
+      await page.waitForFunction(({message})=>{
+        const r=document.querySelector('[aria-label="Provider Council evidence — not billing"]'),n=r?.querySelector('input[type="file"]');
+        return r?.querySelector('[role="status"]')?.textContent===message&&n&&!n.disabled&&!n.value;
+      },{message});
+      assert.equal(await councilStatus().textContent(),message);
+    };
+    assert.equal(await region().count(),1);
+    const funded=await fund();
+    const jev=await upload(metered.envelope,"Saved 330 input and 20 output tokens.");
+    history(jev,[metered]);observed(funded,jev,metered);
+    const before=await read(page);
+    await uploadCouncil(envelope,"Latest report saved for this tab.");
+    const saved=await readCouncil();
+    assert.equal(saved.journal,JSON.stringify(envelope));assert.equal(saved.localJournal,null);
+    assert.match(saved.text,/Fixture report · not live/);
+    assert.match(saved.text,/Local optimum: C,D · cost 7 \/ 7 · value 13/);
+    assert.match(saved.text,/4 optimal · 2 alternative · 1 invalid · 0 unknown/);
+    assert.match(saved.text,/deepseek.*A,B · feasible-suboptimal/);
+    assert.match(saved.text,/kimi.*A,C · over-budget/);
+    assert.match(saved.text,/xai.*invalid-proposal/);
+    assert.deepEqual(await read(page),before,"council import changed Jev or economic state");
+    await recordCheckpoint({label:"council mission imported with dissent and unchanged accounting",summary:saved.text});
+    const changed={...envelope,reportJson:envelope.reportJson.replace("fixture-council-mission-v1","altered")};
+    await uploadCouncil(changed,"Report rejected. Existing evidence and balances were not changed.");
+    assert.deepEqual(await readCouncil(),saved);assert.deepEqual(await read(page),before);
+    const forged=structuredClone(report);forged.rows.find(row=>row.provider==="kimi").answerCorrect=true;
+    const reportJson=JSON.stringify(forged);
+    await uploadCouncil({...envelope,reportJson,reportSha256:hash(reportJson)},"Report rejected. Existing evidence and balances were not changed.");
+    assert.deepEqual(await readCouncil(),saved);assert.deepEqual(await read(page),before);
+    await recordCheckpoint({label:"changed bytes and rehashed invalid plan rejected"});
+    await navigate(before);
+    assert.deepEqual(await readCouncil(),saved);
+    const restored=await reload([metered],jev.journal,fresh);
+    stage="restore saved council report";
+    await page.waitForFunction(()=>document.querySelector('[aria-label="Provider Council evidence — not billing"] [role="status"]')?.textContent==="Restored latest report for this tab.");
+    assert.deepEqual(await readCouncil(),saved);
+    assert.deepEqual(await read(page),restored);
+    await rows().scrollIntoViewIfNeeded();
+    await page.screenshot({path:resolve(out,device.name+"-council-restored.png")});
+    await recordCheckpoint({label:"council survives actual reload without billing or Jev replay"});
+    const original=page;
+    page=await newPage(original.context());await page.goto(base.href,{waitUntil:"domcontentloaded"});await compute();
+    assert.equal((await readCouncil()).journal,null);assert.equal(await councilStatus().textContent(),"No provider council report imported.");
+    await recordCheckpoint({label:"independent no-opener tab has no council history"});
+  }
   async function verifyOrientation(fresh){
     const funded=await fund();
     const first=await upload(metered.envelope,"Saved 330 input and 20 output tokens.");
@@ -397,7 +459,9 @@ async function runDevice(browser, device) {
     const fresh = await checkpoint("empty native Compute object");
     history(fresh,[]); assert.equal(fresh.journal,null);
     assert.deepEqual(fresh.economy.timeline.events,[]); assert.deepEqual(fresh.metrics,["$0.00","$0.00","0","0"]);
-    if(scenario==="orientation"){
+    if(scenario==="council"){
+      await verifyCouncil(fresh);
+    }else if(scenario==="orientation"){
       await verifyOrientation(fresh);
     }else{
     let twice;
@@ -498,7 +562,14 @@ async function runDevice(browser, device) {
           display:c.display,visibility:c.visibility,overflowY:c.overflowY,flex:c.flex,minHeight:c.minHeight,
           height:c.height,transform:c.transform};
       }
+      const focused=document.activeElement,control=p?.querySelector('input[placeholder="model name"]'),r=control?.getBoundingClientRect();
+      const hit=r&&document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+      const node=window.__TUMBO_REALITY_ASSEMBLY__?.getFeatureObject("web-ai")?.root;
       return {viewport:{width:innerWidth,height:innerHeight},selectedId:window.__TUMBO_REALITY_ASSEMBLY__?.getSnapshot()?.selectedId,
+        focusDiagnostic:{activeTag:focused?.tagName,activeId:focused?.id,activePlaceholder:focused?.getAttribute("placeholder"),
+          expectedControl:geometry(control),focused:focused===control,caret:control?[control.selectionStart,control.selectionEnd]:null,
+          centerHit:hit?{tag:hit.tagName,id:hit.id,className:typeof hit.className==="string"?hit.className:""}:null,
+          scaleRatio:node?node.scale.y/node.scale.x:null},
         assemblyClass:a?.className,readingProjection:a?.dataset.readingProjection,
         panel:geometry(p),head:geometry(p?.querySelector(".web-ai-head")),body:geometry(p?.querySelector(".web-ai-body")),
         tabs:geometry(p?.querySelector(".web-ai-tabs")),boundary:geometry(p?.querySelector(".web-ai-boundary")),

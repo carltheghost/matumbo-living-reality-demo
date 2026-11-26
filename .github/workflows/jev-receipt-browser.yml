@@ -6,6 +6,7 @@ on:
       - 'src/**'
       - 'vendor/**'
       - 'tests/browser-jev-receipt-history.mjs'
+      - 'scripts/vivo/provider-council.mjs'
       - 'package.json'
       - '.github/workflows/jev-receipt-browser.yml'
   workflow_dispatch:
@@ -15,7 +16,7 @@ jobs:
   browser:
     name: Jev receipt browser / ${{ matrix.device }} / ${{ matrix.scenario }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +26,8 @@ jobs:
           - {device: mobile, scenario: core}
           - {device: mobile, scenario: isolation}
           - {device: mobile, scenario: orientation}
+          - {device: desktop, scenario: council}
+          - {device: mobile, scenario: council}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +40,7 @@ jobs:
           npm install --no-save --package-lock=false playwright@1.57.0
           npx playwright install --with-deps chromium
       - name: Run actual object and receipt regression
+        timeout-minutes: 20
         env:
           MATUMBO_BROWSER_DEVICE: ${{ matrix.device }}
           MATUMBO_BROWSER_SCENARIO: ${{ matrix.scenario }}
