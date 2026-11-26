@@ -5,6 +5,63 @@ import {parseCouncilReport,summarizeCouncilMission,COUNCIL_MISSION_SCHEMA} from 
 export const COUNCIL_MEMORY_KEY="matumbo.neural-memory.council.v1";
 export const COUNCIL_MEMORY_LIMIT=64;
 export const COUNCIL_MEMORY_MAX_BYTES=524288;
+export const COUNCIL_CAPSULE_SCHEMA="matumbo.neural-memory-capsule/1";
+export const COUNCIL_CAPSULE_MAX_BYTES=2*COUNCIL_MEMORY_MAX_BYTES+4096;
+const byteLength=value=>new TextEncoder().encode(value).length;
+const exact=(value,keys)=>value!==null&&typeof value==="object"&&!Array.isArray(value)&&
+  Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+const hex=value=>typeof value==="string"&&/^[a-f0-9]{64}$/.test(value);
+async function digest(value,cryptoApi){
+  if(!cryptoApi?.subtle)throw Error("Neural Memory integrity check unavailable.");
+  return Array.from(new Uint8Array(await cryptoApi.subtle.digest("SHA-256",new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function validateJournal(raw,cryptoApi,{canonical=false}={}){
+  if(typeof raw!=="string"||raw.length>COUNCIL_MEMORY_MAX_BYTES||byteLength(raw)>COUNCIL_MEMORY_MAX_BYTES)throw invalid();
+  const envelopes=JSON.parse(raw);
+  if(!Array.isArray(envelopes)||envelopes.length>COUNCIL_MEMORY_LIMIT||
+    (canonical&&JSON.stringify(envelopes)!==raw))throw invalid();
+  const ids=new Set(),entries=[];
+  for(const envelope of envelopes){
+    const report=await parseCouncilReport(envelope,{cryptoApi});
+    if(ids.has(report.runId))throw invalid();
+    ids.add(report.runId);
+    entries.push({envelope,report,record:project(envelope,report)});
+  }
+  return entries;
+}
+function capsuleCopy(capsule){
+  // Copy before yielding and bound both the inner and escaped outer bytes.
+  if(!exact(capsule,["schema","journalJson","journalSha256"])||capsule.schema!==COUNCIL_CAPSULE_SCHEMA||
+    typeof capsule.journalJson!=="string"||capsule.journalJson.length>COUNCIL_MEMORY_MAX_BYTES||
+    !hex(capsule.journalSha256)||byteLength(JSON.stringify(capsule))>COUNCIL_CAPSULE_MAX_BYTES)
+    throw Error("Invalid Neural Memory capsule.");
+  return {schema:capsule.schema,journalJson:capsule.journalJson,journalSha256:capsule.journalSha256};
+}
+async function validateCapsule(capsule,cryptoApi){
+  if(await digest(capsule.journalJson,cryptoApi)!==capsule.journalSha256)throw Error("Neural Memory capsule digest mismatch.");
+  try{return await validateJournal(capsule.journalJson,cryptoApi,{canonical:true});}
+  catch{throw Error("Invalid Neural Memory capsule; no evidence was changed.");}
+}
+function mergeJournal(current,incoming){
+  const known=new Map(current.map(entry=>[entry.report.runId,entry]));
+  const added=[];
+  let duplicates=0;
+  for(const entry of incoming){
+    const previous=known.get(entry.report.runId);
+    if(previous){
+      if(previous.envelope.reportSha256!==entry.envelope.reportSha256)
+        throw Error("Capsule conflicts with saved Neural Memory evidence; nothing was changed.");
+      duplicates++;
+    }else{
+      known.set(entry.report.runId,entry);added.push(entry);
+    }
+  }
+  const entries=[...current,...added];
+  const bytes=JSON.stringify(entries.map(entry=>entry.envelope));
+  if(entries.length>COUNCIL_MEMORY_LIMIT||byteLength(bytes)>COUNCIL_MEMORY_MAX_BYTES)
+    throw Error("Neural Memory is full; no evidence was removed.");
+  return {entries,bytes,added:added.length,duplicates};
+}
 const tails=new WeakMap();
 const invalid=()=>new Error("Neural Memory evidence is invalid; nothing was changed.");
 const unavailable=()=>new Error("Neural Memory tab storage is unavailable.");
@@ -55,18 +112,17 @@ export function createCouncilMemory({storage,cryptoApi=globalThis.crypto}={}){
   async function load(){
     const raw=readRaw(storage);
     if(raw===null)return {raw,entries:[]};
+    try{return {raw,entries:await validateJournal(raw,cryptoApi)};}
+    catch{throw invalid();}
+  }
+  function writeJournal(raw,bytes){
+    // Web Storage's single setItem is the only mutation. It is not a
+    // distributed transaction, and cannot make browser storage tamper-proof.
+    if(readRaw(storage)!==raw)throw Error("Neural Memory changed; recall before saving again.");
     try{
-      if(typeof raw!=="string"||new TextEncoder().encode(raw).length>COUNCIL_MEMORY_MAX_BYTES)throw invalid();
-      const envelopes=JSON.parse(raw);
-      if(!Array.isArray(envelopes)||envelopes.length>COUNCIL_MEMORY_LIMIT)throw invalid();
-      const ids=new Set(),entries=[];
-      for(const envelope of envelopes){
-        const report=await parseCouncilReport(envelope,{cryptoApi});
-        if(ids.has(report.runId))throw invalid();
-        ids.add(report.runId);entries.push({envelope,report,record:project(envelope,report)});
-      }
-      return {raw,entries};
-    }catch{throw invalid();}
+      storage.setItem(COUNCIL_MEMORY_KEY,bytes);
+      if(readRaw(storage)!==bytes)throw Error();
+    }catch{throw Error("Neural Memory could not be saved; check tab storage.");}
   }
   function archive(envelope){
     // Snapshot the exact supplied envelope before yielding to async hashing.
@@ -85,11 +141,7 @@ export function createCouncilMemory({storage,cryptoApi=globalThis.crypto}={}){
       if(new TextEncoder().encode(bytes).length>COUNCIL_MEMORY_MAX_BYTES)throw Error("Neural Memory is full; no evidence was removed.");
       // Recheck after async validation. Same-document writes are serialized;
       // this is not a cross-document transactional or tamper-proof store.
-      if(readRaw(storage)!==raw)throw Error("Neural Memory changed; recall before saving again.");
-      try{
-        storage.setItem(COUNCIL_MEMORY_KEY,bytes);
-        if(readRaw(storage)!==bytes)throw Error();
-      }catch{throw Error("Neural Memory could not be saved; check tab storage.");}
+      writeJournal(raw,bytes);
       return freeze({status:"recorded",record});
     });
   }
@@ -99,5 +151,40 @@ export function createCouncilMemory({storage,cryptoApi=globalThis.crypto}={}){
     const entry=(await load()).entries.find(item=>item.record.memoryId===memoryId);
     return entry?freeze(entry.envelope):null;
   });
-  return Object.freeze({archive,snapshot,search,getEvidence});
+  const exportCapsule=()=>serialize(storage,async()=>{
+    const {entries}=await load();
+    const journalJson=JSON.stringify(entries.map(entry=>entry.envelope));
+    const capsule={schema:COUNCIL_CAPSULE_SCHEMA,journalJson,journalSha256:await digest(journalJson,cryptoApi)};
+    return freeze(capsuleCopy(capsule));
+  });
+  function previewCapsule(capsule){
+    let copy;try{copy=capsuleCopy(capsule);}catch(error){return Promise.reject(error);}
+    return serialize(storage,async()=>{
+      const incoming=await validateCapsule(copy,cryptoApi),{raw,entries}=await load();
+      const merged=mergeJournal(entries,incoming);
+      return freeze({capsuleDigest:copy.journalSha256,baseRevision:await digest(JSON.stringify(raw),cryptoApi),
+        current:entries.length,incoming:incoming.length,added:merged.added,duplicates:merged.duplicates,
+        resulting:merged.entries.length,fixture:incoming.filter(e=>e.report.mode==="fixture").length,
+        liveClaims:incoming.filter(e=>e.report.mode==="live").length});
+    });
+  }
+  function restoreCapsule(capsule,review){
+    let copy,expectedRevision,expectedDigest;
+    try{
+      copy=capsuleCopy(capsule);
+      expectedRevision=review?.baseRevision;expectedDigest=review?.capsuleDigest;
+      if(!hex(expectedRevision)||expectedDigest!==copy.journalSha256)
+        throw Error("Preview this exact capsule before restoring.");
+    }catch(error){return Promise.reject(error);}
+    return serialize(storage,async()=>{
+      const incoming=await validateCapsule(copy,cryptoApi),{raw,entries}=await load();
+      if(await digest(JSON.stringify(raw),cryptoApi)!==expectedRevision)
+        throw Error("Neural Memory changed; preview the capsule again.");
+      const merged=mergeJournal(entries,incoming);
+      if(merged.added)writeJournal(raw,merged.bytes);
+      else if(readRaw(storage)!==raw)throw Error("Neural Memory changed; preview the capsule again.");
+      return freeze({status:merged.added?"restored":"unchanged",added:merged.added,duplicates:merged.duplicates,total:merged.entries.length});
+    });
+  }
+  return Object.freeze({archive,snapshot,search,getEvidence,exportCapsule,previewCapsule,restoreCapsule});
 }

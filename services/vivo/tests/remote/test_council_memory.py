@@ -10,7 +10,7 @@ import unittest
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
-from services.vivo.server.council_memory import EvidenceVault, attach_memory_routes, validate_envelope, MemoryError
+from services.vivo.server.council_memory import EvidenceVault, attach_memory_routes, validate_envelope, MemoryError, CAPSULE_MAX_REQUEST
 from services.vivo.server.remote_application import InvitationStore, Principal, token_hash
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -60,11 +60,11 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.invites.close()
         self.temp.cleanup()
 
-    async def rpc(self, op, args=None, token=OWNER, expected=200, origin=ORIGIN):
+    async def rpc(self, op, args=None, token=OWNER, expected=200, origin=ORIGIN, capsule=False):
         headers = {"Origin": origin}
         if token is not None:
             headers["Authorization"] = "Bearer "+token
-        async with self.client.post("/api/neural-memory", headers=headers,
+        async with self.client.post("/api/neural-memory/capsule" if capsule else "/api/neural-memory", headers=headers,
                                     json={"op":op,"args":args or {}}) as response:
             body = await response.json()
             self.assertEqual(response.status, expected, body)
@@ -254,3 +254,101 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.rpc("reason",scope,token=self.one["token"],expected=401),"AUTH_REQUIRED")
         self.assertEqual(await self.rpc("reason",{**scope,"task":"arithmetic-31-v1"},expected=400),"UNSUPPORTED_REASONING_TASK")
         self.assertEqual(await self.rpc("reason",{**scope,"instruction":"run tools"},expected=400),"REQUEST_INVALID")
+
+
+    async def test_local_capsule_roundtrip_owner_review_private_restore_and_duplicate(self):
+        # Produce the exact transfer using the real JS local journal, not a
+        # Python reimplementation of the source capsule encoder.
+        script = """
+          import {createCouncilMemory} from './src/domains/council-memory.js';
+          import {runProviderCouncil} from './scripts/vivo/provider-council.mjs';
+          import {exportCouncilReport,COUNCIL_MISSION_TASK} from './src/domains/provider-council-evidence.js';
+          const rows=new Map();
+          const journal=createCouncilMemory({storage:{getItem:k=>rows.get(k)??null,setItem:(k,v)=>rows.set(k,v)}});
+          for(const task of [COUNCIL_MISSION_TASK,undefined]){
+            await journal.archive(await exportCouncilReport(await runProviderCouncil(task?{task}:{})));
+          }
+          console.log(JSON.stringify(await journal.exportCapsule()));
+        """
+        capsule = json.loads(subprocess.check_output(["node", "--input-type=module", "-e", script], cwd=ROOT, text=True))
+        envelopes = json.loads(capsule["journalJson"])
+        saved = await self.rpc("archive", {"envelope": envelopes[0]})
+        ident = saved["record"]["memoryId"]
+        await self.rpc("grant", {"memoryId":ident, "invitationId":self.one["id"], "granted":True})
+        before = self.vault.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall()
+        grants = self.vault.db.execute("SELECT * FROM grants").fetchall()
+        for token, expected, error in [(None,401,"AUTH_REQUIRED"),(self.one["token"],403,"FORBIDDEN")]:
+            self.assertEqual(await self.rpc("preview", {"capsule":capsule},token=token,expected=expected,capsule=True),error)
+        review=await self.rpc("preview", {"capsule":capsule},capsule=True)
+        self.assertEqual((review["current"],review["incoming"],review["added"],review["duplicates"],review["resulting"]),(1,2,1,1,2))
+        self.assertEqual((review["fixture"],review["liveClaims"]),(2,0))
+        self.assertTrue(review["newReportsPrivate"])
+        self.assertEqual(self.vault.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall(),before)
+        args={"capsule":capsule,"review":{k:review[k] for k in ("capsuleDigest","baseRevision")}}
+        self.assertEqual(await self.rpc("restore",args,token=self.one["token"],expected=403,capsule=True),"FORBIDDEN")
+        result=await self.rpc("restore",args,capsule=True)
+        self.assertEqual((result["status"],result["added"],result["duplicates"],result["total"]),("restored",1,1,2))
+        self.assertEqual(self.vault.db.execute("SELECT * FROM grants").fetchall(),grants)
+        for envelope in envelopes:
+            result=await self.rpc("get",{"memoryId":"council:"+envelope["reportSha256"]})
+            self.assertEqual(result["envelope"],envelope)
+        self.assertEqual(len((await self.rpc("search",token=self.one["token"]))["records"]),1)
+        self.assertEqual(await self.rpc("get",{"memoryId":"council:"+envelopes[1]["reportSha256"]},
+                                        token=self.one["token"],expected=404),"NOT_FOUND")
+        self.assertEqual(await self.rpc("restore",args,expected=409,capsule=True),"CAPSULE_REVIEW_STALE")
+        review=await self.rpc("preview",{"capsule":capsule},capsule=True)
+        again=await self.rpc("restore",{"capsule":capsule,"review":{k:review[k] for k in ("capsuleDigest","baseRevision")}},capsule=True)
+        self.assertEqual((again["status"],again["added"],again["duplicates"]),("unchanged",0,2))
+        # Reopening the database preserves both evidence and only the old grant.
+        await self.client.close(); self.vault.close(); self.invites.close()
+        self.vault=EvidenceVault(self.path/"evidence.sqlite");self.invites=InvitationStore(self.path/"invites.sqlite")
+        await self.start()
+        self.assertEqual(len((await self.rpc("search"))["records"]),2)
+        self.assertEqual(len((await self.rpc("search",token=self.one["token"]))["records"]),1)
+
+    async def test_capsule_tampering_conflict_and_stale_review_fail_without_partial_import(self):
+        def capsule(envelopes):
+            raw=json.dumps(envelopes,separators=(",",":"),ensure_ascii=False)
+            return {"schema":"matumbo.neural-memory-capsule/1","journalJson":raw,
+                    "journalSha256":hashlib.sha256(raw.encode()).hexdigest()}
+        await self.rpc("archive",{"envelope":self.mission})
+        before=self.vault.db.execute("SELECT * FROM evidence").fetchall()
+        conflict=change(self.mission,lambda r:r["rows"][0].update(latencyMs=13))
+        self.assertEqual(await self.rpc("preview",{"capsule":capsule([self.arithmetic,conflict])},
+                                        expected=409,capsule=True),"RUN_CONFLICT")
+        valid=capsule([self.arithmetic])
+        self.assertEqual(await self.rpc("preview",{"capsule":{**valid,"journalJson":valid["journalJson"]+" "}},
+                                        expected=400,capsule=True),"CAPSULE_DIGEST_MISMATCH")
+        self.assertEqual(await self.rpc("preview",{"capsule":capsule([self.arithmetic,{**self.mission,"reportSha256":"0"*64}])},
+                                        expected=400,capsule=True),"CAPSULE_INVALID")
+        self.assertEqual(await self.rpc("preview",{"capsule":capsule([self.arithmetic,self.arithmetic])},
+                                        expected=400,capsule=True),"CAPSULE_INVALID")
+        self.assertEqual(self.vault.db.execute("SELECT * FROM evidence").fetchall(),before)
+        review=await self.rpc("preview",{"capsule":valid},capsule=True)
+        args={"capsule":valid,"review":{k:review[k] for k in ("capsuleDigest","baseRevision")}}
+        await self.rpc("grant",{"memoryId":"council:"+self.mission["reportSha256"],"invitationId":self.one["id"],"granted":True})
+        self.assertEqual(await self.rpc("restore",args,expected=409,capsule=True),"CAPSULE_REVIEW_STALE")
+        self.assertEqual(self.vault.db.execute("SELECT * FROM evidence").fetchall(),before)
+        self.assertEqual(await self.rpc("preview",{"capsule":valid},origin="https://wrong.test",expected=403,capsule=True),"ORIGIN_NOT_ALLOWED")
+
+    async def test_capsule_large_upload_limit_and_database_rollback(self):
+        entries=[change(self.mission,lambda r:r.update(runId=f"capsule-large-{i}")) for i in range(40)]
+        raw=json.dumps(entries,separators=(",",":"),ensure_ascii=False)
+        capsule={"schema":"matumbo.neural-memory-capsule/1","journalJson":raw,
+                 "journalSha256":hashlib.sha256(raw.encode()).hexdigest()}
+        self.assertGreater(len(raw),65536)
+        review=await self.rpc("preview",{"capsule":capsule},capsule=True)
+        self.assertEqual(review["added"],40)
+        args={"capsule":capsule,"review":{k:review[k] for k in ("capsuleDigest","baseRevision")}}
+        # Force a real SQLite insertion failure after the first row; the
+        # transaction must roll back even the successfully inserted prefix.
+        self.vault.db.execute("""CREATE TRIGGER fail_capsule BEFORE INSERT ON evidence
+            WHEN NEW.run_id='capsule-large-1' BEGIN SELECT RAISE(ABORT,'fixture rollback'); END""")
+        self.assertEqual(await self.rpc("restore",args,expected=503,capsule=True),"MEMORY_STORAGE_UNAVAILABLE")
+        self.assertEqual(self.vault.db.execute("SELECT count(*) FROM evidence").fetchone()[0],0)
+        self.vault.db.execute("DROP TRIGGER fail_capsule")
+        restored=await self.rpc("restore",args,capsule=True)
+        self.assertEqual(restored["total"],40)
+        self.assertEqual(await self.rpc("preview",{"capsule":{"oversize":"x"*CAPSULE_MAX_REQUEST}},
+                                        expected=413,capsule=True),"REQUEST_TOO_LARGE")
+        self.assertEqual(self.vault.db.execute("SELECT count(*) FROM evidence").fetchone()[0],40)

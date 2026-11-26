@@ -82,7 +82,57 @@ shareMemoryId.addEventListener('change',()=>{
   memoryStatus.textContent='Evidence changed. Load invitations and grants for this report.';
 });
 shareInvite.addEventListener('change',updateShareActions);
-memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory);
+const vaultRecovery=element('details');
+vaultRecovery.append(element('summary',{textContent:'Restore a local Neural Memory capsule'}),
+  element('p',{className:'muted',textContent:'Review sends the selected file to this private vault. Restore adds new reports privately and keeps existing grants. No provider calls.'}));
+const vaultCapsuleFile=element('input',{type:'file',accept:'.json,application/json'});
+vaultCapsuleFile.setAttribute('aria-label','Local Neural Memory capsule');
+const vaultReview=element('button',{type:'button',textContent:'Review capsule on server',disabled:true});
+const vaultRestore=element('button',{type:'button',textContent:'Restore reviewed capsule to vault',disabled:true});
+const vaultCapsuleStatus=element('p',{textContent:'Choose a capsule. Nothing is uploaded on file selection.'});
+vaultCapsuleStatus.setAttribute('aria-live','polite');vaultCapsuleStatus.setAttribute('aria-label','Vault capsule status');
+vaultRecovery.append(vaultCapsuleFile,vaultReview,vaultRestore,vaultCapsuleStatus);
+let vaultEpoch=0,vaultBusy=false,vaultStaged=null;
+function updateVaultControls(){
+  vaultCapsuleFile.disabled=vaultBusy;
+  vaultReview.disabled=vaultBusy||!vaultCapsuleFile.files?.length;
+  vaultRestore.disabled=vaultBusy||!vaultStaged;
+}
+function resetVaultCapsule(){
+  vaultEpoch++;vaultBusy=false;vaultStaged=null;vaultCapsuleFile.value='';vaultRecovery.open=false;
+  vaultCapsuleStatus.textContent='Choose a capsule. Nothing is uploaded on file selection.';updateVaultControls();
+}
+vaultCapsuleFile.onchange=()=>{
+  vaultEpoch++;vaultStaged=null;vaultCapsuleStatus.textContent='File selected. Review explicitly to send it to the private vault.';updateVaultControls();
+};
+vaultReview.onclick=async()=>{
+  if(vaultBusy||!vaultCapsuleFile.files?.length||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++vaultEpoch,file=vaultCapsuleFile.files[0];
+  const current=()=>transport===client&&!client.closed&&epoch===vaultEpoch&&role==='owner';
+  vaultBusy=true;vaultStaged=null;updateVaultControls();
+  try{
+    if(file.size>1052672)throw Error('Capsule exceeds the local recovery file limit.');
+    const capsule=JSON.parse(await file.text());if(!current())return;
+    const review=await client.reviewMemoryCapsule(capsule);if(!current())return;
+    vaultStaged={capsule,review};
+    vaultCapsuleStatus.textContent='Preview: '+review.added+' new · '+review.duplicates+' duplicates · '+review.current+' existing. '+review.fixture+' fixture / '+review.liveClaims+' host-reported live claims. New reports stay private.';
+  }catch(error){if(current())vaultCapsuleStatus.textContent=error.code||error.message;}
+  finally{if(current()){vaultBusy=false;updateVaultControls();}}
+};
+vaultRestore.onclick=async()=>{
+  if(vaultBusy||!vaultStaged||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++vaultEpoch,staged=vaultStaged;
+  const current=()=>transport===client&&!client.closed&&epoch===vaultEpoch&&role==='owner';
+  vaultBusy=true;vaultStaged=null;updateVaultControls();
+  try{
+    const result=await client.restoreMemoryCapsule(staged.capsule,staged.review);if(!current())return;
+    vaultCapsuleFile.value='';
+    vaultCapsuleStatus.textContent='Restored '+result.added+' new reports · '+result.duplicates+' duplicates skipped · '+result.total+' in private vault.';
+    await recallMemory();
+  }catch(error){if(current())vaultCapsuleStatus.textContent=(error.code||error.message)+' · Recall the vault and review again before another restore.';}
+  finally{if(current()){vaultBusy=false;updateVaultControls();}}
+};
+memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory,vaultRecovery);
 const agentContext=element('details');
 agentContext.append(element('summary',{textContent:'Prepare agent evidence context'}),
   element('p',{className:'muted',textContent:'Choose a task and provenance. Recall returns authorized evidence only, including disagreement. No model call or automatic action.'}));
@@ -111,7 +161,7 @@ let memoryEpoch=0,memoryCursor=null;
 resetSharing();
 function clearMemoryView(){
   memoryEpoch++;memoryCursor=null;clearReasoning();memoryResults.replaceChildren();resetSharing();
-  memoryFile.value='';memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
+  memoryFile.value='';resetVaultCapsule();memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
   taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;reasonEvidence.disabled=false;
   memoryStatus.textContent='Connect to recall evidence.';
 }

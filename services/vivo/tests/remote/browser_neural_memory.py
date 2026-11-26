@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -80,17 +81,38 @@ async def main():
                     from playwright.async_api import expect
                     await expect(locator).to_contain_text(expected, timeout=15000)
                 await open_panel(owner, "neural")
-                for envelope in reports:
-                    await owner_sheet.get_by_label("Council report to archive").set_input_files(
-                        {"name":"fixture.json","mimeType":"application/json","buffer":json.dumps(envelope).encode()})
-                    await owner_sheet.get_by_role("button",name="Archive selected report").click()
-                    await status(owner_status,"Report archived on private server.")
+                await owner_sheet.get_by_label("Council report to archive").set_input_files(
+                    {"name":"fixture.json","mimeType":"application/json","buffer":json.dumps(reports[0]).encode()})
+                await owner_sheet.get_by_role("button",name="Archive selected report").click()
+                await status(owner_status,"Report archived on private server.")
                 await owner_sheet.get_by_role("button",name="Recall evidence").click()
+                await status(owner_status,"1 accessible reports")
+                await owner_sheet.get_by_text("Restore a local Neural Memory capsule",exact=True).click()
+                raw=json.dumps(reports,separators=(",",":"),ensure_ascii=False)
+                capsule={"schema":"matumbo.neural-memory-capsule/1","journalJson":raw,
+                         "journalSha256":hashlib.sha256(raw.encode()).hexdigest()}
+                capsule_status=owner_sheet.get_by_label("Vault capsule status")
+                capsule_input=owner_sheet.get_by_label("Local Neural Memory capsule")
+                review_button=owner_sheet.get_by_role("button",name="Review capsule on server")
+                restore_button=owner_sheet.get_by_role("button",name="Restore reviewed capsule to vault")
+                capsule_requests=[]
+                owner.on("request",lambda request: capsule_requests.append(request.url) if request.url.endswith("/api/neural-memory/capsule") else None)
+                await capsule_input.set_input_files({"name":"recovery.json","mimeType":"application/json","buffer":json.dumps(capsule).encode()})
+                check("file selection does not upload or enable restore",not capsule_requests and await restore_button.is_disabled())
+                await review_button.click()
+                await status(capsule_status,"Preview: 1 new · 1 duplicates · 1 existing.")
+                await owner_sheet.get_by_role("button",name="Recall evidence").click()
+                await status(owner_status,"1 accessible reports")
+                check("review alone does not archive evidence",await owner_sheet.get_by_label("Remote Neural Memory results").locator("details").count()==1)
+                await restore_button.click()
+                await status(capsule_status,"Restored 1 new reports · 1 duplicates skipped · 2 in private vault.")
                 await status(owner_status,"2 accessible reports")
-                check("owner archives two reports", await owner_sheet.get_by_label("Remote Neural Memory results").locator("details").count()==2)
+                check("owner archives and restores two reports",await owner_sheet.get_by_label("Remote Neural Memory results").locator("details").count()==2)
+                check("exactly one review and one restore request",len(capsule_requests)==2)
 
                 await open_panel(editor, "neural")
                 check("editor cannot see archive or grant controls", not await editor_sheet.get_by_role("button",name="Archive selected report").is_visible())
+                check("editor cannot see private capsule restore",not await editor_sheet.get_by_text("Restore a local Neural Memory capsule",exact=True).is_visible())
                 await editor_sheet.get_by_text("Prepare agent evidence context",exact=True).click()
                 await editor_sheet.get_by_label("Required provider in evidence").select_option("kimi")
                 await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
