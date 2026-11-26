@@ -225,7 +225,9 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   const taskDetail=node('pre','No task selected.');taskDetail.style.whiteSpace='pre-wrap';taskDetail.style.overflowWrap='anywhere';
   let journal=null,taskBusy=false,taskScope=null,taskScopeEpoch=0,recommendation=null;
   section.dataset.taskBusy='false';
-  let planPreview=null,planInputEpoch=0;
+  let planPreview=null,planInputEpoch=0,recoveryPreview=null,recoveryReviewEpoch=0;
+  const recoveryReason=node('input');recoveryReason.maxLength=160;recoveryReason.setAttribute('aria-label','Reason for reopening task');recoveryReason.placeholder='Reason for reopening';
+  const recoveryDetail=node('pre','Select a task to inspect its blockers.');recoveryDetail.setAttribute('aria-live','polite');recoveryDetail.style.whiteSpace='pre-wrap';recoveryDetail.style.overflowWrap='anywhere';
   const planObjective=node('input');planObjective.maxLength=160;planObjective.setAttribute('aria-label','Mission objective');planObjective.placeholder='Objective';
   const planLines=node('textarea');planLines.rows=5;planLines.maxLength=8192;planLines.setAttribute('aria-label','Mission plan steps');
   planLines.placeholder='key | task title | agent source | prerequisite keys';
@@ -244,8 +246,12 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     planSummary.textContent=(journal?.plans||[]).map(p=>p.objective+' · '+p.completed+'/'+p.total+' completed · '+p.ready+' ready · '+p.blocked+' blocked · '+p.needsReview+' needs review · '+p.closedIncomplete+' closed incomplete').join('\n')||'No saved mission plans in this world/branch.';
   }
   function resetRecommendation(){recommendation=null;recommendationDetail.textContent='Select a detached, ready task to review agent recommendations.';approveTaskButton.disabled=true;}
+  function resetRecovery(){
+    const old=recoveryPreview;recoveryPreview=null;recoveryReviewEpoch++;if(old?.reviewToken)globalThis.VivaPhoneAgentAdmin?.taskAccess?.discardRecovery?.(old.reviewToken);
+    recoveryDetail.textContent='Select a task to inspect its blockers.';recoveryReason.value='';reopenTaskButton.disabled=true;
+  }
   function drawTask(){
-    resetRecommendation();
+    resetRecommendation();resetRecovery();
     const task=journal?.tasks.find(t=>t.id===taskPicker.value);
     if(!task){taskDetail.textContent='No task selected.';return;}
     const attached=journal.attachments.some(a=>a.taskId===task.id),mission=missionView(journal,task);
@@ -254,10 +260,11 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
       +'Confirmed '+count('confirmed')+' · unresolved '+count('pending')+' · conflicts '+count('conflict')+' · not dispatched '+count('not-dispatched')+'\n'
       +task.steps.map(s=>s.state+' · '+(s.sourceId||task.sourceId)+' · '+s.entityId+' · '+s.operationId+(s.state==='confirmed'?' · revision '+s.revision:'')).join('\n')
       +(task.handoffs||[]).map(h=>'\nHandoff · '+h.from+' → '+h.to+' · epoch '+h.epoch).join('')
+      +(task.recoveries||[]).map(r=>'\nReopened · '+r.sourceId+' · '+r.reason+' · epoch '+r.epoch+' · '+r.confirmed+' confirmed receipt(s) retained').join('')
       +mission.dependencies.map(d=>'\nPrerequisite · '+d.title+' · '+d.status+' · '+d.receipts.length+' confirmed receipt(s)').join('');
   }
   function invalidateTaskScope(){
-    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;resetRecommendation();resetPlanPreview();planSummary.textContent='Refresh saved tasks to see mission progress.';
+    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;resetRecommendation();resetPlanPreview();resetRecovery();planSummary.textContent='Refresh saved tasks to see mission progress.';
     taskPicker.replaceChildren();prerequisitePicker.replaceChildren();taskDetail.textContent='No task selected.';taskStatus.textContent='World changed. Refresh to inspect the current world’s journal.';
   }
   async function refreshTasks(preferred){
@@ -313,6 +320,27 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   }));savePlanButton.disabled=true;
   planObjective.addEventListener('input',resetPlanPreview);planLines.addEventListener('input',resetPlanPreview);agentPicker.addEventListener('change',resetPlanPreview);
   const examplePlanButton=button('Load native edit example',()=>{resetPlanPreview();planLines.value='prepareA | Record first object state | |\nprepareB | Record second object state | |\nchange | Apply reviewed object change | | prepareA,prepareB';});
+  const diagnoseTaskButton=button('Review selected task blockers',taskRun(async()=>{
+    resetRecovery();const id=selectedTask(),epoch=taskScopeEpoch,reviewEpoch=recoveryReviewEpoch;
+    const report=await taskAdmin().diagnose(id);invalidateTaskScope();
+    if(disposed||epoch!==taskScopeEpoch||reviewEpoch!==recoveryReviewEpoch||taskPicker.value!==id){if(report.reviewToken)taskAdmin().discardRecovery(report.reviewToken);return;}
+    recoveryPreview=report;
+    const rows=report.roots.map(r=>r.title+' · '+r.state+' · '+r.counts.confirmed+' confirmed · '+r.counts.pending+' pending · '+r.counts.conflict+' conflicting\n'+r.next
+      +(r.assignment?.sourceId?'\nSuggested '+(r.assignment.afterReopen?'after reopening: ':'agent: ')+r.assignment.sourceId+' · '+r.assignment.relatedChangedReceipts+' related changed receipt(s)':'')
+      +(r.canReopen&&r.taskId!==id?'\nSelect this prerequisite in Saved task, then review it explicitly.':''));
+    recoveryDetail.textContent=report.target.title+' · '+report.target.state+'\n'+(rows.join('\n\n')||report.target.next);
+    reopenTaskButton.disabled=!report.reviewToken;
+  }));
+  const reopenTaskButton=button('Reopen reviewed incomplete task',taskRun(async()=>{
+    const report=recoveryPreview;
+    if(!report?.reviewToken||report.target.taskId!==selectedTask())throw Error('Review a current archived task first.');
+    const epoch=taskScopeEpoch,reviewEpoch=recoveryReviewEpoch,reason=recoveryReason.value;
+    recoveryPreview=null;reopenTaskButton.disabled=true;
+    const result=await taskAdmin().commitRecovery(report.reviewToken,reason);invalidateTaskScope();
+    if(disposed||epoch!==taskScopeEpoch||reviewEpoch!==recoveryReviewEpoch)return;
+    await refreshTasks(result.taskId);
+    taskStatus.textContent='Reopened task with its evidence intact. No agent attached and no action replayed.';
+  }));reopenTaskButton.disabled=true;
   const reconcileTaskButton=button('Reconcile native receipts',taskRun(async()=>{await taskAdmin().reconcile();await refreshTasks();}));
   const pauseTaskButton=button('Detach selected agent from task',taskRun(async()=>{taskAdmin().pause(selectedAgent());await refreshTasks();}));
   const completeTaskButton=button('Complete selected task with confirmed receipts',taskRun(async()=>{
@@ -321,7 +349,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   }));
   const closeTaskButton=button('Close attached task journal',taskRun(async()=>{await taskAdmin().finish(selectedAgent());await refreshTasks();}));
   section.append(node('h4','Persistent agent task journal'),node('p','Use the active agent selector above. Only attached native world edits are journaled. Review receipts before handoff. An explicit handoff replaces the chosen agent’s task attachment without changing native grants. Unresolved object edits block other attached tasks. Detaching does not revoke native action permissions. No automatic replay or cloud sync. Prerequisites must be explicitly completed with confirmed native receipts. Closing a task without completion does not unblock its dependents.'),
-    taskTitle,node('p','Optional prerequisites for a new task (select saved tasks first).'),prerequisitePicker,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,handoffTaskButton,reconcileTaskButton,pauseTaskButton,completeTaskButton,closeTaskButton,taskStatus,taskDetail,node('h4','Mission agent recommendation'),node('p','Advisory only. Uses active native grants, local workload, task continuity, related changed receipts and optional memory availability. Approval attaches a task without granting action permissions.'),recommendTaskButton,approveTaskButton,recommendationDetail,node('h4','Shared mission plan'),node('p','One line per subtask: key | title | registered source ID | comma-separated prerequisite keys. Leave source blank to use the selected active agent. The example is a native-edit template, not AI-generated task decomposition. Review and save creates detached tasks only; each still uses the existing recommendation and receipt gates.'),planObjective,planLines,examplePlanButton,previewPlanButton,savePlanButton,planDetail,planSummary);
+    taskTitle,node('p','Optional prerequisites for a new task (select saved tasks first).'),prerequisitePicker,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,handoffTaskButton,reconcileTaskButton,pauseTaskButton,completeTaskButton,closeTaskButton,taskStatus,taskDetail,node('h4','Mission agent recommendation'),node('p','Advisory only. Uses active native grants, local workload, task continuity, related changed receipts and optional memory availability. Approval attaches a task without granting action permissions.'),recommendTaskButton,approveTaskButton,recommendationDetail,node('h4','Adaptive mission recovery'),node('p','Review the root causes blocking this task. Only an incomplete archive with no unresolved receipts can be reopened. The original task ID, prerequisites, receipts and source history remain intact. Review assignment separately after reopening.'),diagnoseTaskButton,recoveryDetail,recoveryReason,reopenTaskButton,node('h4','Shared mission plan'),node('p','One line per subtask: key | title | registered source ID | comma-separated prerequisite keys. Leave source blank to use the selected active agent. The example is a native-edit template, not AI-generated task decomposition. Review and save creates detached tasks only; each still uses the existing recommendation and receipt gates.'),planObjective,planLines,examplePlanButton,previewPlanButton,savePlanButton,planDetail,planSummary);
   for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])worldEvents?.addEventListener?.(event,invalidateTaskScope);
   invalidateTaskScope();
   refreshMemoryAgents();

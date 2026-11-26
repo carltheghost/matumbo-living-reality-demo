@@ -2,6 +2,7 @@
 import {TASK_JOURNAL_SCHEMA as SCHEMA,LEGACY_TASK_JOURNAL_SCHEMA,normalizePrerequisites,validateMissionGraph,addPrerequisites,assertMissionReady,completeMissionTask,missionView} from './mission-graph.mjs';
 import {rankMissionAgents} from './mission-orchestrator.mjs';
 import {compileMissionPlan,buildPlannedTasks,validatePlanMetadata,summarizeMissionPlans} from './mission-planner.mjs';
+import {diagnoseMissionTask,recoverySnapshot,reopenReviewedTask,validateRecoveryHistory} from './mission-recovery.mjs';
 const TOOL='task.progress',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
@@ -24,7 +25,7 @@ const valid=(journal,key)=>{
     need(owner===t.sourceId,'TASK_STORAGE_INVALID');
     for(const s of t.steps){need(s&&(s.sourceId===undefined?history.length===0:owners.has(s.sourceId))&&(s.spaceId===undefined||id(s.spaceId)),'TASK_STORAGE_INVALID');need(id(s.operationId)&&id(s.entityId)&&/^[a-f0-9]{64}$/.test(s.sha256)&&['pending','confirmed','conflict','not-dispatched'].includes(s.state)&&!operations.has(s.operationId),'TASK_STORAGE_INVALID');operations.add(s.operationId);if(s.state==='confirmed')need(Number.isSafeInteger(s.revision)&&s.revision>=0&&typeof s.changed==='boolean','TASK_STORAGE_INVALID');}
   }
-  return validatePlanMetadata(validateMissionGraph(journal));
+  return validateRecoveryHistory(validatePlanMetadata(validateMissionGraph(journal)));
 };
 /** Atomic same-origin IndexedDB updates; deliberately no volatile fallback. */
 export class IndexedDbTaskStore {
@@ -41,7 +42,7 @@ export class IndexedDbTaskStore {
 }
 /** Host is trusted; its native registry remains the only world-action authority. */
 export function createTaskContinuity({registry,downstream,validateEdit,getEnvelope,store=new IndexedDbTaskStore(),newId=()=>crypto.randomUUID()}){
-  const bindings=new Map(),attaching=new Map();let currentKey=null,lastWarning=null,scopeEpoch=0,planDraft=null;
+  const bindings=new Map(),attaching=new Map();let currentKey=null,lastWarning=null,scopeEpoch=0,planDraft=null,recoveryDraft=null;
   const active=session=>{const a=registry.agentController.assertActive(session);return {sourceId:a.sourceId,sessionId:a.sessionId,generation:a.generation};};
   const sameAgent=(a,b)=>a?.sessionId===b?.sessionId&&a?.generation===b?.generation&&a?.sourceId===b?.sourceId;
   function syncScope(){const scope=scopeOf(getEnvelope());const key=scope?keyOf(scope):null;if(key!==currentKey){clear();currentKey=key;}return key;}
@@ -52,7 +53,7 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
   function binding(session){syncScope();const agent=active(session),b=bindings.get(agent.sessionId);if(b&&!sameAgent(b.agent,agent)){bindings.delete(agent.sessionId);return null;}return b||null;}
   function checkBinding(b){need(syncScope()===b.key&&bindings.get(b.agent.sessionId)===b&&sameAgent(active(b.agent),b.agent),'TASK_ATTACHMENT_STALE');}
   function pause(session){const sessionId=typeof session==='string'?session:session?.sessionId;bindings.delete(sessionId);attaching.delete(sessionId);}
-  function clear(){bindings.clear();attaching.clear();planDraft=null;scopeEpoch++;}
+  function clear(){bindings.clear();attaching.clear();planDraft=null;recoveryDraft=null;scopeEpoch++;}
   // Owner-side review only. The preview is kept in this host, not entrusted to
   // a mutable client response. Saving never attaches or dispatches a task.
   function assertPlanCurrent(draft){
@@ -113,6 +114,52 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       return {...a,status,tools,attachmentPending:a.sessionId!==ignorePending&&attaching.has(a.sessionId)};
     });
     return rankMissionAgents({tasks:j.tasks,task,agents,attachments,mission:missionView(j,task)});
+  }
+  function assertRecoveryCurrent(draft){
+    need(syncScope()===draft.key&&scopeEpoch===draft.epoch&&recoveryDraft===draft,'RECOVERY_PREVIEW_STALE');
+  }
+  async function diagnose(taskId){
+    const key=scopeKey(),epoch=scopeEpoch;
+    need(!recoveryDraft?.committing,'RECOVERY_COMMIT_IN_PROGRESS');
+    const draft={token:newId(),key,epoch,taskId,snapshot:null,committing:false};
+    recoveryDraft=draft;
+    try{
+      const result=await tx(key,j=>{
+        assertRecoveryCurrent(draft);
+        const task=find(j,taskId),report=diagnoseMissionTask(j,taskId);
+        const roots=report.roots.map(row=>{
+          // Show a possible replacement using existing live capabilities and
+          // related changed receipts. Hypothetical reopening never modifies the journal.
+          if(row.waiting.length||!['closed-incomplete','review-completion','ready-for-work'].includes(row.state))return row;
+          const original=find(j,row.taskId);
+          const candidate=recommendationFor(j,row.canReopen?{...original,closed:false}:original);
+          const top=candidate.candidates.find(a=>a.sessionId===candidate.recommended?.sessionId);
+          return {...row,assignment:{sourceId:top?.sourceId||null,reason:candidate.reason,
+            relatedChangedReceipts:top?.relatedChangedReceipts??null,memoryAvailable:top?.memoryAvailable??false,
+            afterReopen:row.canReopen,authorizesAction:false}};
+        });
+        return {report:{...report,roots},snapshot:report.target.canReopen?recoverySnapshot(task):null};
+      });
+      assertRecoveryCurrent(draft);
+      draft.snapshot=result.snapshot;
+      if(!draft.snapshot)recoveryDraft=null;
+      return {...result.report,reviewToken:draft.snapshot?draft.token:null};
+    }catch(error){if(recoveryDraft===draft)recoveryDraft=null;throw error;}
+  }
+  function discardRecovery(token){if(recoveryDraft&&recoveryDraft.token===token&&!recoveryDraft.committing)recoveryDraft=null;}
+  async function commitRecovery(token,reason){
+    const key=scopeKey(),draft=recoveryDraft;
+    need(draft&&draft.token===token&&draft.key===key&&draft.snapshot&&!draft.committing,'RECOVERY_PREVIEW_STALE');
+    assertRecoveryCurrent(draft);draft.committing=true;
+    try{
+      return await tx(key,j=>{
+        assertRecoveryCurrent(draft);
+        const task=find(j,draft.taskId);
+        need(recoverySnapshot(task)===draft.snapshot,'RECOVERY_PREVIEW_STALE');
+        const record=reopenReviewedTask(task,reason);
+        return {taskId:task.id,epoch:task.epoch,sourceId:task.sourceId,record,authorizesAction:false};
+      });
+    }finally{if(recoveryDraft===draft)recoveryDraft=null;}
   }
   async function recommend(taskId){
     const key=scopeKey(),epoch=scopeEpoch;
@@ -201,5 +248,5 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       try{if(syncScope()===b.key)await reconcile();}catch{lastWarning='Task evidence could not be refreshed. Review the existing operation before retrying.';}
     }
   }
-  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,approveRecommendation,previewPlan,commitPlan,discardPlan,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
+  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,approveRecommendation,previewPlan,commitPlan,discardPlan,diagnose,commitRecovery,discardRecovery,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
 }
