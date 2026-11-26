@@ -22,13 +22,15 @@ function observe(tasks,cue){
       const from=t.steps[i];if(from.state!=='confirmed'||address(from)!==cue)continue;
       const to=t.steps[i+1],next=to?.state==='confirmed'?address(to):null;
       const key=next?'object:'+next:to?'unknown':'terminal';
-      if(!outcomes.has(key))outcomes.set(key,next?{kind:'object',key:next,spaceId:to.spaceId,entityId:to.entityId,from:witness(t,from),to:witness(t,to)}:{kind:key});
+      if(!outcomes.has(key))outcomes.set(key,next?{kind:'object',key:next,spaceId:to.spaceId,entityId:to.entityId,from:witness(t,from),to:witness(t,to)}:{kind:key,from:witness(t,from)});
     }
     if(outcomes.size===1)rows.push({taskId:t.id,...outcomes.values().next().value});
     else if(outcomes.size>1)rows.push({taskId:t.id,kind:'ambiguous'});
   }
   return rows;
 }
+/** Shared exact observation rule for forecasts and preregistered experiments. */
+export function observeMissionSequence(tasks,args){return observe(tasks,address(normalizeMissionForecast(args)));}
 function summarize(rows){
   const counts={matchingTasks:rows.length,objectVotes:0,terminal:0,unknown:0,ambiguous:0},byObject=new Map();
   for(const r of rows){

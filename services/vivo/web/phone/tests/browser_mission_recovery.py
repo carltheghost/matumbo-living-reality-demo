@@ -193,25 +193,69 @@ def exercise(page, route, label):
     assert prediction["counts"]["matchingTasks"]==3 and prediction["retrospective"]["evaluated"]==0,prediction
     assert prediction["retrospective"]["observedAccuracy"] is None and not prediction["calibratedProbability"] and not prediction["authorizesAction"],prediction
     assert sorted(w["taskId"] for w in prediction["candidates"][0]["witnesses"])==sorted(sources),prediction
+    # Register the forecast before future observations and persist it through
+    # a reload. The new outcome deliberately contradicts the synthetic history.
+    panel.get_by_role("textbox",name="Experiment cue space ID").fill("root")
+    panel.get_by_role("textbox",name="Experiment cue object ID").fill("relic")
+    panel.get_by_role("textbox",name="Experiment hypotheses").fill("root | workpiece\nroot | portal")
+    panel.get_by_role("checkbox",name="Preserve current forecast summary").check()
+    panel.get_by_role("button",name="Register experiment before work").click()
+    idle()
+    experiment_text=panel.locator("#vivoMissionExperiment").inner_text()
+    assert "Primary: root / workpiece" in experiment_text and "Alternative: root / portal" in experiment_text,experiment_text
+    assert "Primary outcome: pending" in experiment_text,experiment_text
     forecast_saved=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
     assert len(forecast_saved["tasks"])==4 and len(forecast_saved["missionRecallGrants"])==1,forecast_saved
     assert sum(len(t["steps"]) for t in forecast_saved["tasks"])==6,forecast_saved
+    assert forecast_saved["experiments"]["counts"]["pending"]==1,forecast_saved
+    registered=forecast_saved["experiments"]["reports"][0]["registration"]
+    assert registered["forecast"]["suggestion"]["entityId"]=="workpiece",registered
+    assert registered["forecast"]["suggestion"]["supportingTasks"]==3,registered
+    assert not any(task_id in json.dumps(registered) for task_id in sources),registered
     enter_local(page,route,forecast_world)
     open_agent_panel(page)
     forecast_restored=page.evaluate("""async()=>{
       const state=await window.VivaPhoneAgentAdmin.taskAccess.inspect(),e=await window.VivaPhoneEngine.snapshot();
-      return {tasks:state.tasks,experience:state.experience,attachments:state.attachments,grants:state.missionRecallGrants,
+      return {tasks:state.tasks,experience:state.experience,experiments:state.experiments,attachments:state.attachments,grants:state.missionRecallGrants,
         receipts:e.snapshot.localOperationResults.filter(r=>r.operationId.startsWith('forecast:')).map(r=>r.operationId)};
     }""")
     assert forecast_restored["tasks"]==forecast_saved["tasks"] and forecast_restored["experience"]==forecast_saved["experience"],forecast_restored
     assert forecast_restored["attachments"]==[] and forecast_restored["grants"]==[],forecast_restored
+    assert forecast_restored["experiments"]==forecast_saved["experiments"],forecast_restored
     assert sorted(forecast_restored["receipts"])==sorted(["forecast:"+kind+":"+str(i) for kind in ["cue","next"] for i in range(3)]),forecast_restored
+    resumed=page.evaluate("""async taskId=>{
+      const admin=window.VivaPhoneAgentAdmin;
+      const agent=admin.register({sourceId:'forecast-target',capabilities:['world.read','world.edit']});
+      await admin.taskAccess.resume(agent,taskId);return agent;
+    }""",future["taskId"])
+    first_observation=page.evaluate(edit,{"agent":resumed,"operationId":"experiment:cue","amount":0,"entityId":"relic"})
+    second_observation=page.evaluate(edit,{"agent":resumed,"operationId":"experiment:alternative","amount":0,"entityId":"portal"})
+    assert first_observation["result"]["status"]=="accepted" and second_observation["result"]["status"]=="accepted",(first_observation,second_observation)
+    assert second_observation["progress"]["experiment"]["status"]=="pending",second_observation
+    page.evaluate("""async ({agent,task})=>window.VivaPhoneAgentAdmin.taskAccess.complete(agent,{taskId:task.id,epoch:task.epoch})""",
+                  {"agent":resumed,"task":second_observation["progress"]["task"]})
+    evaluated=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
+    report=evaluated["experiments"]["reports"][0]
+    assert report["registration"]==registered and report["primaryOutcome"]=="incorrect" and report["forecastOutcome"]=="incorrect",report
+    assert [h["result"] for h in report["hypotheses"]]==["contradicted","supported"],report
+    assert report["observation"]["to"]["operationId"]=="experiment:alternative",report
+    panel=page.locator("#vivo-ai-accounts")
+    panel.get_by_role("button",name="Refresh saved tasks").click()
+    idle()
+    panel.get_by_role("combobox",name="Saved task in this world and branch").select_option(future["taskId"])
+    experiment_text=panel.locator("#vivoMissionExperiment").inner_text()
+    assert "Primary outcome: incorrect" in experiment_text and "Alternative: root / portal · supported" in experiment_text,experiment_text
+    enter_local(page,route,forecast_world)
+    open_agent_panel(page)
+    final_state=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
+    assert final_state["tasks"]==evaluated["tasks"] and final_state["experiments"]==evaluated["experiments"],final_state
+    assert final_state["attachments"]==[] and final_state["missionRecallGrants"]==[],final_state
     return {"rootDiagnosed":True,"reopened":True,"replacementRecommended":True,"originalReceiptPreserved":True,
-            "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":9,
+            "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":11,
             "collectiveExperiencePreserved":True,"originalSourceCredited":True,"scopedAgentExperience":True,
             "exactNeuralRecall":True,"grantNotRestored":True,"crossMissionReuse":True,
             "multiHopAssociation":True,"unsharedPathRejected":True,"causalClaim":False,
-            "historicalForecast":True,"sparseEvidenceAbstained":True,"calibratedProbability":False,"stationaryForecastFixture":True,"forecastReload":True}
+            "historicalForecast":True,"sparseEvidenceAbstained":True,"calibratedProbability":False,"stationaryForecastFixture":True,"forecastReload":True,"prospectiveExperiment":True,"incorrectForecastPreserved":True,"experimentReload":True}
 
 
 def main(base):

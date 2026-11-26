@@ -10,6 +10,7 @@ import {normalizeMissionForecast,forecastMissionEvidence} from './mission-foreca
 import {validateScenario,compareMissionScenarios} from './mission-scenarios.mjs';
 import {compareMissionStrategies} from './mission-strategy.mjs';
 import {reviewMissionStrategies} from './mission-critic.mjs';
+import {normalizeExperimentSpec,captureExperimentForecast,registerMissionExperiment,validateExperimentHistory,evaluateMissionExperiment,summarizeExperiments} from './mission-experiment.mjs';
 const TOOL='task.progress',RECALL='neural.missionRecall',TRACE='neural.missionTrace',FORECAST='neural.missionForecast',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
@@ -32,7 +33,7 @@ const valid=(journal,key)=>{
     need(owner===t.sourceId,'TASK_STORAGE_INVALID');
     for(const s of t.steps){need(s&&(s.sourceId===undefined?history.length===0:owners.has(s.sourceId))&&(s.spaceId===undefined||id(s.spaceId)),'TASK_STORAGE_INVALID');need(id(s.operationId)&&id(s.entityId)&&/^[a-f0-9]{64}$/.test(s.sha256)&&['pending','confirmed','conflict','not-dispatched'].includes(s.state)&&!operations.has(s.operationId),'TASK_STORAGE_INVALID');operations.add(s.operationId);if(s.state==='confirmed')need(Number.isSafeInteger(s.revision)&&s.revision>=0&&typeof s.changed==='boolean','TASK_STORAGE_INVALID');}
   }
-  return validateRecoveryHistory(validatePlanMetadata(validateMissionGraph(journal)));
+  return validateExperimentHistory(validateRecoveryHistory(validatePlanMetadata(validateMissionGraph(journal))));
 };
 /** Atomic same-origin IndexedDB updates; deliberately no volatile fallback. */
 export class IndexedDbTaskStore {
@@ -266,7 +267,7 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
     if(bindings.get(b.agent.sessionId)===b)pause(b.agent);
     return result;
   }
-  async function inspect(){const key=scopeKey(),epoch=scopeEpoch;const tasks=await tx(key,j=>j.tasks);need(syncScope()===key&&scopeEpoch===epoch,'TASK_ATTACHMENT_STALE');for(const [sid,b] of bindings){try{checkBinding(b);const t=tasks.find(t=>t.id===b.taskId);if(t&&!t.closed&&t.epoch===b.epoch)continue;}catch{}bindings.delete(sid);recallGrants.delete(sid);}return {tasks,missionRecallGrants:[...bindings.values()].flatMap(b=>{const grant=recallGrantFor(b);return grant?[{taskId:b.taskId,sessionId:b.agent.sessionId,sourceTaskIds:[...grant.sourceTaskIds]}]:[];}),plans:summarizeMissionPlans(tasks),experience:collectMissionExperience(tasks),attachments:[...bindings.values()].map(b=>({taskId:b.taskId,sourceId:b.agent.sourceId,sessionId:b.agent.sessionId})),warning:lastWarning};}
+  async function inspect(){const key=scopeKey(),epoch=scopeEpoch;const tasks=await tx(key,j=>j.tasks);need(syncScope()===key&&scopeEpoch===epoch,'TASK_ATTACHMENT_STALE');for(const [sid,b] of bindings){try{checkBinding(b);const t=tasks.find(t=>t.id===b.taskId);if(t&&!t.closed&&t.epoch===b.epoch)continue;}catch{}bindings.delete(sid);recallGrants.delete(sid);}return {tasks,missionRecallGrants:[...bindings.values()].flatMap(b=>{const grant=recallGrantFor(b);return grant?[{taskId:b.taskId,sessionId:b.agent.sessionId,sourceTaskIds:[...grant.sourceTaskIds]}]:[];}),plans:summarizeMissionPlans(tasks),experience:collectMissionExperience(tasks),experiments:summarizeExperiments(tasks),attachments:[...bindings.values()].map(b=>({taskId:b.taskId,sourceId:b.agent.sourceId,sessionId:b.agent.sessionId})),warning:lastWarning};}
   async function reconcile(){
     const envelope=getEnvelope(),key=scopeKey();need(scopeOf(envelope)&&keyOf(scopeOf(envelope))===key,'TASK_SCOPE_CHANGED');
     const receipts=Array.isArray(envelope.snapshot.localOperationResults)?envelope.snapshot.localOperationResults:[];
@@ -295,6 +296,28 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       return {taskId:b.taskId,sourceTaskIds:[...sourceTaskIds],readOnly:true,authorizesAction:false};
     }catch(e){if(recallGrants.get(b.agent.sessionId)===g)recallGrants.delete(b.agent.sessionId);throw e;}
   }
+  async function registerExperiment(session,expected){
+    need(expected&&typeof expected==='object'&&!Array.isArray(expected)&&Object.keys(expected).every(k=>['taskId','epoch','cue','hypotheses','captureForecast'].includes(k)),'EXPERIMENT_SPEC_INVALID');
+    const b=binding(session);need(b,'TASK_NOT_ATTACHED');checkBinding(b);
+    need(expected.taskId===b.taskId&&expected.epoch===b.epoch,'EXPERIMENT_TARGET_STALE');
+    const spec=normalizeExperimentSpec({cue:expected.cue,hypotheses:expected.hypotheses,captureForecast:expected.captureForecast});
+    const grant=spec.captureForecast?recallGrantFor(b):null;
+    if(spec.captureForecast)need(grant,'MISSION_RECALL_NOT_GRANTED');
+    const result=await tx(b.key,j=>{
+      checkBinding(b);const task=owns(j,b);
+      need(task.experiment===undefined,'EXPERIMENT_ALREADY_REGISTERED');
+      need(!task.closed&&task.completed!==true&&task.steps.length===0,'EXPERIMENT_TOO_LATE');
+      let captured=null;
+      if(grant){
+        assertRecallGrant(b,grant);
+        const [worldId,projectId]=JSON.parse(b.key),sources=selectMissionEvidence(j.tasks,b.taskId,grant.sourceTaskIds);
+        captured=captureExperimentForecast(forecastMissionEvidence({scope:{worldId,projectId},tasks:sources,args:spec.cue}),spec.cue);
+      }
+      const registration=registerMissionExperiment(task,spec,captured);
+      return {taskId:task.id,registration,authorizesAction:false};
+    });
+    checkBinding(b);return result;
+  }
   async function recallFor(b,args,name){
     need(b,'TASK_NOT_ATTACHED');const g=recallGrantFor(b);need(g,'MISSION_RECALL_NOT_GRANTED');
     const normalize=name===TRACE?normalizeMissionTrace:name===FORECAST?normalizeMissionForecast:normalizeMissionRecall;
@@ -318,7 +341,7 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
     if(name!==TOOL&&name!==RECALL&&name!==TRACE&&name!==FORECAST&&name!=='vivo.world.edit')return downstream.invokeFor(session,name,args);
     const b=binding(session);
     if(name===RECALL||name===TRACE||name===FORECAST)return recallFor(b,args,name);
-    if(name===TOOL){need(b,'TASK_NOT_ATTACHED');need(args&&typeof args==='object'&&!Array.isArray(args)&&Object.keys(args).length===0,'TASK_ARGUMENTS_INVALID');const result=await tx(b.key,j=>{const task=owns(j,b);const mission=missionView(j,task);return {task,mission,experience:taskMissionExperience(task,mission)};});checkBinding(b);return {schema:SCHEMA,...result,readOnly:true,authorizesAction:false};}
+    if(name===TOOL){need(b,'TASK_NOT_ATTACHED');need(args&&typeof args==='object'&&!Array.isArray(args)&&Object.keys(args).length===0,'TASK_ARGUMENTS_INVALID');const result=await tx(b.key,j=>{const task=owns(j,b);const mission=missionView(j,task);return {task,mission,experience:taskMissionExperience(task,mission),experiment:evaluateMissionExperiment(task)};});checkBinding(b);return {schema:SCHEMA,...result,readOnly:true,authorizesAction:false};}
     if(!b)return downstream.invokeFor(session,name,args);
     checkBinding(b);const safe=structuredClone(args);const v=validateEdit(safe,getEnvelope());need(!v.prior,'TASK_OPERATION_ALREADY_RECORDED');const sha256=await digest(fingerprint(v));checkBinding(b);
     const step={operationId:v.operationId,entityId:v.entityId,spaceId:v.spaceId,sourceId:b.agent.sourceId,sha256,state:'pending'};
@@ -330,5 +353,5 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       try{if(syncScope()===b.key)await reconcile();}catch{lastWarning='Task evidence could not be refreshed. Review the existing operation before retrying.';}
     }
   }
-  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,compareScenario,compareStrategy,reviewStrategy,approveRecommendation,previewPlan,commitPlan,discardPlan,diagnose,commitRecovery,discardRecovery,grantMissionRecall,revokeMissionRecall,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
+  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,compareScenario,compareStrategy,reviewStrategy,approveRecommendation,previewPlan,commitPlan,discardPlan,diagnose,commitRecovery,discardRecovery,grantMissionRecall,revokeMissionRecall,registerExperiment,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
 }
