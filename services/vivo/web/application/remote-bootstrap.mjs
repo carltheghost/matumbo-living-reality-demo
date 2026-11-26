@@ -370,7 +370,20 @@ const prepareEvidence=element('button',{type:'button',textContent:'Prepare agent
 const reasonEvidence=element('button',{type:'button',textContent:'Reason from authorized evidence'});
 const reasoningResult=element('section');reasoningResult.setAttribute('aria-label','Advisory reasoning result');
 agentContext.append(taskScope,modeScope,providerScope,prepareEvidence,reasonEvidence,reasoningResult);
-function clearReasoning(){reasoningResult.replaceChildren();}
+const plannerArea=element('details');
+plannerArea.append(element('summary',{textContent:'Plan a custom agent mission'}),
+  element('p',{className:'muted',textContent:'Edit the bounded mission: 1–12 jobs with integer costs and values, a budget, required job IDs and mutually exclusive ID pairs. Maximize value, then minimize cost, then sort IDs. Empty choice is allowed unless jobs are required. No automatic execution.'}));
+const defaultMission={budget:7,jobs:[{id:'A',cost:3,value:5},{id:'B',cost:4,value:7},{id:'C',cost:5,value:9},{id:'D',cost:2,value:4}],required:[],conflicts:[]};
+const missionInput=element('textarea',{rows:10,maxLength:8192,value:JSON.stringify(defaultMission,null,2)});
+missionInput.setAttribute('aria-label','Agent mission definition');
+const missionPlan=element('button',{type:'button',textContent:'Solve and verify mission'});
+const plannerResult=element('section');plannerResult.setAttribute('aria-label','Verified custom mission result');
+plannerArea.append(missionInput,missionPlan,plannerResult);
+agentContext.append(plannerArea);
+function clearReasoning(){reasoningResult.replaceChildren();plannerResult.replaceChildren();}
+missionInput.addEventListener('input',()=>{
+  memoryEpoch++;clearReasoning();memoryStatus.textContent='Mission changed. Solve this exact definition again.';
+});
 for(const control of [taskScope,modeScope,providerScope])control.addEventListener('change',()=>{
   memoryEpoch++;clearReasoning();memoryResults.replaceChildren();resetSharing();
   memoryCursor=null;memoryMore.hidden=true;
@@ -384,6 +397,7 @@ function clearMemoryView(){
   memoryEpoch++;memoryCursor=null;clearReasoning();memoryResults.replaceChildren();resetSharing();
   memoryFile.value='';resetVaultCapsule();resetVaultBackup();memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
   taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;reasonEvidence.disabled=false;
+  missionInput.value=JSON.stringify(defaultMission,null,2);plannerArea.open=false;
   memoryStatus.textContent='Connect to recall evidence.';
 }
 const memoryAction=fn=>async()=>{
@@ -467,6 +481,35 @@ reasonEvidence.onclick=memoryAction(async(client,current)=>{
     reasoningResult.append(detail);
   }
   memoryStatus.textContent='Local reasoning complete · '+e.recordsUsed+' authorized reports'+(e.truncated?' · more matches exist':'');
+});
+missionPlan.onclick=memoryAction(async(client,current)=>{
+  const text=missionInput.value;if(text.length>8192)throw Error('Mission definition is too large.');
+  let mission;try{mission=JSON.parse(text);}catch{throw Error('Mission must be valid JSON.');}
+  memoryResults.replaceChildren();resetSharing();memoryCursor=null;memoryMore.hidden=true;
+  const result=await client.planAgentMission({mission,selection:{mode:modeScope.value,
+    providers:providerScope.value?[providerScope.value]:[],limit:4}});
+  if(!current())return;
+  const p=result.proposal,proof=result.proof,receipt=result.evidence.receipt;
+  plannerResult.append(element('h3',{textContent:'Independently verified mission'}),
+    element('p',{textContent:p?'Verified plan: '+(p.candidate||'Empty choice')+' · cost '+p.cost+' / '+result.mission.budget+' · value '+p.value:
+      'No feasible plan satisfies the required jobs, conflicts and budget.'}),
+    element('p',{textContent:proof.subsetsChecked+' subsets checked · '+proof.feasibleSubsets+' feasible · '+proof.equallyValuableOptima+' equally valuable optima'}),
+    element('p',{textContent:proof.runnerUp?'Runner-up: '+(proof.runnerUp.candidate||'Empty choice')+' · value '+proof.runnerUp.value+' · gap '+proof.optimalityGap:'No feasible alternative.'}),
+    element('p',{textContent:'Mission SHA-256: '+result.missionSha256}),
+    element('p',{textContent:'Enumeration SHA-256: '+proof.enumerationSha256}),
+    element('p',{textContent:'Decision SHA-256: '+result.decisionSha256}),
+    element('p',{className:'muted',textContent:'Advisory only. No provider call, billing or world action.'}));
+  if(receipt){
+    const e=receipt.evidence;
+    plannerResult.append(element('p',{textContent:'Exact historical task · '+e.recordsUsed+' authorized evidence reports. Local proof is independent.'}));
+    for(const record of e.citations){
+      const detail=element('details');detail.append(element('summary',{textContent:record.provenance+' · '+record.runId}),
+        element('p',{textContent:'Evidence: '+record.evidenceDigest}));
+      for(const row of record.observations)detail.append(element('p',{textContent:row.provider+' · '+row.verdict+(row.candidate?' · '+row.candidate:'')}));
+      plannerResult.append(detail);
+    }
+  }else plannerResult.append(element('p',{textContent:'Custom task has no matching evidence contract. Historical Council proposals were not recalled.'}));
+  memoryStatus.textContent='Mission verified · '+(receipt?receipt.evidence.recordsUsed:0)+' authorized reports';
 });
 archiveMemory.onclick=memoryAction(async(client,current)=>{
   const file=memoryFile.files?.[0];if(!file||file.size>65536)throw Error('Choose a Council JSON report no larger than 64 KB.');

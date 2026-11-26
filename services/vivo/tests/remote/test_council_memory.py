@@ -558,3 +558,66 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.vault.db.execute("SELECT * FROM evidence").fetchall(),before)
         self.assertEqual(self.vault.db.execute("SELECT count(*) FROM backup_set_restore_receipts").fetchone()[0],0)
         self.assertEqual(await self.rpc("preview",{"bundle":bundle},origin="https://wrong.test",expected=403,backup_set=True),"ORIGIN_NOT_ALLOWED")
+
+
+    async def test_bounded_mission_exact_evidence_scope_and_custom_constraints(self):
+        known={"budget":7,"jobs":[{"id":"D","cost":2,"value":4},{"id":"B","cost":4,"value":7},
+               {"id":"A","cost":3,"value":5},{"id":"C","cost":5,"value":9}],"required":[],"conflicts":[]}
+        scope={"mode":"fixture","providers":["kimi"],"limit":4}
+        args={"mission":known,"selection":scope}
+        empty=await self.rpc("plan",args,token=self.one["token"])
+        self.assertEqual(empty["proposal"],{"candidate":"C,D","cost":7,"value":13,"feasible":True})
+        self.assertEqual(empty["proof"]["subsetsChecked"],16)
+        self.assertEqual(empty["proof"]["feasibleSubsets"],9)
+        self.assertEqual(empty["evidence"]["receipt"]["evidence"]["recordsUsed"],0)
+        record=(await self.rpc("archive",{"envelope":self.mission}))["record"]
+        self.assertEqual(await self.rpc("plan",args,token=self.one["token"]),empty)
+        grant={"memoryId":record["memoryId"],"invitationId":self.one["id"],"granted":True}
+        await self.rpc("grant",grant)
+        matched=await self.rpc("plan",args,token=self.one["token"])
+        self.assertEqual(matched["evidence"]["status"],"exact-task-recall")
+        self.assertEqual(matched["evidence"]["receipt"]["evidence"]["citations"][0]["evidenceDigest"],self.mission["reportSha256"])
+        self.assertEqual(matched["proof"],empty["proof"])
+        custom={"mission":{**known,"required":["A"],"conflicts":[["B","A"]]},"selection":scope}
+        result=await self.rpc("plan",custom,token=self.one["token"])
+        self.assertEqual(result["proposal"],{"candidate":"A,D","cost":5,"value":9,"feasible":True})
+        self.assertEqual(result["proof"]["feasibleSubsets"],2)
+        self.assertEqual(result["proof"]["runnerUp"]["candidate"],"A")
+        self.assertEqual(result["proof"]["optimalityGap"],4)
+        self.assertEqual(result["evidence"],{"status":"mission-not-in-memory-contract","receipt":None})
+        self.assertNotIn(self.mission["reportSha256"],json.dumps(result))
+        await self.rpc("grant",{**grant,"granted":False})
+        self.assertEqual(await self.rpc("plan",args,token=self.one["token"]),empty)
+        self.assertEqual(await self.rpc("plan",custom,token=self.one["token"]),result)
+        self.assertEqual(await self.rpc("plan",custom),result)
+        self.assertEqual(self.vault.db.execute("SELECT count(*) FROM evidence").fetchone()[0],1)
+
+    async def test_bounded_mission_ties_empty_infeasible_and_invalid_inputs(self):
+        scope={"mode":"fixture","providers":[],"limit":4}
+        jobs=[{"id":"A","cost":2,"value":3},{"id":"B","cost":1,"value":3}]
+        mission={"budget":2,"jobs":jobs,"required":[],"conflicts":[]}
+        result=await self.rpc("plan",{"mission":mission,"selection":scope})
+        self.assertEqual(result["proposal"]["candidate"],"B")
+        self.assertEqual(result["proof"]["runnerUp"]["candidate"],"A")
+        self.assertEqual(result["proof"]["equallyValuableOptima"],2)
+        self.assertEqual(result["proof"]["optimalityGap"],0)
+        empty=await self.rpc("plan",{"mission":{**mission,"budget":0},"selection":scope})
+        self.assertEqual(empty["proposal"],{"candidate":"","cost":0,"value":0,"feasible":True})
+        self.assertIsNone(empty["proof"]["runnerUp"])
+        impossible=await self.rpc("plan",{"mission":{**mission,"required":["A","B"],"conflicts":[["A","B"]]},"selection":scope})
+        self.assertEqual(impossible["status"],"infeasible")
+        self.assertIsNone(impossible["proposal"])
+        self.assertEqual(impossible["proof"]["feasibleSubsets"],0)
+        self.assertIsNone(impossible["proof"]["optimalityGap"])
+        maximum=await self.rpc("plan",{"mission":{"budget":12,"jobs":[{"id":f"J{i}","cost":1,"value":i+1} for i in range(12)],
+            "required":[],"conflicts":[]},"selection":scope})
+        self.assertEqual(maximum["proposal"]["value"],78)
+        self.assertEqual(maximum["proof"]["subsetsChecked"],4096)
+        self.assertEqual(maximum["proof"]["feasibleSubsets"],4096)
+        for bad in ({**mission,"budget":True},{**mission,"jobs":jobs+[jobs[0]]},
+                    {**mission,"required":["C"]},{**mission,"conflicts":[["A","B"],["B","A"]]},
+                    {**mission,"jobs":[{"id":"A","cost":-1,"value":3}]},
+                    {**mission,"jobs":[{"id":f"J{i}","cost":1,"value":1} for i in range(13)]}):
+            self.assertEqual(await self.rpc("plan",{"mission":bad,"selection":scope},expected=400),"MISSION_INVALID")
+        self.assertEqual(await self.rpc("plan",{"mission":mission,"selection":{**scope,"mode":"all"}},expected=400),"MISSION_INVALID")
+        self.assertEqual(await self.rpc("plan",{"mission":mission,"selection":scope},token=None,expected=401),"AUTH_REQUIRED")

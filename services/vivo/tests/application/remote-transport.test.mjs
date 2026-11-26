@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RemoteTransport,verifyMemoryBackupSet,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
+import {RemoteTransport,verifyAgentMissionPlan,normalizeAgentMission,verifyMemoryBackupSet,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
 
 class FakeSocket {
   static instances=[];
@@ -402,5 +402,43 @@ test('complete restore reviews exact manifest, writes once and reconciles the hi
   await assert.rejects(transport.reviewCompleteMemoryBackup(bundle,serve(review)),/MEMORY_OWNER_REQUIRED/);
   await assert.rejects(transport.restoreCompleteMemoryBackup(bundle,review,serve(restored)),/MEMORY_OWNER_REQUIRED/);
   assert.equal(calls.length,4);
+  await shutdown(transport,socket);
+});
+
+
+test('custom mission proof checks ties, constraint coverage, and independent hashes before accepting',async()=>{
+  const {transport,socket}=await admitted();
+  const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+  const mission={budget:2,jobs:[{id:'A',cost:2,value:3},{id:'B',cost:1,value:3}],required:[],conflicts:[]};
+  const selection={mode:'fixture',providers:[],limit:4},request={mission,selection};
+  const proposal={candidate:'B',cost:1,value:3,feasible:true};
+  const proof={method:'exhaustive-bounded-subsets/1',subsetsChecked:4,feasibleSubsets:3,equallyValuableOptima:2,
+    runnerUp:{candidate:'A',cost:2,value:3,feasible:true},optimalityGap:0,
+    enumerationSha256:await hash(JSON.stringify([['',0,0,true],['A',2,3,true],['A,B',3,6,false],['B',1,3,true]])),
+    ranking:'value-desc-cost-asc-id-asc',includesEmptyChoice:true};
+  const core={schema:'vivo.agent-mission-plan/1',mission,missionSha256:await hash(JSON.stringify(mission)),selection,
+    proposal,status:'optimal',proof,evidence:{status:'mission-not-in-memory-contract',receipt:null},
+    authority:'evidence-only',providerAuthenticated:false,providerCallsInitiated:0,postedChargesUsd:null,worldActionExecuted:false};
+  const sign=async value=>({...value,decisionSha256:await hash(JSON.stringify(value))});
+  const packet=await sign(core);
+  const calls=[];
+  const fetchImpl=async(url,init)=>{
+    assert.equal(url,'http://vivo.test/api/neural-memory');calls.push(JSON.parse(init.body));
+    return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:packet})};
+  };
+  assert.deepEqual(await transport.planAgentMission({mission:{...mission,jobs:[...mission.jobs].reverse()},selection},fetchImpl),packet);
+  assert.deepEqual(calls,[{op:'plan',args:request}]);
+  for(const invalid of [
+    {...core,proposal:{candidate:'A',cost:2,value:3,feasible:true}},
+    {...core,proof:{...proof,feasibleSubsets:4}},
+    {...core,proof:{...proof,equallyValuableOptima:1}},
+    {...core,proof:{...proof,enumerationSha256:'0'.repeat(64)}},
+    {...core,evidence:{status:'exact-task-recall',receipt:{}}},
+    {...core,providerCallsInitiated:1},
+    {...core,worldActionExecuted:true},
+    {...core,mission:{...mission,budget:3}},
+  ])await assert.rejects(verifyAgentMissionPlan(await sign(invalid),request),/MEMORY_MISSION_INVALID/);
+  assert.throws(()=>normalizeAgentMission({...mission,conflicts:[['A','B'],['B','A']]}),/MEMORY_MISSION_INVALID/);
+  assert.throws(()=>normalizeAgentMission({...mission,jobs:[...mission.jobs,mission.jobs[0]]}),/MEMORY_MISSION_INVALID/);
   await shutdown(transport,socket);
 });
