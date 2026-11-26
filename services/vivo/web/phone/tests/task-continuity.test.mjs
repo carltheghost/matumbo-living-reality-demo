@@ -327,3 +327,34 @@ test('recovered histories persist after reload but do not restore a task attachm
   await assert.rejects(progress(f),{code:'TASK_NOT_ATTACHED'});await assert.rejects(f.bridge.admin.commitRecovery(review.reviewToken,'again'),{code:'RECOVERY_PREVIEW_STALE'});
   assert(!f.bridge.tools.listFor('a').some(t=>/diagnose|recovery/i.test(t.name)));assert.equal(f.calls(),1);
 });
+
+test('collective experience learns from actual completed operations and remains scoped across handoff and reload',async()=>{
+  const f=fixture(),root=await attach(f);eligible(f,'a');eligible(f,'b');
+  await run(f,'first-change');
+  await f.bridge.admin.create('b','Dependent',[root.taskId]);
+  await complete(f,'a',(await progress(f)).task);
+  const independent=await f.bridge.admin.create('a','Unrelated secret');await run(f,'private-change');await complete(f,'a',(await progress(f)).task);
+  const own=await progress(f,'b');
+  assert.equal(own.experience.scope,'attached-task-and-completed-direct-prerequisites');
+  assert.equal(own.experience.authorizesAction,false);assert.equal(own.experience.profiles[0].completedContributions,1);
+  assert.equal(own.experience.profiles[0].confirmedChanged,1);assert(!JSON.stringify(own.experience).includes(independent.taskId));
+  const state=await f.bridge.admin.inspect();assert.equal(state.experience.find(p=>p.sourceId==='muse').completedContributions,2);
+  f.bridge=f.build();const restored=await f.bridge.admin.inspect();assert.deepEqual(restored.experience,state.experience);
+  await assert.rejects(progress(f,'b'),{code:'TASK_NOT_ATTACHED'});assert.equal(f.calls(),2);
+});
+test('uncertain receipts are observed but never counted as completed expertise',async()=>{
+  const f=fixture();await attach(f);f.mode('missing');await run(f,'uncertain');
+  let profile=(await f.bridge.admin.inspect()).experience[0];assert.equal(profile.pending,1);assert.equal(profile.confirmedChanged,0);assert.equal(profile.completedContributions,0);
+  f.receipt(edit('uncertain'));await f.bridge.admin.reconcile();
+  profile=(await f.bridge.admin.inspect()).experience[0];assert.equal(profile.pending,0);assert.equal(profile.confirmedChanged,1);assert.equal(profile.completedContributions,0);
+  await complete(f,'a',(await progress(f)).task);
+  profile=(await f.bridge.admin.inspect()).experience[0];assert.equal(profile.completedContributions,1);assert.equal(profile.objects[0].completedChangedTasks,1);assert.equal(f.calls(),1);
+});
+test('owner experience remains branch-local and no source receives credit merely for assignment',async()=>{
+  const f=fixture();await attach(f);
+  assert.deepEqual((await f.bridge.admin.inspect()).experience,[]);
+  await run(f);await complete(f,'a',(await progress(f)).task);
+  const main=(await f.bridge.admin.inspect()).experience;assert.equal(main.length,1);
+  f.branch('fork');f.bridge.syncScope();assert.deepEqual((await f.bridge.admin.inspect()).experience,[]);
+  f.branch('main');f.bridge.syncScope();assert.deepEqual((await f.bridge.admin.inspect()).experience,main);
+});
