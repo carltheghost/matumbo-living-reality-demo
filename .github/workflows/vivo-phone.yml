@@ -61,7 +61,7 @@ jobs:
 
   browser-mounted-economy:
     name: Mounted simulated economy phone flow
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +98,7 @@ jobs:
         run: echo 'Mounted economy evidence is local simulated TUMBO-SIM state in Chromium; it does not certify remote authority, real funds, external orders, real-money settlement, camera behavior, or deployment by itself.'
 
   browser-offline-shell:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -152,7 +152,7 @@ jobs:
           retention-days: 7
 
   browser-field-world-static:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -259,7 +259,7 @@ jobs:
         run: echo 'This is synthetic Chromium evidence against the built Pages artifact; it does not certify physical camera, hand, head, Android device, AR, VR, remote authority, or deployment behavior.'
 
   browser-authority-adapter:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4

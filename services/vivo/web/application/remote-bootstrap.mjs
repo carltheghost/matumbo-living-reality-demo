@@ -20,7 +20,8 @@ const tokenLabel=element('label',{textContent:'Private access token'});tokenLabe
 $('displayName').closest('label').replaceWith(tokenLabel);
 $('spaceKind').closest('.row').hidden=true;$('metricInputLabel').hidden=true;$('keyLabel').hidden=true;$('joinRoom').hidden=true;
 $('createRoom').textContent='Enter shared Vivo';$('inviteNote').textContent='The token stays in this browser session and WebSocket join message. Camera frames never leave this device.';
-$('welcome').querySelector('a').hidden=true;document.querySelector('[data-panel="neural"]').hidden=true;
+$('welcome').querySelector('a').hidden=true;
+document.querySelector('[data-panel="neural"]').hidden=false;document.querySelector('[data-panel="neural"]').textContent='Neural Memory';
 document.querySelector('[data-panel="people"]').textContent='♧ People';document.querySelector('[data-panel="record"]').textContent='↧ State';
 $('moveTarget').options[0].textContent='Shared learned material object';
 const moveSheet=document.querySelector('[data-sheet="move"]');
@@ -41,6 +42,151 @@ const exportButton=element('button',{id:'remoteExport',textContent:'Export accep
 const forkButton=element('button',{id:'remoteForkOffline',textContent:'Fork offline branch'});
 const reconcileButton=element('button',{id:'remoteReconcile',textContent:'Reconcile uncertain grips'});
 recordSheet.append(materialButton,exportButton,forkButton,reconcileButton,element('p',{className:'muted',textContent:'Exports accepted world/Eye/history only. Offline forks are explicit checkpoint handoffs; no invitation tokens, camera frames, microphone or private runtime token.'}));
+// Use the existing remote neural surface. No automatic upload, provider call,
+// credential storage or new login is introduced.
+const memorySheet=document.querySelector('[data-sheet="neural"]');
+memorySheet.replaceChildren(element('h3',{textContent:'Neural Memory · private evidence vault'}),
+  element('p',{className:'muted',textContent:'Owner archives Council reports. Collaborators recall only individually shared reports. Evidence is not provider-authenticated or billing.'}));
+const memoryOwner=element('section',{hidden:true}),memoryFile=element('input',{type:'file',accept:'.json,application/json'});
+memoryFile.setAttribute('aria-label','Council report to archive');
+const archiveMemory=element('button',{textContent:'Archive selected report',type:'button'});
+const memoryQuery=element('input',{type:'search',placeholder:'Provider, task, verdict or digest',maxLength:128});
+memoryQuery.setAttribute('aria-label','Search shared Neural Memory');
+const memoryRecall=element('button',{type:'button',textContent:'Recall evidence'});
+const memoryMore=element('button',{type:'button',textContent:'Older reports',hidden:true});
+const memoryStatus=element('p',{textContent:'Connect to recall evidence.'});memoryStatus.setAttribute('role','status');
+const memoryResults=element('div');memoryResults.setAttribute('aria-label','Remote Neural Memory results');
+const shareMemoryId=element('select'),shareInvite=element('select');
+shareMemoryId.setAttribute('aria-label','Evidence to share');shareInvite.setAttribute('aria-label','Collaborator invitation');
+const loadShares=element('button',{type:'button',textContent:'Load invitations and grants'});
+const grantMemory=element('button',{type:'button',textContent:'Grant recall access'});
+const revokeMemory=element('button',{type:'button',textContent:'Revoke recall access'});
+let loadedShareMemoryId=null;
+function updateShareActions(){
+  loadShares.disabled=role!=='owner'||!shareMemoryId.value;
+  const ready=role==='owner'&&Boolean(shareMemoryId.value)&&
+    loadedShareMemoryId===shareMemoryId.value&&Boolean(shareInvite.value);
+  grantMemory.disabled=!ready;revokeMemory.disabled=!ready;
+}
+function resetInviteSelection(){
+  loadedShareMemoryId=null;
+  shareInvite.replaceChildren(element('option',{value:'',textContent:'Select a collaborator'}));
+  shareInvite.value='';updateShareActions();
+}
+function resetSharing(){
+  shareMemoryId.replaceChildren(element('option',{value:'',textContent:'Select evidence to share'}));
+  shareMemoryId.value='';resetInviteSelection();
+}
+shareMemoryId.addEventListener('change',()=>{
+  memoryEpoch++;resetInviteSelection();
+  memoryStatus.textContent='Evidence changed. Load invitations and grants for this report.';
+});
+shareInvite.addEventListener('change',updateShareActions);
+memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory);
+const agentContext=element('details');
+agentContext.append(element('summary',{textContent:'Prepare agent evidence context'}),
+  element('p',{className:'muted',textContent:'Choose a task and provenance. Recall returns authorized evidence only, including disagreement. No model call or automatic action.'}));
+const taskScope=element('select'),modeScope=element('select'),providerScope=element('select');
+taskScope.setAttribute('aria-label','Agent evidence task');modeScope.setAttribute('aria-label','Agent evidence provenance');
+providerScope.setAttribute('aria-label','Required provider in evidence');
+for(const [value,textContent] of [['route-constraint-v1','Constrained planning'],['arithmetic-31-v1','Arithmetic']])
+  taskScope.append(element('option',{value,textContent}));
+for(const [value,textContent] of [['fixture','Synthetic fixtures'],['live','Host-reported live (unverified)']])
+  modeScope.append(element('option',{value,textContent}));
+for(const value of ['','openai','anthropic','google','deepseek','kimi','nvidia','xai'])
+  providerScope.append(element('option',{value,textContent:value||'Any provider'}));
+const prepareEvidence=element('button',{type:'button',textContent:'Prepare agent evidence'});
+agentContext.append(taskScope,modeScope,providerScope,prepareEvidence);
+memorySheet.append(memoryOwner,memoryQuery,memoryRecall,memoryMore,agentContext,memoryStatus,memoryResults);
+let memoryEpoch=0,memoryCursor=null;
+resetSharing();
+function clearMemoryView(){
+  memoryEpoch++;memoryCursor=null;memoryResults.replaceChildren();resetSharing();
+  memoryFile.value='';memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
+  taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;
+  memoryStatus.textContent='Connect to recall evidence.';
+}
+const memoryAction=fn=>async()=>{
+  const client=transport,epoch=++memoryEpoch;
+  if(!client||client.closed){clearMemoryView();return;}
+  const current=()=>transport===client&&!client.closed&&memoryEpoch===epoch;
+  memoryStatus.textContent='Reading private memory…';
+  try{await fn(client,current);}catch(e){if(current()){
+    if(['AUTH_REQUIRED','FORBIDDEN','NOT_FOUND'].includes(e.code)){
+      memoryResults.replaceChildren();resetSharing();memoryCursor=null;memoryMore.hidden=true;
+    }
+    memoryStatus.textContent=e.code||e.message||'Memory request failed.';
+  }}
+};
+function addMemoryRecord(record){
+  const card=element('details');
+  card.append(element('summary',{textContent:(record.mode==='fixture'?'Fixture · not live':'Host-reported · unverified')+' · '+record.runId}),
+    element('p',{textContent:'Evidence: '+record.evidenceDigest}),
+    element('p',{textContent:'Advisory only; charges unknown.'}));
+  if(record.localOptimum)card.append(element('p',{textContent:'Local optimum: '+record.localOptimum.candidate+' · value '+record.localOptimum.value}));
+  for(const row of record.rows)card.append(element('p',{textContent:row.provider+' · '+row.verdict+(row.candidate?' · '+row.candidate:'')}));
+  memoryResults.append(card);
+  if(role==='owner'&&![...shareMemoryId.options].some(o=>o.value===record.memoryId))
+    shareMemoryId.append(element('option',{value:record.memoryId,textContent:record.runId+' · '+record.mode}));
+}
+function recallMemory(older=false){
+  return memoryAction(async(client,current)=>{
+    const page=await client.memoryRequest('search',{query:memoryQuery.value,limit:16,before:older?memoryCursor:null});
+    if(!current())return;
+    if(!older){memoryResults.replaceChildren();resetSharing();}
+    page.records.forEach(addMemoryRecord);memoryCursor=page.nextBefore;memoryMore.hidden=memoryCursor===null;
+    memoryStatus.textContent=memoryResults.children.length+' accessible reports · private server evidence';
+  })();
+}
+memoryRecall.onclick=()=>void recallMemory();
+memoryMore.onclick=()=>void recallMemory(true);
+prepareEvidence.onclick=memoryAction(async(client,current)=>{
+  memoryResults.replaceChildren();resetSharing();
+  memoryCursor=null;memoryMore.hidden=true;
+  const packet=await client.prepareAgentContext({task:taskScope.value,mode:modeScope.value,
+    providers:providerScope.value?[providerScope.value]:[],limit:4});
+  if(!current())return;
+  packet.records.forEach(addMemoryRecord);
+  memoryStatus.textContent=packet.status==='no-matching-evidence'?'No matching authorized evidence.':
+    'Prepared '+packet.records.length+' evidence reports · advisory only'+(packet.truncated?' · more matches exist':'');
+});
+archiveMemory.onclick=memoryAction(async(client,current)=>{
+  const file=memoryFile.files?.[0];if(!file||file.size>65536)throw Error('Choose a Council JSON report no larger than 64 KB.');
+  const envelope=JSON.parse(await file.text());if(!current())return;
+  const result=await client.memoryRequest('archive',{envelope});if(!current())return;
+  memoryFile.value='';memoryStatus.textContent=result.status==='duplicate'?'Already archived.':'Report archived on private server. Select Recall evidence to inspect.';
+});
+loadShares.onclick=memoryAction(async(client,current)=>{
+  const memoryId=shareMemoryId.value;
+  if(!memoryId)throw Error('Recall and select a report first.');
+  resetInviteSelection();
+  const [invites,grants]=await Promise.all([client.listInvites(),client.memoryRequest('grants',{memoryId})]);
+  if(!current()||shareMemoryId.value!==memoryId)return;
+  if(grants.memoryId!==memoryId)throw Error('Grant response belongs to another report.');
+  const byId=new Map(grants.grants.map(g=>[g.invitationId,g]));
+  shareInvite.replaceChildren(element('option',{value:'',textContent:'Select a collaborator'}),
+    ...invites.filter(i=>!i.revoked&&i.expiresAt>Date.now()/1000).map(i=>
+      element('option',{value:i.id,textContent:i.actorId+(byId.has(i.id)?' · shared':' · private')})));
+  shareInvite.value='';loadedShareMemoryId=memoryId;updateShareActions();
+  memoryStatus.textContent='Select a collaborator. Grant and revoke affect only the selected report.';
+});
+function changeShare(granted){
+  return memoryAction(async(client,current)=>{
+    const memoryId=shareMemoryId.value,invitationId=shareInvite.value;
+    if(!memoryId||!invitationId||loadedShareMemoryId!==memoryId)throw Error('Select evidence and an active invitation for that report.');
+    const actor=shareInvite.selectedOptions[0]?.textContent?.split(' · ')[0]||'selected collaborator';
+    // A grant/revoke consumes this explicit target selection. Reconcile
+    // with the server before allowing another sharing change.
+    resetInviteSelection();
+    const result=await client.memoryRequest('grant',{memoryId,invitationId,granted});
+    if(!current())return;
+    if(result.memoryId!==memoryId||result.invitationId!==invitationId||result.granted!==granted)
+      throw Error('Unexpected sharing receipt. Reload invitations and grants.');
+    memoryStatus.textContent=result.granted?'Recall access granted. Target: '+actor:
+      'Future recall access revoked. Previously downloaded copies cannot be revoked. Target: '+actor;
+  })();
+}
+grantMemory.onclick=()=>void changeShare(true);revokeMemory.onclick=()=>void changeShare(false);
 const badge=element('div',{id:'localCapabilities',textContent:'REMOTE · disconnected'});document.body.append(badge);
 
 async function gridFor(d){if(!grids.has(d)){const r=await fetch('/api/remote/grid?dimension='+d);if(!r.ok)throw Error(await r.text());grids.set(d,await r.json());}return grids.get(d);}
@@ -67,12 +213,12 @@ function updateUI(){if(!state)return;const e=currentEntity(),activeRole=role??tr
 }
 async function connect(){if(transport&&!transport.closed)await disconnect();const token=tokenInput.value.trim();if(!token)throw Error('Enter owner or invitation token');
   const socket=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
-  const client=new RemoteTransport({url:socket,token,onState:receive,onError:error=>say('Remote: '+(error.code||error.message||'protocol error'))});transport=client;const admitted=await client.admit();role=admitted.role;receive(admitted.state);
+  const client=new RemoteTransport({url:socket,token,onState:receive,onError:error=>say('Remote: '+(error.code||error.message||'protocol error')),onClose:()=>{if(transport===client)clearMemoryView();}});transport=client;const admitted=await client.admit();role=admitted.role;clearMemoryView();memoryOwner.hidden=role!=='owner';memoryStatus.textContent='Connected. Select Recall evidence.';receive(admitted.state);
   host=await GripHost.open(client,{onPreview:(key,v)=>v?previews.set(key,v):previews.delete(key),onStatus:(_k,e)=>e.code&&say('Grip: '+e.code)});
   inputs=new ApplicationInputs({host,nextEpoch:()=>client.nextEpoch(),project:(entity,anchor,point)=>screenTarget(renderer,entity,anchor,point),onRemove:key=>previews.delete(key)});
   await gridFor(state.eye.dimension);configureAxes();$('welcome').hidden=true;$('toolbar').hidden=false;say('Connected to one canonical Vivo world. Touch, hands and Eye actions use accepted authority state.');
 }
-async function disconnect(){online=false;camera.stop();try{await inputs?.cancelAll('remote-disconnect');}catch{}try{await inputs?.close();}catch{}try{await transport?.close();}catch{}host=null;inputs=null;transport=null;state=null;$('welcome').hidden=false;$('toolbar').hidden=true;badge.textContent='REMOTE · disconnected';}
+async function disconnect(){online=false;clearMemoryView();camera.stop();try{await inputs?.cancelAll('remote-disconnect');}catch{}try{await inputs?.close();}catch{}try{await transport?.close();}catch{}host=null;inputs=null;transport=null;state=null;$('welcome').hidden=false;$('toolbar').hidden=true;badge.textContent='REMOTE · disconnected';}
 function cooperativeGroup(id){return 'shared.'+state.eye.spaceId+'.'+id;}
 async function beginGesture(key,source,id,point,observedAt){if(!inputs||!online)throw Error('Not connected');const e=state.snapshot.spaces[state.eye.spaceId].entities[id];selected=id;renderer.selected=id;updateUI();return inputs.begin(key,{entity:e,source,point,observedAt,cooperativeGroup:cooperativeGroup(id)});}
 const moveGesture=(key,p,t)=>inputs?.move(key,p,t),endGesture=(key,p,t)=>inputs?.end(key,{point:p,observedAt:t});

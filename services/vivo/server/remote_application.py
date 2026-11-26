@@ -29,6 +29,7 @@ from .local_application import LocalBridge
 from .application.adaptive_host import AdaptiveApplicationHost
 from .authority.module_routes import install_module_routes
 from .conversation import ConversationAdapter, attach_conversation_routes
+from .council_memory import EvidenceVault, attach_memory_routes
 from .geometry import Geometry
 
 WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
@@ -445,6 +446,7 @@ def remote_index():
 async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conversation_adapter=None):
     gateway = RemoteGateway(Path(data_dir), owner_token, origin, store=store)
     conversation = conversation_adapter or ConversationAdapter.from_env()
+    memory = EvidenceVault(gateway.data_dir / "neural-memory.sqlite")
 
     @web.middleware
     async def security(request, handler):
@@ -465,6 +467,7 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conve
     app = web.Application(client_max_size=MAX_MESSAGE, middlewares=[security])
     app["gateway"] = gateway
     app["conversation"] = conversation
+    app["neural_memory"] = memory
     install_module_routes(app, REPOSITORY)
     grids = {d: Geometry("flat", d).sample_grid() for d in (4, 11)}
 
@@ -512,6 +515,9 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conve
         identity_for_token=conversation_identity,
     )
 
+    attach_memory_routes(app, vault=memory, origin=origin, authenticate=gateway.authenticate,
+                         invitations=gateway.invites.list)
+
     async def asset(_request, name):
         data = (WEB_ROOT / name).read_bytes()
         content_type = "text/css" if name.endswith(".css") else "text/javascript"
@@ -538,6 +544,11 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conve
         await conversation.close()
 
     app.on_cleanup.append(close_conversation)
+
+    async def close_memory(_app):
+        memory.close()
+
+    app.on_cleanup.append(close_memory)
     return app
 
 

@@ -150,11 +150,33 @@ test('Pages live hash verifier covers every changed mounted phone module', async
   const block = workflow.match(/for name in \[(.*?)\]:/s)?.[1];
   assert.ok(block, 'deploy workflow must expose a public HTTPS hash-verifier list');
   const listed = [...block.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+  // Preserve every previously verified public path, not an obsolete fixed
+  // count that fails whenever coverage is expanded.
   const required = [
+    'src/render/web-ai.js',
+    'src/domains/jev-advice-receipt.js',
+    'field-lab-grab.html',
+    'src/field-lab/field-lab-touch-repair.js',
+    'field-lab-studio.html',
+    'src/field-lab/studio-core.js',
+    'src/field-lab/studio.js',
+    'src/field-lab/studio-layout.js',
+    'src/field-lab/viva-core.js',
+    'src/field-lab/viva-visibility.js',
+    'src/field-lab/viva-spaces.js',
+    'vivo-phone-sw.js',
+    'src/vivo-phone-engine/boot.mjs',
+    'src/vivo-phone-engine/engine.mjs',
+    'src/vivo-phone-engine/engine-worker.mjs',
+    'src/vivo-phone-engine/agent-runtime.mjs',
+    'src/vivo-phone-engine/native-tools.mjs',
+    'src/vivo-phone-engine/storage.mjs',
     'services/vivo/web/application/conversation-transport.mjs',
     'services/vivo/web/application/remote-transport.mjs',
     'services/vivo/web/phone/projection-parameters.mjs',
+    'services/vivo/web/phone/index.html',
     'services/vivo/web/phone/companion.mjs',
+    'services/vivo/web/phone/bootstrap.mjs',
     'services/vivo/web/phone/fingertip-input.mjs',
     'services/vivo/web/phone/material-contract.mjs',
     'services/vivo/web/phone/material-input-runtime.mjs',
@@ -166,13 +188,36 @@ test('Pages live hash verifier covers every changed mounted phone module', async
     'services/vivo/web/phone/engine.mjs',
     'services/vivo/web/phone/engine-worker.mjs',
     'services/vivo/web/phone/two-hand-camera.mjs',
+    'services/vivo/web/phone/economy-entry.mjs',
+    'services/vivo/web/phone/static-shared.js',
+    'services/vivo/web/phone/field-world.mjs',
+    'services/vivo/web/phone/spatial-fabric.mjs',
+    'services/vivo/web/phone/phone-render.mjs',
+    'services/vivo/web/phone/phone-world.css',
+    'services/vivo/web/phone/field-palette.mjs',
+    'services/vivo/web/phone/vendor/economy/manifest.json',
+    'services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js',
     'services/vivo/web/phone/vendor/economy/src/domains/snapshot-graph.js',
+    'services/vivo/web/phone/vendor/economy/src/domains/token.js',
+    'services/vivo/web/phone/vendor/economy/src/domains/token-config.js',
+    'services/vivo/web/phone/vendor/economy/src/domains/token-store.js',
     'services/vivo/web/phone/vendor/economy/src/domains/token-supply-policy.js',
     'services/vivo/web/phone/vendor/economy/src/domains/token-economy-overview.js',
+    'services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js',
     'services/vivo/web/phone/vendor/economy/src/render/token-economy-overview.js',
+    'services/vivo/web/vivo-sw.js',
+    'src/domains/provider-council-evidence.js',
+    'src/domains/council-memory.js',
+    'src/render/neural-mesh.js',
+    'src/render/reading-anchor.js',
+    'src/render/reality-assembly.js',
+    'src/render/reality-assembly.css',
+    'src/render/reality-assembly-scene.js',
+    'src/domains/living-surface-layout-engine.js',
+    'src/domains/reality-tab-layout.js',
+    'services/vivo/web/application/remote-bootstrap.mjs',
   ];
   for (const path of required) assert.ok(listed.includes(path), `${path} must be covered by public HTTPS hash verification`);
-  assert.equal(listed.length, 51, 'public HTTPS hash-verifier list must preserve all 51 public assets');
   assert.equal(new Set(listed).size, listed.length, 'public HTTPS hash-verifier list must not contain duplicate paths');
 });
 

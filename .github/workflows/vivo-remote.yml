@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'services/vivo/server/remote_application.py'
+      - 'services/vivo/server/council_memory.py'
       - 'services/vivo/server/application/runtime.mjs'
       - 'services/vivo/server/application/adaptive_host.py'
       - 'services/vivo/web/application/**'
@@ -35,7 +36,7 @@ jobs:
           set -euo pipefail
           node --check services/vivo/web/application/remote-transport.mjs
           node --check services/vivo/server/application/runtime.mjs
-          python -m py_compile services/vivo/server/remote_application.py
+          python -m py_compile services/vivo/server/remote_application.py services/vivo/server/council_memory.py
       - name: Real two-WebSocket canonical acceptance
         run: |
           set -euo pipefail
@@ -49,7 +50,7 @@ jobs:
         run: echo 'Loopback two-WebSocket evidence. No physical phone, camera, public DNS/TLS deployment, or real Internet latency is certified.'
 
   browser-two-person:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -108,6 +109,7 @@ jobs:
           PY
           timeout --signal=TERM 120s python services/vivo/tests/remote/browser_two_person.py             http://127.0.0.1:8769/ "$owner_token" remote-browser-evidence/two-person.json
           timeout --signal=TERM 60s python services/vivo/tests/remote/browser_device_check_smoke.py             http://127.0.0.1:8769/ remote-browser-evidence/device-check-smoke.json
+          timeout --signal=TERM 150s python services/vivo/tests/remote/browser_neural_memory.py http://127.0.0.1:8769/ "$owner_token" remote-browser-evidence/neural-memory.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
