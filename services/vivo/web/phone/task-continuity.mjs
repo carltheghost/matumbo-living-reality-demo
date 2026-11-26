@@ -3,6 +3,7 @@ import {TASK_JOURNAL_SCHEMA as SCHEMA,LEGACY_TASK_JOURNAL_SCHEMA,normalizePrereq
 import {rankMissionAgents} from './mission-orchestrator.mjs';
 import {compileMissionPlan,buildPlannedTasks,validatePlanMetadata,summarizeMissionPlans} from './mission-planner.mjs';
 import {diagnoseMissionTask,recoverySnapshot,reopenReviewedTask,validateRecoveryHistory} from './mission-recovery.mjs';
+import {collectMissionExperience,taskMissionExperience} from './mission-experience.mjs';
 const TOOL='task.progress',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
@@ -223,7 +224,7 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
     if(bindings.get(b.agent.sessionId)===b)pause(b.agent);
     return result;
   }
-  async function inspect(){const key=scopeKey();const tasks=await tx(key,j=>j.tasks);need(syncScope()===key,'TASK_ATTACHMENT_STALE');for(const [sid,b] of bindings){try{checkBinding(b);const t=tasks.find(t=>t.id===b.taskId);if(t&&!t.closed&&t.epoch===b.epoch)continue;}catch{}bindings.delete(sid);}return {tasks,plans:summarizeMissionPlans(tasks),attachments:[...bindings.values()].map(b=>({taskId:b.taskId,sourceId:b.agent.sourceId,sessionId:b.agent.sessionId})),warning:lastWarning};}
+  async function inspect(){const key=scopeKey(),epoch=scopeEpoch;const tasks=await tx(key,j=>j.tasks);need(syncScope()===key&&scopeEpoch===epoch,'TASK_ATTACHMENT_STALE');for(const [sid,b] of bindings){try{checkBinding(b);const t=tasks.find(t=>t.id===b.taskId);if(t&&!t.closed&&t.epoch===b.epoch)continue;}catch{}bindings.delete(sid);}return {tasks,plans:summarizeMissionPlans(tasks),experience:collectMissionExperience(tasks),attachments:[...bindings.values()].map(b=>({taskId:b.taskId,sourceId:b.agent.sourceId,sessionId:b.agent.sessionId})),warning:lastWarning};}
   async function reconcile(){
     const envelope=getEnvelope(),key=scopeKey();need(scopeOf(envelope)&&keyOf(scopeOf(envelope))===key,'TASK_SCOPE_CHANGED');
     const receipts=Array.isArray(envelope.snapshot.localOperationResults)?envelope.snapshot.localOperationResults:[];
@@ -236,7 +237,7 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
   async function invokeFor(session,name,args={}){
     if(name!==TOOL&&name!=='vivo.world.edit')return downstream.invokeFor(session,name,args);
     const b=binding(session);
-    if(name===TOOL){need(b,'TASK_NOT_ATTACHED');need(args&&typeof args==='object'&&!Array.isArray(args)&&Object.keys(args).length===0,'TASK_ARGUMENTS_INVALID');const result=await tx(b.key,j=>{const task=owns(j,b);return {task,mission:missionView(j,task)};});checkBinding(b);return {schema:SCHEMA,...result,readOnly:true,authorizesAction:false};}
+    if(name===TOOL){need(b,'TASK_NOT_ATTACHED');need(args&&typeof args==='object'&&!Array.isArray(args)&&Object.keys(args).length===0,'TASK_ARGUMENTS_INVALID');const result=await tx(b.key,j=>{const task=owns(j,b);const mission=missionView(j,task);return {task,mission,experience:taskMissionExperience(task,mission)};});checkBinding(b);return {schema:SCHEMA,...result,readOnly:true,authorizesAction:false};}
     if(!b)return downstream.invokeFor(session,name,args);
     checkBinding(b);const safe=structuredClone(args);const v=validateEdit(safe,getEnvelope());need(!v.prior,'TASK_OPERATION_ALREADY_RECORDED');const sha256=await digest(fingerprint(v));checkBinding(b);
     const step={operationId:v.operationId,entityId:v.entityId,spaceId:v.spaceId,sourceId:b.agent.sourceId,sha256,state:'pending'};

@@ -75,17 +75,30 @@ def exercise(page, route, label):
     assert ready["mission"]["state"]=="ready",ready
     assert [(r["operationId"],r["sourceId"]) for r in ready["mission"]["dependencies"][0]["receipts"]]==[("recovery:before","recovery-a"),("recovery:after","recovery-c")],ready
     completed=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
+    profiles={p["sourceId"]:p for p in completed["experience"]}
+    assert set(profiles)=={"recovery-a","recovery-c"},profiles
+    assert profiles["recovery-a"]["confirmedUnchanged"]==1 and profiles["recovery-a"]["completedContributions"]==1,profiles
+    assert profiles["recovery-c"]["confirmedChanged"]==1 and profiles["recovery-c"]["completedContributions"]==1,profiles
+    assert profiles["recovery-c"]["objects"][0]["completedChangedTasks"]==1,profiles
+    assert ready["experience"]["authorizesAction"] is False and ready["experience"]["scope"]=="attached-task-and-completed-direct-prerequisites",ready
+    assert ready["experience"]["profiles"]==completed["experience"],ready
+    panel.get_by_role("button",name="Refresh saved tasks").click()
+    idle()
+    experience_text=panel.locator("#vivoMissionExperience").inner_text()
+    assert "recovery-a" in experience_text and "recovery-c" in experience_text and "completed task contribution(s)" in experience_text,experience_text
     enter_local(page,route,world_id)
     open_agent_panel(page)
     restored=page.evaluate("""async()=>{
       const state=await window.VivaPhoneAgentAdmin.taskAccess.inspect(),e=await window.VivaPhoneEngine.snapshot();
-      return {tasks:state.tasks,attachments:state.attachments,branchId:e.branchId,
+      return {tasks:state.tasks,experience:state.experience,attachments:state.attachments,branchId:e.branchId,
         receipts:e.snapshot.localOperationResults.filter(r=>r.operationId.startsWith('recovery:')).map(r=>r.operationId)};
     }""")
     assert restored["tasks"]==completed["tasks"] and restored["attachments"]==[],restored
+    assert restored["experience"]==completed["experience"],restored
     assert restored["branchId"]==second["branchId"] and sorted(restored["receipts"])==["recovery:after","recovery:before"],restored
     return {"rootDiagnosed":True,"reopened":True,"replacementRecommended":True,"originalReceiptPreserved":True,
-            "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":2}
+            "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":2,
+            "collectiveExperiencePreserved":True,"originalSourceCredited":True,"scopedAgentExperience":True}
 
 
 def main(base):

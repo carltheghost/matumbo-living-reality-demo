@@ -233,6 +233,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   planLines.placeholder='key | task title | agent source | prerequisite keys';
   const planDetail=node('pre','Review a plan before saving its tasks.');planDetail.setAttribute('aria-live','polite');planDetail.style.whiteSpace='pre-wrap';planDetail.style.overflowWrap='anywhere';
   const planSummary=node('pre','Refresh saved tasks to see mission progress.');planSummary.setAttribute('aria-live','polite');planSummary.style.whiteSpace='pre-wrap';planSummary.style.overflowWrap='anywhere';
+  const experienceDetail=node('pre','Refresh saved tasks to inspect collective experience.');experienceDetail.id='vivoMissionExperience';experienceDetail.setAttribute('aria-live','polite');experienceDetail.style.whiteSpace='pre-wrap';experienceDetail.style.overflowWrap='anywhere';
   const recommendationDetail=node('pre','Select a detached, ready task to review agent recommendations.');recommendationDetail.style.whiteSpace='pre-wrap';recommendationDetail.style.overflowWrap='anywhere';recommendationDetail.setAttribute('aria-live','polite');
   const taskScopeNow=()=>{const host=globalThis.VivaPhoneEngine,e=host?.publishedSnapshot?.();return host?.active&&e?.snapshot?.worldId&&e?.branchId?JSON.stringify([e.snapshot.worldId,e.branchId]):null;};
   const taskAdmin=()=>{const access=globalThis.VivaPhoneAgentAdmin?.taskAccess;if(!access)throw Error('Native task continuity is unavailable.');return access;};
@@ -241,6 +242,14 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   function resetPlanPreview(){
     const old=planPreview;planPreview=null;planInputEpoch++;if(old)globalThis.VivaPhoneAgentAdmin?.taskAccess?.discardPlan?.(old.token);
     planDetail.textContent='Review a plan before saving its tasks.';savePlanButton.disabled=true;
+  }
+  function drawExperience(){
+    const rows=journal?.experience||[];
+    experienceDetail.textContent=rows.map(p=>p.sourceId+' · '+p.completedContributions+' completed task contribution(s) · '+p.contributedTasks+' recorded task(s)\n'
+      +p.confirmedChanged+' confirmed changed · '+p.confirmedUnchanged+' confirmed unchanged · '+p.pending+' pending · '+p.conflict+' conflicting · '+p.notDispatched+' not dispatched · '+p.closedIncompleteContributions+' closed-incomplete contributions'
+      +(p.unknownSpaceOperations?' · '+p.unknownSpaceOperations+' legacy/unknown-space operations':'')
+      +(p.objects.length?'\n'+p.objects.slice(0,3).map(o=>o.spaceId+' / '+o.entityId+' · '+o.completedChangedTasks+' completed task(s) with changes · '+o.changedTasks+' changed task(s)').join('\n'):'')
+      +(p.objects.length>3?'\n'+(p.objects.length-3)+' additional object histories in the journal.':'')).join('\n\n')||'No recorded operation experience in this world/branch.';
   }
   function drawPlanSummary(){
     planSummary.textContent=(journal?.plans||[]).map(p=>p.objective+' · '+p.completed+'/'+p.total+' completed · '+p.ready+' ready · '+p.blocked+' blocked · '+p.needsReview+' needs review · '+p.closedIncomplete+' closed incomplete').join('\n')||'No saved mission plans in this world/branch.';
@@ -264,7 +273,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
       +mission.dependencies.map(d=>'\nPrerequisite · '+d.title+' · '+d.status+' · '+d.receipts.length+' confirmed receipt(s)').join('');
   }
   function invalidateTaskScope(){
-    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;resetRecommendation();resetPlanPreview();resetRecovery();planSummary.textContent='Refresh saved tasks to see mission progress.';
+    const next=taskScopeNow();if(next===taskScope)return;taskScope=next;taskScopeEpoch++;journal=null;resetRecommendation();resetPlanPreview();resetRecovery();planSummary.textContent='Refresh saved tasks to see mission progress.';experienceDetail.textContent='Refresh saved tasks to inspect collective experience.';
     taskPicker.replaceChildren();prerequisitePicker.replaceChildren();taskDetail.textContent='No task selected.';taskStatus.textContent='World changed. Refresh to inspect the current world’s journal.';
   }
   async function refreshTasks(preferred){
@@ -275,7 +284,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     const placeholder=node('option','Choose a saved task');placeholder.value='';taskPicker.append(placeholder);
     for(const t of journal.tasks){const label=t.title+' · '+t.sourceId+' · '+missionView(journal,t).state;const option=node('option',label);option.value=t.id;taskPicker.append(option);const prerequisite=node('option',label);prerequisite.value=t.id;prerequisite.selected=selectedPrerequisites.has(t.id);prerequisitePicker.append(prerequisite);}
     if(journal.tasks.some(t=>t.id===old))taskPicker.value=old;
-    taskStatus.textContent=journal.warning||journal.tasks.length+' saved task(s) in this world/branch. Grants never resume automatically.';drawTask();drawPlanSummary();
+    taskStatus.textContent=journal.warning||journal.tasks.length+' saved task(s) in this world/branch. Grants never resume automatically.';drawTask();drawPlanSummary();drawExperience();
   }
   const taskRun=fn=>async()=>{if(taskBusy||disposed)return;invalidateTaskScope();const epoch=taskScopeEpoch;taskBusy=true;section.dataset.taskBusy='true';try{refreshMemoryAgents();await fn();}catch(e){if(!disposed){invalidateTaskScope();if(epoch===taskScopeEpoch)taskStatus.textContent=message(e);}}finally{taskBusy=false;section.dataset.taskBusy='false';}};
   taskPicker.addEventListener('change',drawTask);
@@ -292,7 +301,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     const plan=await taskAdmin().recommend(id);invalidateTaskScope();
     if(disposed||epoch!==taskScopeEpoch||taskPicker.value!==id)return;
     recommendation=plan;const top=plan.candidates.find(a=>a.sessionId===plan.recommended?.sessionId);
-    const rows=plan.candidates.map(a=>a.label+' · '+(a.eligible?'eligible':a.reasons.join(', '))+' · '+a.relatedChangedReceipts+' related changed receipt(s)'+(a.continuity?' · current owner':'')+(a.memoryAvailable?' · memory available':''));
+    const rows=plan.candidates.map(a=>a.label+' · '+(a.eligible?'eligible':a.reasons.join(', '))+' · '+a.relatedCompletedTasks+' related completed task(s) · '+a.relatedChangedTasks+' related changed task(s) · '+a.relatedChangedReceipts+' changed receipt(s)'+(a.continuity?' · current owner':'')+(a.memoryAvailable?' · memory available':''));
     recommendationDetail.textContent=(top?'Recommended: '+top.label:'No assignment: '+plan.reason)+'\n'+rows.join('\n');
     approveTaskButton.disabled=!top;
   }));
@@ -349,7 +358,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
   }));
   const closeTaskButton=button('Close attached task journal',taskRun(async()=>{await taskAdmin().finish(selectedAgent());await refreshTasks();}));
   section.append(node('h4','Persistent agent task journal'),node('p','Use the active agent selector above. Only attached native world edits are journaled. Review receipts before handoff. An explicit handoff replaces the chosen agent’s task attachment without changing native grants. Unresolved object edits block other attached tasks. Detaching does not revoke native action permissions. No automatic replay or cloud sync. Prerequisites must be explicitly completed with confirmed native receipts. Closing a task without completion does not unblock its dependents.'),
-    taskTitle,node('p','Optional prerequisites for a new task (select saved tasks first).'),prerequisitePicker,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,handoffTaskButton,reconcileTaskButton,pauseTaskButton,completeTaskButton,closeTaskButton,taskStatus,taskDetail,node('h4','Mission agent recommendation'),node('p','Advisory only. Uses active native grants, local workload, task continuity, related changed receipts and optional memory availability. Approval attaches a task without granting action permissions.'),recommendTaskButton,approveTaskButton,recommendationDetail,node('h4','Adaptive mission recovery'),node('p','Review the root causes blocking this task. Only an incomplete archive with no unresolved receipts can be reopened. The original task ID, prerequisites, receipts and source history remain intact. Review assignment separately after reopening.'),diagnoseTaskButton,recoveryDetail,recoveryReason,reopenTaskButton,node('h4','Shared mission plan'),node('p','One line per subtask: key | title | registered source ID | comma-separated prerequisite keys. Leave source blank to use the selected active agent. The example is a native-edit template, not AI-generated task decomposition. Review and save creates detached tasks only; each still uses the existing recommendation and receipt gates.'),planObjective,planLines,examplePlanButton,previewPlanButton,savePlanButton,planDetail,planSummary);
+    taskTitle,node('p','Optional prerequisites for a new task (select saved tasks first).'),prerequisitePicker,createTaskButton,taskPicker,refreshTaskButton,resumeTaskButton,handoffTaskButton,reconcileTaskButton,pauseTaskButton,completeTaskButton,closeTaskButton,taskStatus,taskDetail,node('h4','Mission agent recommendation'),node('p','Advisory only. Uses active native grants, local workload, task continuity, distinct related completed tasks, distinct related changed tasks and optional memory availability. Receipt volume is descriptive, not a ranking bonus. Approval attaches a task without granting action permissions.'),recommendTaskButton,approveTaskButton,recommendationDetail,node('h4','Collective mission experience'),node('p','Derived from recorded operations in this world and branch. Counts distinguish owner-completed contributions, unchanged receipts, unresolved outcomes and non-dispatch. These observations are not intelligence ratings or provider identity verification.'),experienceDetail,node('h4','Adaptive mission recovery'),node('p','Review the root causes blocking this task. Only an incomplete archive with no unresolved receipts can be reopened. The original task ID, prerequisites, receipts and source history remain intact. Review assignment separately after reopening.'),diagnoseTaskButton,recoveryDetail,recoveryReason,reopenTaskButton,node('h4','Shared mission plan'),node('p','One line per subtask: key | title | registered source ID | comma-separated prerequisite keys. Leave source blank to use the selected active agent. The example is a native-edit template, not AI-generated task decomposition. Review and save creates detached tasks only; each still uses the existing recommendation and receipt gates.'),planObjective,planLines,examplePlanButton,previewPlanButton,savePlanButton,planDetail,planSummary);
   for(const event of ['vivo:phone-statechange','vivo:phone-local-ready'])worldEvents?.addEventListener?.(event,invalidateTaskScope);
   invalidateTaskScope();
   refreshMemoryAgents();
