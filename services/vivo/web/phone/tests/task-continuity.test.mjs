@@ -8,8 +8,8 @@ function fixture(){let serial=0,env={branchId:'main',snapshot:{worldId:'world',l
 const active=s=>{const a=sessions.get(typeof s==='string'?s:s?.sessionId);if(!a||(typeof s==='object'&&s.generation!==a.generation))throw Error('STALE_NATIVE_SESSION');return clone(a);};
 const fp=x=>JSON.stringify({worldId:x.worldId,branchId:x.branchId,eyeId:x.eyeId,spaceId:x.spaceId,entityId:x.entityId,baseRevision:x.baseRevision,delta:x.delta,geometry:x.geometry??null});
 const receipt=(a,fingerprint=fp(a))=>({operationId:a.operationId,fingerprint,result:{revision:1,changed:true}});
-const registry={agentController:{assertActive:active}};
-const downstream={listFor:s=>{active(s);return [{name:'vivo.world.edit'},{name:'neural.predict'}];},invokeFor:async(s,name,a)=>{active(s);calls++;if(name!=='vivo.world.edit')return {name};if(mode==='throw')throw Error('response lost');if(mode==='hold'){await hold;}if(mode!=='missing')env.snapshot.localOperationResults.push(receipt(a));return {status:'accepted'};}};
+const registry={agentController:{assertActive:active},agents:()=>[...sessions.values()].map(a=>({status:'active',activeOperations:0,activeContacts:0,...clone(a)}))};
+const downstream={listFor:s=>{active(s);return [{name:'vivo.world.edit'},{name:'neural.predict'},...(s?.sessionId&&sessions.get(s.sessionId)?.allowRead===true?[{name:'vivo.world.read'}]:[])];},invokeFor:async(s,name,a)=>{active(s);calls++;if(name!=='vivo.world.edit')return {name};if(mode==='throw')throw Error('response lost');if(mode==='hold'){await hold;}if(mode!=='missing')env.snapshot.localOperationResults.push(receipt(a));return {status:'accepted'};}};
 const validateEdit=(a,e)=>{if(a.worldId!==e.snapshot.worldId||a.branchId!==e.branchId)throw Error('scope mismatch');return {...a,prior:e.snapshot.localOperationResults.find(r=>r.operationId===a.operationId)||null};};
 const build=()=>createTaskContinuity({registry,downstream,validateEdit,getEnvelope:()=>env,store,newId:()=>'task-'+(++serial)});
 const f={store,sessions,build,bridge:build(),calls:()=>calls,mode:x=>{mode=x;},branch:x=>{env={branchId:x,snapshot:{worldId:'world',localOperationResults:[]}};},receipt:(a,x)=>env.snapshot.localOperationResults.push(receipt(a,x)),hold(){let resolve;hold=new Promise(r=>resolve=r);mode='hold';return resolve;}};return f;}
@@ -153,4 +153,46 @@ test('an attached agent sees only the explicit direct prerequisite evidence, not
   await f.bridge.admin.create('a','Private unrelated task');await run(f,'private-op');await complete(f,'a',(await progress(f)).task);
   await f.bridge.admin.create('b','Dependent',[a.taskId]);const p=await progress(f,'b');assert.equal(p.mission.dependencies.length,1);
   assert.equal(p.mission.dependencies[0].receipts[0].operationId,'op1');assert(!JSON.stringify(p).includes('private-op'));assert(!f.bridge.tools.listFor('b').some(t=>t.name.includes('complete')));
+});
+
+const eligible=(f,sid)=>{const a=f.sessions.get(sid);f.sessions.set(sid,{...a,allowRead:true});};
+test('orchestrator recommends without attaching or executing and approval reuses the existing task',async()=>{
+  const f=fixture(),a=await attach(f);eligible(f,'a');eligible(f,'b');f.bridge.admin.pause('a');
+  const plan=await f.bridge.admin.recommend(a.taskId);assert.equal(plan.state,'recommended');assert.equal(plan.recommended.sourceId,'muse');assert.equal(plan.authorizesAction,false);
+  await assert.rejects(progress(f),{code:'TASK_NOT_ATTACHED'});assert.equal(f.calls(),0);
+  const approved=await f.bridge.admin.approveRecommendation(plan);assert.equal(approved.taskId,a.taskId);assert.equal(approved.epoch,a.epoch+1);
+  assert.equal((await progress(f)).task.id,a.taskId);assert.equal(f.calls(),0);
+});
+test('recommendation for a detached task fails closed if the chosen session becomes busy',async()=>{
+  const f=fixture(),a=await attach(f);eligible(f,'a');eligible(f,'b');f.bridge.admin.pause('a');const plan=await f.bridge.admin.recommend(a.taskId);
+  const other=await f.bridge.admin.create('a','Other task');
+  await assert.rejects(f.bridge.admin.approveRecommendation(plan),{code:'TASK_ASSIGNMENT_STALE'});
+  assert.equal((await progress(f)).task.id,other.taskId);assert.equal(f.calls(),0);
+});
+test('approval rejects stale world scope, session generation and a competing task epoch',async()=>{
+  const f=fixture(),a=await attach(f);eligible(f,'a');f.bridge.admin.pause('a');
+  const first=await f.bridge.admin.recommend(a.taskId);f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();
+  await assert.rejects(f.bridge.admin.approveRecommendation(first),{code:'TASK_ASSIGNMENT_STALE'});
+  const second=await f.bridge.admin.recommend(a.taskId);f.sessions.set('a',{...f.sessions.get('a'),generation:2});await assert.rejects(f.bridge.admin.approveRecommendation(second));
+  const third=await f.bridge.admin.recommend(a.taskId);await f.build().admin.resume('a',a.taskId);
+  await assert.rejects(f.bridge.admin.approveRecommendation(third),{code:'TASK_ASSIGNMENT_STALE'});assert.equal(f.calls(),0);
+});
+test('approved recommendation transfers ownership and preserves prior receipts, without an edit',async()=>{
+  const f=fixture(),a=await attach(f);await run(f);f.bridge.admin.pause('a');eligible(f,'b');
+  const plan=await f.bridge.admin.recommend(a.taskId);assert.equal(plan.recommended.sourceId,'codex');
+  await f.bridge.admin.approveRecommendation(plan);const p=await progress(f,'b');
+  assert.equal(p.task.sourceId,'codex');assert.equal(p.task.steps[0].sourceId,'muse');assert.equal(p.task.steps[0].state,'confirmed');assert.equal(f.calls(),1);
+  assert.equal(p.task.handoffs[0].to,'codex');
+});
+test('unready or already attached task never has an approved recommendation',async()=>{
+  const f=fixture(),a=await attach(f);eligible(f,'a');eligible(f,'b');
+  assert.equal((await f.bridge.admin.recommend(a.taskId)).reason,'TASK_ALREADY_ATTACHED');
+  const b=await f.bridge.admin.create('b','Dependent',[a.taskId]);f.bridge.admin.pause('b');
+  const plan=await f.bridge.admin.recommend(b.taskId);assert.equal(plan.reason,'TASK_PREREQUISITES_INCOMPLETE');
+  await assert.rejects(f.bridge.admin.approveRecommendation(plan),{code:'TASK_ASSIGNMENT_STALE'});assert.equal(f.calls(),0);
+});
+test('concurrent approval for the same task admits only one assignment',async()=>{
+  const f=fixture(),a=await attach(f);eligible(f,'a');f.bridge.admin.pause('a');const plan=await f.bridge.admin.recommend(a.taskId);
+  const results=await Promise.allSettled([f.bridge.admin.approveRecommendation(plan),f.bridge.admin.approveRecommendation(plan)]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal((await progress(f)).task.epoch,2);assert.equal(f.calls(),0);
 });
