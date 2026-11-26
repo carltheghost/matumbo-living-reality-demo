@@ -297,3 +297,29 @@ test('restore reconciliation is read-only, receipt-bound, and owner-only',async(
   assert.equal(calls.length,4);
   await shutdown(transport,socket);
 });
+
+
+test('owner backup validates each original digest and rejects wrong cursor, flags and truncated parts',async()=>{
+  const {transport,socket}=await admitted();
+  const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+  const reportJson=JSON.stringify({schema:'matumbo.provider-council/1',mode:'fixture',runId:'backup-fixture',worldActionExecuted:false,postedChargesUsd:null});
+  const envelope={schema:'matumbo.provider-council-export/1',reportJson,reportSha256:await hash(reportJson)};
+  const journalJson=JSON.stringify([envelope]),capsule={schema:'matumbo.neural-memory-capsule/1',journalJson,journalSha256:await hash(journalJson)};
+  const part={schema:'vivo.memory-backup-part/1',revision:'a'.repeat(64),after:null,offset:0,count:1,total:2,nextAfter:1,complete:false,
+    capsule,includesGrants:false,includesRestoreReceipts:false};
+  const calls=[];
+  const respond=value=>async(url,init)=>{assert.equal(url,'http://vivo.test/api/neural-memory/capsule');calls.push(JSON.parse(init.body));return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:value})};};
+  const first=await transport.prepareMemoryBackupPart(undefined,respond(part));
+  assert.deepEqual(JSON.parse(first.text),capsule);assert.equal(first.nextAfter,1);
+  const next={...part,after:1,offset:1,nextAfter:null,complete:true};
+  assert.equal((await transport.prepareMemoryBackupPart({after:1,revision:part.revision},respond(next))).complete,true);
+  for(const bad of [{...part,includesGrants:true},{...part,count:2},{...part,complete:true},{...part,capsule:{...capsule,journalSha256:'0'.repeat(64)}},
+    {...part,capsule:{...capsule,journalJson:journalJson+' ',journalSha256:await hash(journalJson+' ')}}])
+    await assert.rejects(transport.prepareMemoryBackupPart(undefined,respond(bad)),/MEMORY_BACKUP_PART_INVALID/);
+  await assert.rejects(transport.prepareMemoryBackupPart({after:1,revision:part.revision},respond({...next,revision:'b'.repeat(64)})),/MEMORY_BACKUP_PART_INVALID/);
+  assert.ok(calls.every(call=>call.op==='backup'));
+  const count=calls.length;transport.role='editor';
+  await assert.rejects(transport.prepareMemoryBackupPart(undefined,respond(part)),/MEMORY_OWNER_REQUIRED/);
+  assert.equal(calls.length,count);
+  await shutdown(transport,socket);
+});

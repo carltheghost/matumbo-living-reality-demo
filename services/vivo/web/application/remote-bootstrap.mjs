@@ -173,7 +173,48 @@ vaultRecent.onclick=async()=>{
   }catch(error){if(current())vaultCapsuleStatus.textContent=error.code||error.message;}
   finally{if(current()){vaultBusy=false;updateVaultControls();}}
 };
-memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory,vaultRecovery);
+const vaultBackup=element('details');
+vaultBackup.append(element('summary',{textContent:'Back up private evidence vault'}),
+  element('p',{className:'muted',textContent:'Download all evidence in bounded parts. Files exclude invitations, grants and restore receipts. Copies are not revocable or encrypted by Vivo. Save every part to recover the full evidence vault.'}));
+const backupStart=element('button',{type:'button',textContent:'Download first backup part'});
+const backupNext=element('button',{type:'button',textContent:'Download next backup part',disabled:true});
+const backupStatus=element('p',{textContent:'No backup started.'});
+backupStatus.setAttribute('aria-label','Vault backup status');backupStatus.setAttribute('aria-live','polite');
+vaultBackup.append(backupStart,backupNext,backupStatus);
+let backupEpoch=0,backupBusy=false,backupCursor=null;
+function updateBackupControls(){backupStart.disabled=backupBusy;backupNext.disabled=backupBusy||!backupCursor;}
+function resetVaultBackup(){
+  backupEpoch++;backupBusy=false;backupCursor=null;vaultBackup.open=false;
+  backupStatus.textContent='No backup started.';updateBackupControls();
+}
+async function downloadVaultPart(first){
+  if(backupBusy||(!first&&!backupCursor)||role!=='owner'||!transport||transport.closed)return;
+  const client=transport,epoch=++backupEpoch,prior=first?null:backupCursor;
+  const current=()=>transport===client&&!client.closed&&epoch===backupEpoch&&role==='owner';
+  if(first)backupCursor=null;
+  backupBusy=true;updateBackupControls();
+  try{
+    const part=await client.prepareMemoryBackupPart(prior?{after:prior.after,revision:prior.revision}:undefined);
+    if(!current())return;
+    if(prior&&(part.offset!==prior.offset||part.total!==prior.total))throw Error('MEMORY_BACKUP_PART_INVALID');
+    if(part.total===0){backupStatus.textContent='Vault is empty. No backup file needed.';return;}
+    const url=URL.createObjectURL(new Blob([part.text],{type:'application/json'}));
+    const link=element('a',{href:url,download:part.filename,hidden:true});
+    try{document.body.append(link);link.click();}
+    finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+    backupCursor=part.complete?null:{after:part.nextAfter,revision:part.revision,offset:part.offset+part.count,total:part.total};
+    backupStatus.textContent='Download requested: '+(part.offset+1)+'–'+(part.offset+part.count)+' of '+part.total+
+      ' reports. '+(part.complete?'Final part; confirm every file was saved.':'Download the next part to complete this backup.');
+  }catch(error){
+    if(current()){
+      if(error.code==='BACKUP_REVISION_STALE'||error.code==='BACKUP_CURSOR_INVALID')backupCursor=null;
+      backupStatus.textContent=(error.code||error.message)+' · '+(backupCursor?'Check saved files before continuing.':'Start a new backup; do not combine different revisions.');
+    }
+  }finally{if(current()){backupBusy=false;updateBackupControls();}}
+}
+backupStart.onclick=()=>void downloadVaultPart(true);
+backupNext.onclick=()=>void downloadVaultPart(false);
+memoryOwner.append(memoryFile,archiveMemory,shareMemoryId,shareInvite,loadShares,grantMemory,revokeMemory,vaultRecovery,vaultBackup);
 const agentContext=element('details');
 agentContext.append(element('summary',{textContent:'Prepare agent evidence context'}),
   element('p',{className:'muted',textContent:'Choose a task and provenance. Recall returns authorized evidence only, including disagreement. No model call or automatic action.'}));
@@ -202,7 +243,7 @@ let memoryEpoch=0,memoryCursor=null;
 resetSharing();
 function clearMemoryView(){
   memoryEpoch++;memoryCursor=null;clearReasoning();memoryResults.replaceChildren();resetSharing();
-  memoryFile.value='';resetVaultCapsule();memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
+  memoryFile.value='';resetVaultCapsule();resetVaultBackup();memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
   taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;reasonEvidence.disabled=false;
   memoryStatus.textContent='Connect to recall evidence.';
 }

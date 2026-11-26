@@ -226,6 +226,47 @@ export class RemoteTransport {
       return body.result;
     }finally{clearTimeout(timer);}
   }
+  async prepareMemoryBackupPart(cursor={after:null,revision:null},fetchImpl=globalThis.fetch){
+    if(this.role!=='owner')throw Error('MEMORY_OWNER_REQUIRED');
+    const key=structuredClone(cursor),socket=this.socket;
+    const fail=()=>{throw Error('MEMORY_BACKUP_PART_INVALID');};
+    const integer=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
+    if(!reasoningKeys(key,['after','revision'])||
+      !((key.after===null&&key.revision===null)||(integer(key.after,1,Number.MAX_SAFE_INTEGER)&&reasoningDigest(key.revision))))fail();
+    const result=await this._memoryRequest('/api/neural-memory/capsule','backup',key,fetchImpl);
+    if(!reasoningKeys(result,['schema','revision','after','offset','count','total','nextAfter','complete','capsule','includesGrants','includesRestoreReceipts'])||
+      result.schema!=='vivo.memory-backup-part/1'||!reasoningDigest(result.revision)||result.after!==key.after||
+      (key.revision!==null&&result.revision!==key.revision)||result.includesGrants!==false||result.includesRestoreReceipts!==false||
+      !integer(result.total,0,128)||!integer(result.offset,0,result.total)||!integer(result.count,0,64)||
+      result.offset+result.count>result.total||(key.after===null&&result.offset!==0)||
+      (result.count===0&&result.total!==0)||result.complete!==(result.offset+result.count===result.total)||
+      (result.complete?result.nextAfter!==null:!integer(result.nextAfter,(key.after??0)+1,Number.MAX_SAFE_INTEGER)))fail();
+    const capsule=result.capsule;
+    if(!reasoningKeys(capsule,['schema','journalJson','journalSha256'])||capsule.schema!=='matumbo.neural-memory-capsule/1'||
+      typeof capsule.journalJson!=='string'||capsule.journalJson.length>524288||!reasoningDigest(capsule.journalSha256))fail();
+    const bytes=new TextEncoder().encode(capsule.journalJson);
+    if(bytes.length>524288)fail();
+    const sha=async data=>Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256',data)),b=>b.toString(16).padStart(2,'0')).join('');
+    if(await sha(bytes)!==capsule.journalSha256)fail();
+    let envelopes;try{envelopes=JSON.parse(capsule.journalJson);}catch{fail();}
+    if(!Array.isArray(envelopes)||envelopes.length!==result.count||JSON.stringify(envelopes)!==capsule.journalJson)fail();
+    const seen=new Set();
+    for(const envelope of envelopes){
+      if(!reasoningKeys(envelope,['schema','reportJson','reportSha256'])||envelope.schema!=='matumbo.provider-council-export/1'||
+        typeof envelope.reportJson!=='string'||envelope.reportJson.length>32000||!reasoningDigest(envelope.reportSha256)||
+        await sha(new TextEncoder().encode(envelope.reportJson))!==envelope.reportSha256)fail();
+      let report;try{report=JSON.parse(envelope.reportJson);}catch{fail();}
+      if(!['matumbo.provider-council/1','matumbo.provider-council/2'].includes(report?.schema)||
+        !['fixture','live'].includes(report.mode)||typeof report.runId!=='string'||seen.has(report.runId)||
+        report.worldActionExecuted!==false||report.postedChargesUsd!==null||JSON.stringify(report)!==envelope.reportJson)fail();
+      seen.add(report.runId);
+    }
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    return Object.freeze({revision:result.revision,offset:result.offset,count:result.count,total:result.total,
+      complete:result.complete,nextAfter:result.nextAfter,
+      filename:'neural-memory-'+result.revision.slice(0,12)+'-'+(result.offset+1)+'-'+(result.offset+result.count)+'.json',
+      text:JSON.stringify(capsule,null,2)+'\n',digest:capsule.journalSha256});
+  }
   async _verifyRestoreReceipt(receipt){
     const keys=['schema','capsuleDigest','baseRevision','committedAt','addedMemoryIds','added','duplicates',
       'totalAtCommit','newReportsPrivateAtCommit','receiptSha256'];

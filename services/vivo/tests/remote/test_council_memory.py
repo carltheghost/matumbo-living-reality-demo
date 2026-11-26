@@ -410,3 +410,64 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.vault.db.execute("DROP TRIGGER fail_receipt")
         await self.rpc("restore",{"capsule":capsule,"review":key},capsule=True)
         self.assertEqual((await self.rpc("receipt",key,capsule=True))["status"],"committed")
+
+
+    async def test_owner_backup_parts_roundtrip_and_revision_fence(self):
+        entries=[change(self.mission,lambda r:r.update(runId=f"backup-{i:03}")) for i in range(70)]
+        for envelope in entries:
+            await self.rpc("archive",{"envelope":envelope})
+        before=self.vault.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall()
+        args={"after":None,"revision":None}
+        first=await self.rpc("backup",args,capsule=True)
+        self.assertEqual(first["schema"],"vivo.memory-backup-part/1")
+        self.assertEqual((first["offset"],first["count"],first["total"]),(0,64,70))
+        self.assertFalse(first["complete"])
+        self.assertFalse(first["includesGrants"])
+        self.assertFalse(first["includesRestoreReceipts"])
+        self.assertEqual(await self.rpc("backup",args,token=self.one["token"],expected=403,capsule=True),"FORBIDDEN")
+        self.assertEqual(await self.rpc("backup",args,token=None,expected=401,capsule=True),"AUTH_REQUIRED")
+        cursor={"after":first["nextAfter"],"revision":first["revision"]}
+        second=await self.rpc("backup",cursor,capsule=True)
+        self.assertEqual((second["offset"],second["count"],second["total"]),(64,6,70))
+        self.assertTrue(second["complete"])
+        self.assertIsNone(second["nextAfter"])
+        self.assertEqual(first["revision"],second["revision"])
+        recovered=[]
+        for part in (first,second):
+            raw=part["capsule"]["journalJson"]
+            self.assertEqual(hashlib.sha256(raw.encode()).hexdigest(),part["capsule"]["journalSha256"])
+            self.assertLessEqual(len(raw.encode()),512*1024)
+            recovered.extend(json.loads(raw))
+        self.assertEqual(recovered,entries)
+        self.assertEqual(self.vault.db.execute("SELECT * FROM evidence ORDER BY seq").fetchall(),before)
+        # Import both parts through the existing restore path in a fresh
+        # database; compare exact original envelopes, not just counts.
+        with tempfile.TemporaryDirectory() as temp:
+            other=EvidenceVault(Path(temp)/"restored.sqlite")
+            try:
+                principal=Principal("owner","remote.owner","one")
+                for part in (first,second):
+                    capsule=part["capsule"]
+                    review=other.capsule_dispatch(principal,{"op":"preview","args":{"capsule":capsule}})
+                    other.capsule_dispatch(principal,{"op":"restore","args":{"capsule":capsule,
+                        "review":{k:review[k] for k in ("capsuleDigest","baseRevision")}}})
+                self.assertEqual([other.decode(row)[1] for row in other.db.execute("SELECT * FROM evidence ORDER BY seq")],entries)
+                self.assertEqual(other.db.execute("SELECT count(*) FROM grants").fetchone()[0],0)
+            finally:
+                other.close()
+        await self.rpc("grant",{"memoryId":"council:"+entries[0]["reportSha256"],"invitationId":self.one["id"],"granted":True})
+        self.assertEqual(await self.rpc("backup",cursor,expected=409,capsule=True),"BACKUP_REVISION_STALE")
+        fresh=await self.rpc("backup",args,capsule=True)
+        self.assertNotEqual(fresh["revision"],first["revision"])
+        self.assertEqual(fresh["capsule"],first["capsule"])
+        self.assertEqual(await self.rpc("backup",{"after":999,"revision":fresh["revision"]},expected=409,capsule=True),"BACKUP_CURSOR_INVALID")
+
+    async def test_empty_backup_and_corrupt_evidence_fail_closed(self):
+        args={"after":None,"revision":None}
+        empty=await self.rpc("backup",args,capsule=True)
+        self.assertEqual((empty["count"],empty["total"],empty["complete"]),(0,0,True))
+        self.assertEqual(empty["capsule"]["journalJson"],"[]")
+        await self.rpc("archive",{"envelope":self.mission})
+        self.vault.db.execute("UPDATE evidence SET envelope='{}'")
+        self.assertEqual(await self.rpc("backup",args,expected=409,capsule=True),"STORED_EVIDENCE_INVALID")
+        self.assertEqual(await self.rpc("backup",{"after":1,"revision":None},expected=400,capsule=True),"REQUEST_INVALID")
