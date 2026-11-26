@@ -4,6 +4,9 @@ on:
     paths:
       - 'scripts/vivo/provider-council.mjs'
       - 'src/domains/provider-council-evidence.js'
+      - 'src/domains/council-memory.js'
+      - 'src/render/neural-mesh.js'
+      - 'tests/council-memory.test.mjs'
       - 'src/render/web-ai.js'
       - 'tests/provider-council.test.mjs'
       - '.github/workflows/provider-council-ci.yml'
@@ -24,7 +27,7 @@ jobs:
         run: |
           node --check scripts/vivo/provider-council.mjs
           node --check src/render/web-ai.js
-          node --test tests/provider-council.test.mjs tests/compute-economy-expanded.test.mjs tests/web-ai-compute.test.mjs
+          node --test tests/provider-council.test.mjs tests/compute-economy-expanded.test.mjs tests/web-ai-compute.test.mjs tests/council-memory.test.mjs tests/neural-mesh-render.test.mjs
           node scripts/vivo/provider-council.mjs --fixture --out=provider-council-fixture.json
           node scripts/vivo/provider-council.mjs --fixture --task=route --out=provider-council-mission-fixture.json
       - uses: actions/upload-artifact@v4

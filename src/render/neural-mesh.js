@@ -1,3 +1,4 @@
+import { createCouncilMemory, filterCouncilMemory } from "../domains/council-memory.js";
 import { NEURAL_MESH_SOURCE } from "../domains/neural-mesh.js?v=20260922-cache2";
 
 /**
@@ -281,6 +282,64 @@ export function createNeuralMeshConsole({
   let opened = panel.hidden !== true;
   let trace = [];
 
+  // Evidence recall is separate from the simulated Control Tower/Oracle
+  // projection. It does not add agents, grant authority or execute proposals.
+  let memoryStore=null;
+  try{memoryStore=documentRoot.defaultView?.sessionStorage??null;}catch{}
+  const memory=createCouncilMemory({storage:memoryStore});
+  const memoryRegion=documentRoot.createElement("section");
+  memoryRegion.setAttribute("role","region");
+  memoryRegion.setAttribute("aria-label","Neural Memory evidence");
+  memoryRegion.appendChild(createText(documentRoot,"h3","neural-mesh-section-title","Neural Memory · council evidence"));
+  memoryRegion.appendChild(createText(documentRoot,"p","","Explicitly archived reports in this tab. Integrity is checked on recall; provider origin and billing are not authenticated."));
+  const memoryQuery=documentRoot.createElement("input");
+  memoryQuery.type="search";memoryQuery.maxLength=128;memoryQuery.value="";
+  memoryQuery.setAttribute("aria-label","Search Neural Memory");
+  memoryQuery.setAttribute("placeholder","Provider, task, verdict or digest");
+  const memoryMode=documentRoot.createElement("select");
+  memoryMode.setAttribute("aria-label","Evidence source");
+  for(const [value,label] of [["all","All evidence"],["fixture","Synthetic fixtures"],["live","Host-reported live"]]){
+    const option=documentRoot.createElement("option");option.value=value;option.textContent=label;memoryMode.appendChild(option);
+  }
+  memoryMode.value="all";
+  const recallButton=createText(documentRoot,"button","","Recall evidence");recallButton.type="button";
+  const memoryStatus=createText(documentRoot,"p","","Neural Memory has not been read.");
+  memoryStatus.setAttribute("role","status");memoryStatus.setAttribute("aria-label","Neural Memory status");
+  const memoryResults=documentRoot.createElement("div");
+  memoryResults.setAttribute("aria-label","Neural Memory results");
+  memoryRegion.append(memoryQuery,memoryMode,recallButton,memoryStatus,memoryResults);
+  if(typeof panel.insertBefore==="function")panel.insertBefore(memoryRegion,currentEl);
+  else panel.appendChild(memoryRegion);
+  let recallEpoch=0;
+  async function recallEvidence(){
+    const epoch=++recallEpoch;
+    try{
+      const all=await memory.snapshot();
+      if(epoch!==recallEpoch)return;
+      const records=filterCouncilMemory(all,{query:String(memoryQuery.value??""),mode:memoryMode.value||"all"});
+      memoryResults.replaceChildren();
+      memoryStatus.textContent=records.length+" matching / "+all.length+" remembered reports · this tab";
+      for(const record of records){
+        const card=documentRoot.createElement("details");
+        card.appendChild(createText(documentRoot,"summary","",
+          (record.mode==="fixture"?"Fixture · not live":"Host-reported · unverified")+" · "+record.task+" · "+record.runId));
+        card.appendChild(createText(documentRoot,"p","","Evidence SHA-256: "+record.evidenceDigest));
+        if(record.localOptimum)card.appendChild(createText(documentRoot,"p","","Local optimum: "+record.localOptimum.candidate+
+          " · cost "+record.localOptimum.cost+" · value "+record.localOptimum.value));
+        for(const row of record.rows)card.appendChild(createText(documentRoot,"p","",row.provider+" · "+row.verdict+
+          (row.candidate?" · "+row.candidate:"")));
+        card.appendChild(createText(documentRoot,"p","","Advisory evidence only. Actual charges unknown."));
+        memoryResults.appendChild(card);
+      }
+    }catch(error){
+      if(epoch!==recallEpoch)return;
+      memoryResults.replaceChildren();memoryStatus.textContent=error.message;
+    }
+  }
+  recallButton.addEventListener("click",()=>{void recallEvidence();});
+  memoryQuery.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();void recallEvidence();}});
+  memoryMode.addEventListener("change",()=>{void recallEvidence();});
+
   function selectedRecord() {
     return listForType(summary, selectedType).find((record) => record.id === selectedId)
       ?? summary.records[0]
@@ -292,6 +351,8 @@ export function createNeuralMeshConsole({
     panel.hidden = !opened;
     panel.classList?.toggle?.("visible", opened);
     panel.setAttribute?.("aria-hidden", String(!opened));
+    if(opened)void recallEvidence();
+    else recallEpoch++;
   }
 
   function pushTrace(entry) {

@@ -28,6 +28,8 @@ jobs:
           - {device: mobile, scenario: orientation}
           - {device: desktop, scenario: council}
           - {device: mobile, scenario: council}
+          - {device: desktop, scenario: memory}
+          - {device: mobile, scenario: memory}
     steps:
       - uses: actions/checkout@v4
         with:

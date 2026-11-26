@@ -1,3 +1,4 @@
+import { createCouncilMemory } from "../domains/council-memory.js";
 import { createJevUsageJournal } from "../domains/jev-advice-receipt.js";
 import { parseCouncilReport, summarizeCouncilMission, COUNCIL_MISSION_SCHEMA, COUNCIL_STORAGE_KEY } from "../domains/provider-council-evidence.js";
 /**
@@ -623,6 +624,23 @@ export function createWebAiConsole({
   councilStatus.setAttribute("role","status");councilSection.appendChild(councilStatus);
   const councilRows=el(doc,"div","web-ai-economy-section");
   councilRows.setAttribute("aria-label","Latest provider council report");councilSection.appendChild(councilRows);
+  const councilMemory=createCouncilMemory({storage:sessionStore});
+  let acceptedCouncilEnvelope=null;
+  const rememberCouncil=el(doc,"button","web-ai-btn","Remember in Neural Mesh");
+  rememberCouncil.type="button";rememberCouncil.disabled=true;councilSection.appendChild(rememberCouncil);
+  const memoryNotice=el(doc,"p","web-ai-economy-statusline","Optional: archive this validated report for later recall on Neural Mesh in this tab.");
+  memoryNotice.setAttribute("aria-live","polite");memoryNotice.setAttribute("aria-label","Council memory status");
+  councilSection.appendChild(memoryNotice);
+  rememberCouncil.addEventListener("click",async()=>{
+    if(!acceptedCouncilEnvelope||rememberCouncil.disabled)return;
+    const envelope=acceptedCouncilEnvelope;
+    rememberCouncil.disabled=true;councilFile.disabled=true;
+    try{
+      const result=await councilMemory.archive(envelope);
+      memoryNotice.textContent=result.status==="duplicate"?"Already remembered in Neural Mesh.":"Evidence remembered in Neural Mesh.";
+    }catch(error){memoryNotice.textContent=error.message;}
+    finally{rememberCouncil.disabled=!acceptedCouncilEnvelope;councilFile.disabled=false;}
+  });
   councilSection.appendChild(el(doc,"p","web-ai-economy-statusline",
     "Report contents are not provider-authenticated. Fixture results never establish live availability. Imported observations cannot execute a model, change demo credits, rewards or posted charges. Latest report only, saved in this tab when storage is available."));
   economySection.insertBefore(councilSection,metrics);
@@ -656,6 +674,9 @@ export function createWebAiConsole({
   async function acceptCouncil(envelope,epoch,save){
     const report=await parseCouncilReport(envelope);
     if(epoch!==councilEpoch)return;
+    acceptedCouncilEnvelope=JSON.parse(JSON.stringify(envelope));
+    rememberCouncil.disabled=false;
+    memoryNotice.textContent="Optional: archive this validated report for later recall on Neural Mesh in this tab.";
     renderCouncil(report);
     if(!save){councilStatus.textContent="Restored latest report for this tab.";return;}
     const bytes=JSON.stringify(envelope);
@@ -677,12 +698,12 @@ export function createWebAiConsole({
   }catch{councilStatus.textContent="Saved provider report could not be read.";}
   councilFile.addEventListener("change",async()=>{
     const file=councilFile.files?.[0];if(!file)return;
-    const epoch=++councilEpoch;councilFile.disabled=true;
+    const epoch=++councilEpoch;councilFile.disabled=true;rememberCouncil.disabled=true;
     try{
       if(file.size>65536)throw new Error("Report too large.");
       await acceptCouncil(JSON.parse(await file.text()),epoch,true);
     }catch{councilStatus.textContent="Report rejected. Existing evidence and balances were not changed.";}
-    finally{councilFile.value="";councilFile.disabled=false;}
+    finally{councilFile.value="";councilFile.disabled=false;rememberCouncil.disabled=!acceptedCouncilEnvelope;}
   });
 
 
