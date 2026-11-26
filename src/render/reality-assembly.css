@@ -239,7 +239,25 @@ body.assembly-mode .reality-lens-feature-panel:not([hidden])::after{bottom:4px;t
 body.assembly-mode .reality-lens-feature-panel[data-object-shape=sphere]:not([hidden])::before,body.assembly-mode .reality-lens-feature-panel[data-object-shape=sphere]:not([hidden])::after{left:18%;width:64%;border-radius:50%}
 body.assembly-mode .reality-lens-feature-panel[data-object-shape=cylinder]:not([hidden])::before,body.assembly-mode .reality-lens-feature-panel[data-object-shape=cylinder]:not([hidden])::after{left:14%;width:72%;border-radius:50%}
 body.assembly-mode .reality-lens-feature-panel[data-object-shape=phone]:not([hidden])::before,body.assembly-mode .reality-lens-feature-panel[data-object-shape=phone]:not([hidden])::after{left:10%;width:80%;border-radius:12px}
-body.assembly-mode #web-ai-console.reality-lens-feature-panel .web-ai-body{min-height:0;flex:1;overflow:auto}
+/* The attached Web + AI skin is the scroll container. Let each selected
+   face contribute its full natural height instead of creating a nested,
+   zero-height flex viewport when phone chrome consumes the object height.
+   Detached/standalone Web + AI keeps its original layout. */
+body.assembly-mode #reality-assembly #web-ai-console[data-lens-surface-attached=true] .web-ai-body{
+  display:block!important;flex:0 0 auto!important;min-height:0;overflow:visible!important
+}
+body.assembly-mode #reality-assembly #web-ai-console[data-lens-surface-attached=true] .web-ai-body>section:not([hidden]){
+  flex:none;min-height:0
+}
+/* Three short face labels fit in one row; generic surface action wrapping
+   must not turn them into three full-width, 48px-high toolbar rows. */
+body.assembly-mode #reality-assembly #web-ai-console[data-lens-surface-attached=true] .web-ai-tabs{
+  display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:6px!important;padding:0 0 6px
+}
+body.assembly-mode #reality-assembly #web-ai-console[data-lens-surface-attached=true] .web-ai-tabs>button{
+  min-width:0!important;min-height:48px!important;padding:6px 4px;overflow-wrap:anywhere
+}
 body.assembly-mode #web-ai-console.reality-lens-feature-panel .web-ai-frame{height:clamp(90px,22vh,180px)}
 /* The Web + AI panel is the selected object face in the Lens: use the same
    restrained gold language as the shell rather than the old cyan console. */

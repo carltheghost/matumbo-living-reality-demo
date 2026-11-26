@@ -528,18 +528,27 @@ export function createWebAiConsole({
   economyStatus.dataset.kind = "info";
   form.appendChild(economyStatus);
   economySection.appendChild(form);
+  // Imported observations belong to the Compute object, before the demo
+  // wallet/router/labs. Keep them visually and semantically separate from
+  // verified spend, rewards and the page-session accounting timeline.
+  const receiptSection = el(doc, "div", "web-ai-economy-section");
+  receiptSection.setAttribute("role", "region");
+  receiptSection.setAttribute("aria-label", "Imported Jev usage — not billing");
+  receiptSection.appendChild(el(doc, "strong", "web-ai-economy-title", "IMPORTED JEV USAGE · NOT BILLING"));
+  economySection.insertBefore(receiptSection, metrics);
   const receiptLabel = el(doc, "label", "web-ai-economy-statusline", "Import a Vivo Jev usage receipt");
   const receiptFile = el(doc, "input");
   receiptFile.type = "file";
   receiptFile.accept = ".json,application/json";
+  receiptFile.setAttribute("aria-describedby", "web-ai-jev-import-boundary");
   receiptLabel.appendChild(receiptFile);
   const receiptStatus = el(doc, "p", "web-ai-status");
   receiptStatus.setAttribute("role", "status");
-  economySection.append(receiptLabel, receiptStatus);
+  receiptSection.append(receiptLabel, receiptStatus);
   const jevJournal = createJevUsageJournal({ storage: sessionStore });
   const receiptHistory = el(doc, "div", "web-ai-economy-section");
   receiptHistory.setAttribute("aria-label", "Saved Jev receipt history");
-  economySection.appendChild(receiptHistory);
+  receiptSection.appendChild(receiptHistory);
 
   function renderJevHistory() {
     receiptHistory.replaceChildren();
@@ -594,8 +603,10 @@ export function createWebAiConsole({
     }
   });
   renderJevHistory();
-  economySection.appendChild(el(doc, "p", "web-ai-economy-statusline",
-    "Saved history survives reloads in this tab, not guaranteed after closing it. Imported receipts are not provider-authenticated and do not change demo credits, rewards or posted charges. Provider billing remains authoritative."));
+  const receiptBoundary = el(doc, "p", "web-ai-economy-statusline",
+    "Saved history survives reloads in this tab, not guaranteed after closing it. Imported receipts are not provider-authenticated and do not change demo credits, rewards or posted charges. Provider billing remains authoritative.");
+  receiptBoundary.id = "web-ai-jev-import-boundary";
+  receiptSection.appendChild(receiptBoundary);
 
 
   const treasurySection = el(doc, "div", "web-ai-economy-section");
