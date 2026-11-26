@@ -598,3 +598,67 @@ test('critic rechecks world/branch epoch before returning a report',async()=>{
   f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();release();
   await assert.rejects(pending,{code:'CRITIC_SCOPE_STALE'});assert.equal(f.calls(),0);
 });
+
+const experimentalSpec=(target,captureForecast=false)=>({taskId:target.taskId,epoch:target.epoch,cue:{spaceId:'room',entityId:'object'},hypotheses:[{spaceId:'room',entityId:'other'},{spaceId:'room',entityId:'alternative'}],captureForecast});
+test('preregistered forecast survives reload and is contradicted by actual future journal evidence',async()=>{
+  const {f,target,sources,grant}=await forecastFixture();
+  await assert.rejects(f.bridge.admin.registerExperiment('b',experimentalSpec(target,true)),{code:'MISSION_RECALL_NOT_GRANTED'});
+  await grant(sources);
+  const receipt=await f.bridge.admin.registerExperiment('b',experimentalSpec(target,true));
+  assert.equal(receipt.registration.forecast.suggestion.supportingTasks,3);
+  assert.equal(receipt.registration.forecast.suggestion.entityId,'other');
+  assert.equal(receipt.authorizesAction,false);
+  assert(!sources.some(id=>JSON.stringify(receipt.registration).includes(id)));
+  assert.equal((await progress(f,'b')).experiment.status,'pending');
+  assert.equal(f.calls(),8);
+  f.bridge=f.build();
+  assert.deepEqual((await f.bridge.admin.inspect()).missionRecallGrants,[]);
+  const resumed=await f.bridge.admin.resume('b',target.taskId);
+  await assert.rejects(f.bridge.admin.registerExperiment('b',experimentalSpec(resumed)),{code:'EXPERIMENT_ALREADY_REGISTERED'});
+  await run(f,'experiment-cue','b');
+  await f.bridge.tools.invokeFor('b','vivo.world.edit',{...edit('experiment-alternative'),entityId:'alternative'});
+  assert.equal((await progress(f,'b')).experiment.status,'pending');
+  await complete(f,'b',(await progress(f,'b')).task);
+  const state=await f.bridge.admin.inspect(),result=state.experiments.reports[0];
+  assert.equal(result.status,'evaluated');assert.equal(result.primaryOutcome,'incorrect');assert.equal(result.forecastOutcome,'incorrect');
+  assert.deepEqual(result.hypotheses.map(h=>h.result),['contradicted','supported']);
+  assert.equal(result.observation.to.operationId,'experiment-alternative');
+  assert.deepEqual(result.registration,receipt.registration);
+  assert.equal(state.experiments.counts.forecastIncorrect,1);assert.equal(f.calls(),10);
+  f.bridge=f.build();assert.deepEqual((await f.bridge.admin.inspect()).experiments,state.experiments);
+});
+test('registration requires exact attachment and pre-operation ordering',async()=>{
+  const f=fixture(),a=await attach(f);
+  await assert.rejects(f.bridge.admin.registerExperiment('a',{...experimentalSpec(a),epoch:a.epoch+1}),{code:'EXPERIMENT_TARGET_STALE'});
+  await assert.rejects(f.bridge.admin.registerExperiment('b',experimentalSpec(a)),{code:'TASK_NOT_ATTACHED'});
+  await run(f,'already-observed');await assert.rejects(f.bridge.admin.registerExperiment('a',experimentalSpec(a)),{code:'EXPERIMENT_TOO_LATE'});
+  assert.equal((await f.bridge.admin.inspect()).experiments.counts.registered,0);
+  const fresh=await f.bridge.admin.create('a','Unobserved test');
+  const both=await Promise.allSettled([f.bridge.admin.registerExperiment('a',experimentalSpec(fresh)),f.bridge.admin.registerExperiment('a',experimentalSpec(fresh))]);
+  assert.equal(both.filter(r=>r.status==='fulfilled').length,1);
+  assert.equal(both.find(r=>r.status==='rejected').reason.code,'EXPERIMENT_ALREADY_REGISTERED');
+  assert.equal(f.calls(),1);
+});
+test('replacing a recall grant during queued registration cannot capture earlier private evidence',async()=>{
+  const {f,target,sources,grant}=await forecastFixture();await grant(sources);
+  const release=f.store.hold(),pending=f.bridge.admin.registerExperiment('b',experimentalSpec(target,true));await release.entered;
+  f.bridge.admin.revokeMissionRecall('b');release();
+  await assert.rejects(pending,{code:'MISSION_RECALL_GRANT_STALE'});
+  assert.equal((await f.bridge.admin.inspect()).experiments.counts.registered,0);assert.equal(f.calls(),8);
+});
+test('registration persists through handoff, but another task never sees it through task.progress',async()=>{
+  const f=fixture(),a=await attach(f);const result=await f.bridge.admin.registerExperiment('a',experimentalSpec(a));
+  const unrelated=await f.bridge.admin.create('b','Unrelated task');assert.equal((await progress(f,'b')).experiment,null);
+  const task=(await progress(f)).task;
+  await f.bridge.admin.handoff('b',task.id,{sourceId:task.sourceId,epoch:task.epoch});
+  assert.deepEqual((await progress(f,'b')).task.experiment,result.registration);
+  assert.equal((await progress(f,'b')).experiment.registration.registeredSourceId,'muse');
+  assert.equal((await f.bridge.admin.inspect()).tasks.find(t=>t.id===unrelated.taskId).experiment,undefined);
+  assert.equal(f.calls(),0);
+});
+test('world switch fences registration queued against previous branch',async()=>{
+  const f=fixture(),a=await attach(f),release=f.store.hold(),pending=f.bridge.admin.registerExperiment('a',experimentalSpec(a));await release.entered;
+  f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();release();
+  await assert.rejects(pending,{code:'TASK_ATTACHMENT_STALE'});
+  assert.equal((await f.bridge.admin.inspect()).experiments.counts.registered,0);assert.equal(f.calls(),0);
+});
