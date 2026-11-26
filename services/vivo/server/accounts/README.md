@@ -116,3 +116,51 @@ No merge/deployment or provider authentication has been performed by writing thi
 code. A real account login and completed inference, complete-repository browser CI,
 cache upgrade, Windows credential-store validation and phone acceptance remain
 separate release gates. No private note, model archive or secret is published.
+
+## GitHub repository agent (opt-in local connector)
+
+This is a read-only repository agent/tool bridge, not GitHub Copilot or a
+remote coding agent. The owner configures the existing local account host
+with an explicit allowlist (at most eight repositories) and a separately
+issued read-only GitHub token through the process environment variable
+`VIVO_GITHUB_TOKEN`. Prefer a fine-grained token or GitHub App installation
+token restricted to the selected repositories, with Pull requests, Actions,
+and (only for source inspection) Contents read access. Never paste it into
+Vivo, a chat, a command-line argument, or the repository. The connector does
+not extract CLI credentials or claim that ChatGPT's GitHub connection grants
+this application access. The host process keeps the token in memory only.
+
+Launch, after securely setting the environment variable in your own local
+shell or secret manager:
+
+```sh
+python services/vivo/server/accounts/host.py --repo . --github-repository OWNER/REPO
+```
+
+Enter the local world, open AI & memory, choose GitHub repository agent,
+check configuration, enter repository and PR number, and optionally select
+one exact UTF-8 source file. Verify the PR (actual GitHub API reads), review
+its head SHA and first page of commit-filtered workflow runs, then create
+a dedicated native GitHub reader or grant the reviewed scope to a selected
+existing active session. Only `github.pull.read` and, if explicitly selected,
+`github.file.read` are added. These tools accept no caller-selected paths,
+repository or commit. Each read checks the reviewed PR head; a changed head
+requires a fresh review. Fork-head source files are denied; file bytes are
+bounded to 32 KiB, text only. A partial workflow page is marked partial.
+Grant replacement, revoke, stop, scope changes and reload fence access. No
+automatic provider call, retry, task assignment, file execution, commit,
+PR update, push, merge, workflow dispatch, Copilot invocation or paid model
+request. The same-origin role boundary is not OS isolation: an authorized
+page can call the broker for any host-allowlisted repository. Host allowlist
+and least-privilege token are the external boundary. Do not run untrusted
+scripts on the credential host. Disconnect the local process and revoke the
+token at GitHub if needed; revoking an agent does not revoke the token.
+
+Official references: https://docs.github.com/en/rest/pulls/pulls ;
+https://docs.github.com/en/rest/actions/workflow-runs ;
+https://docs.github.com/en/rest/repos/contents .
+
+Six bridge tests executed against the exact committed JavaScript module with
+synthetic responses. Python broker and loopback endpoint tests, provider DOM
+checks and cache upgrade require hosted verification. A real credentialed
+host request and external agent acceptance are separate release gates.

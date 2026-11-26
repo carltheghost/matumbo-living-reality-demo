@@ -37,7 +37,7 @@ with sync_playwright() as p:
         store:{load:async s=>structuredClone(saved.get(JSON.stringify(s))),save:async(s,p)=>saved.set(JSON.stringify(s),structuredClone(p))}});
     }''')
     check('zero requests on mount; native world controls retained',page.evaluate('calls.length')==0 and page.locator('#sentinel').count()==1)
-    check('six popular choices, ten total; details closed until selected',page.locator('.provider-row').count()==10 and page.locator('.provider-group').count()==3 and not page.locator('#vivoProviderDetail').is_visible())
+    check('six popular choices, eleven total; details closed until selected',page.locator('.provider-row').count()==11 and page.locator('.provider-group').count()==3 and not page.locator('#vivoProviderDetail').is_visible())
     check('no password, API key or manual management-URL input',page.locator('input[type=password],input[type=url]').count()==0)
     check('no horizontal overflow at phone width',page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
     page.screenshot(path=str(args.evidence/'provider-picker-mobile.png'),full_page=True)
@@ -49,6 +49,9 @@ with sync_playwright() as p:
     check('empty search state is useful',page.get_by_text('No providers match. Try another name.').is_visible())
     search.fill('OpenAI');page.locator('[data-provider-id=openai-api]').click()
     check('API option cannot collect credentials without an adapter','not implemented' in page.locator('#vivoProviderDetail').inner_text() and page.locator('#vivoProviderDetail input').count()==0 and page.evaluate('calls.length')==0)
+    search.fill('GitHub');page.locator('[data-provider-id=github-agent]').click()
+    check('GitHub selection offers local setup but initiates no connection',page.get_by_role('button',name='Check GitHub connector').is_visible() and page.get_by_role('button',name='Create GitHub review agent and grant').is_disabled() and page.evaluate('calls.length')==0)
+    check('GitHub connector has no secret or arbitrary URL fields',page.locator('#vivoProviderDetail input[type=password],#vivoProviderDetail input[type=url]').count()==0)
     before_add=page.evaluate('({calls:calls.length,accounts:JSON.stringify(accounts)})')
     page.get_by_role('button',name='Add another account',exact=True).click()
     check('add account resets search and selection without authentication or account changes',

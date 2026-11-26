@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {AI_PROVIDERS,findAIProviders} from '../ai-accounts-panel.mjs';
 
-test('ten unique connection routes grouped by method, not invented models',()=>{
-  assert.equal(AI_PROVIDERS.length,10);
-  assert.equal(new Set(AI_PROVIDERS.map(p=>p.id)).size,10);
+test('eleven unique connection routes grouped by method, not invented models',()=>{
+  assert.equal(AI_PROVIDERS.length,11);
+  assert.equal(new Set(AI_PROVIDERS.map(p=>p.id)).size,11);
   assert.deepEqual([...new Set(AI_PROVIDERS.map(p=>p.group))],['Popular','Local & self-hosted','Advanced']);
   assert.equal(AI_PROVIDERS.filter(p=>p.group==='Popular').length,6);
 });
-test('only implemented ChatGPT host route advertises an executable sign-in action',()=>{
-  assert.deepEqual(AI_PROVIDERS.filter(p=>p.action).map(p=>p.id),['chatgpt-plan']);
+test('ChatGPT and local GitHub connector are the only implemented routes',()=>{
+  assert.deepEqual(AI_PROVIDERS.filter(p=>p.action).map(p=>p.id),['chatgpt-plan','github-agent']);
 });
 test('subscription and separately billed API access remain distinct',()=>{
   assert.equal(AI_PROVIDERS.find(p=>p.id==='chatgpt-plan').method,'Plan sign-in');
@@ -25,7 +25,7 @@ test('case-insensitive search matches provider and connection method',()=>{
   assert.equal(findAIProviders('  cLaUdE ').length,2);
   assert.equal(findAIProviders('API key').length,4);
   assert.equal(findAIProviders('does-not-exist').length,0);
-  assert.equal(findAIProviders().length,10);
+  assert.equal(findAIProviders().length,11);
   assert.throws(()=>findAIProviders(null),TypeError);
 });
 test('catalogue and returned provider objects cannot be mutated',()=>{
@@ -45,3 +45,5 @@ test('native memory and current toolbar integration are retained',async()=>{
   assert.match(src,/AI & memory/);assert.match(src,/vivo:phone-local-ready/);
   assert.doesNotMatch(src,/createElement\(['"]iframe/);
 });
+
+test('GitHub is a separate local repository connector, not another model sign-in',()=>{const p=findAIProviders('GitHub')[0];assert.equal(p.id,'github-agent');assert.equal(p.action,'github');assert.match(p.method,/read-only/);assert.match(p.description,/local account host/);});
