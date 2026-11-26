@@ -50,8 +50,17 @@ async def main():
                 await connect(owner, OWNER_TOKEN, "owner")
                 await open_panel(owner, "people")
                 await owner.click("#makeInvite")
-                await owner.wait_for_function("document.getElementById('inviteLink').value.includes('#token=')")
-                invite = await owner.locator("#inviteLink").input_value()
+                # Poll the actual input, as in the existing canonical two-person
+                # acceptance. Playwright's string wait_for_function uses eval,
+                # which is intentionally prohibited by the remote page CSP.
+                deadline = asyncio.get_running_loop().time() + 10
+                invite = ""
+                while asyncio.get_running_loop().time() < deadline:
+                    invite = await owner.locator("#inviteLink").input_value()
+                    if "#token=" in invite:
+                        break
+                    await asyncio.sleep(0.1)
+                check("owner invitation created under strict CSP", "#token=" in invite)
                 await editor.goto(invite, wait_until="domcontentloaded", timeout=60000)
                 await wait_text(editor, "#serviceReady", "REMOTE AUTHORITY READY")
                 await editor.click("#createRoom")
