@@ -132,6 +132,32 @@ export class RemoteTransport {
       (packet.status==='evidence-found')!==(packet.records.length>0))throw Error('MEMORY_CONTEXT_INVALID');
     return packet;
   }
+  async reasonAgentMission(selection,fetchImpl=globalThis.fetch){
+    const scope=structuredClone(selection),socket=this.socket;
+    const packet=await this.memoryRequest('reason',scope,fetchImpl);
+    if(!packet||packet.schema!=='vivo.agent-reasoning/1'||packet.authority!=='evidence-only'||
+      packet.providerAuthenticated!==false||packet.providerCallsInitiated!==0||packet.worldActionExecuted!==false||
+      packet.postedChargesUsd!==null||packet.selection?.task!==scope.task||packet.selection?.mode!==scope.mode||
+      packet.selection?.limit!==(scope.limit??4)||
+      JSON.stringify(packet.selection?.providers)!==JSON.stringify([...(scope.providers??[])].sort())||
+      !/^[0-9a-f]{64}$/.test(packet.decisionSha256??'')||
+      packet.proof?.method!=='exhaustive-subset-enumeration'||packet.proof?.subsetsChecked!==15||
+      packet.proposal?.feasible!==true||!Array.isArray(packet.evidence?.citations)||
+      packet.evidence.citations.length>(scope.limit??4)||packet.evidence.recordsUsed!==packet.evidence.citations.length||
+      !['no-matching-evidence','matching-optimum-observed','dissent-or-invalid-only','no-usable-proposal'].includes(packet.evidence.status)||
+      (packet.evidence.status==='no-matching-evidence')!==(packet.evidence.citations.length===0)||
+      packet.evidence.citations.some(r=>!/^council:[0-9a-f]{64}$/.test(r.memoryId??'')||
+        r.memoryId!=='council:'+r.evidenceDigest||
+        r.provenance!==(scope.mode==='fixture'?'synthetic-fixture':'host-reported-unverified')||
+        !Array.isArray(r.observations)||r.observations.length>7||
+        (scope.providers??[]).some(provider=>!r.observations.some(row=>row.provider===provider))))throw Error('MEMORY_REASONING_INVALID');
+    const {decisionSha256,...core}=packet;
+    const digest=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(core)));
+    const actual=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    if(actual!==decisionSha256)throw Error('MEMORY_REASONING_DIGEST_MISMATCH');
+    return packet;
+  }
   createInvite(ttlSeconds=3600){return this.call('invite.create',{ttlSeconds});}
   revokeInvite(id){return this.call('invite.revoke',{id});}
   listInvites(){return this.call('invite.list',{});}

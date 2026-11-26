@@ -136,3 +136,27 @@ test('agent memory context is explicit same-origin scoped recall and never a pro
   release({ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:basePacket})});
   await assert.rejects(pending,/REMOTE_CLOSED/);
 });
+
+test('agent reasoning verifies exact receipt bytes, selected scope and no execution authority',async()=>{
+  const {transport,socket}=await admitted();
+  const selection={task:'route-constraint-v1',mode:'fixture',providers:['kimi'],limit:4};
+  const core={schema:'vivo.agent-reasoning/1',selection,proposal:{candidate:'C,D',cost:7,value:13,feasible:true},
+    proof:{method:'exhaustive-subset-enumeration',subsetsChecked:15},
+    evidence:{status:'no-matching-evidence',recordsUsed:0,citations:[]},
+    authority:'evidence-only',providerAuthenticated:false,providerCallsInitiated:0,postedChargesUsd:null,worldActionExecuted:false};
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(core)));
+  const packet={...core,decisionSha256:Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('')};
+  let sent=0;
+  const response=value=>async(url,init)=>{
+    assert.equal(url,'http://vivo.test/api/neural-memory');
+    assert.deepEqual(JSON.parse(init.body),{op:'reason',args:selection});
+    sent++;
+    return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:value})};
+  };
+  assert.deepEqual(await transport.reasonAgentMission(selection,response(packet)),packet);
+  assert.equal(sent,1);
+  await assert.rejects(transport.reasonAgentMission(selection,response({...packet,proposal:{...packet.proposal,value:999}})),/DIGEST_MISMATCH/);
+  await assert.rejects(transport.reasonAgentMission(selection,response({...packet,providerCallsInitiated:1})),/MEMORY_REASONING_INVALID/);
+  await assert.rejects(transport.reasonAgentMission(selection,response({...packet,selection:{...selection,mode:'live'}})),/MEMORY_REASONING_INVALID/);
+  await shutdown(transport,socket);
+});

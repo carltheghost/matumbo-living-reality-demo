@@ -332,6 +332,70 @@ class EvidenceVault:
                 "authority": "evidence-only", "providerAuthenticated": False,
                 "postedChargesUsd": None, "worldActionExecuted": False}
 
+    def agent_reason(self, principal, args):
+        """Resolve one exact versioned planning task, using scoped memory.
+
+        The local mathematical certificate is independent of model votes.
+        Historical proposals are observations, not authenticated facts. The
+        same solver answer is possible without memory, but no hidden record
+        can influence the evidence summary, citations or returned digest.
+        """
+        need(args.get("task") == "route-constraint-v1", "UNSUPPORTED_REASONING_TASK")
+        context = self.agent_context(principal, args)
+        options = [plan(",".join(parts)) for size in range(1, len(JOBS)+1)
+                   for parts in combinations(JOBS, size)]
+        feasible = sorted((item for item in options if item["feasible"]),
+                          key=lambda item: (-item["value"], item["cost"], item["candidate"]))
+        best, runner_up = feasible[:2]
+        need(best == optimum() and best["value"] > runner_up["value"])
+        counts = {verdict: 0 for verdict in
+                  ("optimal", "feasible-suboptimal", "over-budget", "invalid-proposal", "unknown")}
+        citations = []
+        for record in context["records"]:
+            observations = []
+            for row in record["rows"]:
+                verdict = row["verdict"]
+                need(verdict in counts, "STORED_EVIDENCE_INVALID", 409)
+                counts[verdict] += 1
+                observations.append({"provider": row["provider"], "candidate": row["candidate"],
+                                     "verdict": verdict, "status": row["status"]})
+            citations.append({"memoryId": record["memoryId"], "evidenceDigest": record["evidenceDigest"],
+                              "runId": record["runId"], "provenance": record["provenance"],
+                              "observations": observations})
+        if not citations:
+            support = "no-matching-evidence"
+        elif counts["optimal"]:
+            support = "matching-optimum-observed"
+        elif counts["feasible-suboptimal"] or counts["over-budget"] or counts["invalid-proposal"]:
+            support = "dissent-or-invalid-only"
+        else:
+            support = "no-usable-proposal"
+        decision = {
+            "schema": "vivo.agent-reasoning/1",
+            "selection": context["selection"],
+            "proposal": best,
+            "proof": {
+                "method": "exhaustive-subset-enumeration",
+                "budget": 7,
+                "jobs": [{"id": name, "cost": cost, "value": value}
+                         for name, (cost, value) in JOBS.items()],
+                "subsetsChecked": len(options), "feasibleSubsets": len(feasible),
+                "runnerUp": runner_up, "optimalityGap": best["value"] - runner_up["value"],
+                "enumerated": options,
+            },
+            "evidence": {
+                "status": support, "recordsUsed": len(citations),
+                "truncated": context["truncated"], "observationCounts": counts,
+                "countUnit": "report-provider-observations-not-independent-votes",
+                "citations": citations,
+            },
+            "authority": "evidence-only", "providerAuthenticated": False,
+            "providerCallsInitiated": 0, "postedChargesUsd": None, "worldActionExecuted": False,
+        }
+        # Hash the exact decision bytes; this is a reproducible receipt, not
+        # a provider signature or new permission to execute the proposal.
+        return {**decision, "decisionSha256": hashlib.sha256(canonical(decision).encode("utf-8")).hexdigest()}
+
     def set_grant(self, principal, memory_id, invitation_id, granted, invitations):
         need(principal.role == "owner", "FORBIDDEN", 403)
         need(matches(INVITE_ID, invitation_id) and type(granted) is bool, "REQUEST_INVALID")
@@ -366,6 +430,8 @@ class EvidenceVault:
             return self.search(principal, args)
         if op == "context":
             return self.agent_context(principal, args)
+        if op == "reason":
+            return self.agent_reason(principal, args)
         if op == "get":
             need(exact(args, {"memoryId"}), "REQUEST_INVALID")
             return self.get(principal, args["memoryId"])
