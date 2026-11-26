@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { JEV_HISTORY_KEY, parseJevAdviceReceipt } from "../src/domains/jev-advice-receipt.js";
 import { COUNCIL_STORAGE_KEY, COUNCIL_MISSION_TASK, exportCouncilReport } from "../src/domains/provider-council-evidence.js";
 import { runProviderCouncil } from "../scripts/vivo/provider-council.mjs";
+import { COUNCIL_MEMORY_KEY } from "../src/domains/council-memory.js";
 const require = createRequire(process.env.MATUMBO_NODE_DEPENDENCIES ?? new URL("../package.json", import.meta.url));
 const { chromium } = require("playwright");
 const base = new URL(process.env.MATUMBO_PREVIEW_URL ?? "http://127.0.0.1:8123/index.html?feature=web-ai");
@@ -60,8 +61,8 @@ const devices = [{ name: "desktop", viewport: { width: 1280, height: 900 }, mobi
 const selected = process.env.MATUMBO_BROWSER_DEVICE;
 assert.ok(!selected || devices.some(d => d.name === selected), "unknown browser device");
 const scenario = process.env.MATUMBO_BROWSER_SCENARIO ?? "full";
-assert.ok(["full","core","isolation","orientation","council"].includes(scenario),"unknown browser scenario");
-const report = { schema: "matumbo.jev-receipt-browser-regression/8", scenario, passed: false,
+assert.ok(["full","core","isolation","orientation","council","memory"].includes(scenario),"unknown browser scenario");
+const report = { schema: "matumbo.jev-receipt-browser-regression/9", scenario, passed: false,
   preview: base.href, playwrightVersion: require("playwright/package.json").version,
   fixtures: [metered, conflict, unknown].map(f => f.envelope.receiptSha256), results: [] };
 async function read(page) {
@@ -278,13 +279,13 @@ async function runDevice(browser, device) {
     const search = assembly.locator("[data-search]");
     await search.waitFor({state:"visible"});
     await search.fill(id);
-    const label = {"paycore":"Pecunia · PAYCORE","web-ai":"Retia & AI"}[id];
+    const label = {"paycore":"Pecunia · PAYCORE","web-ai":"Retia & AI","neural-mesh":"Rete Neurale"}[id];
     assert.ok(label,"explicit directory label required");
     const match=assembly.locator(".assembly-domain-features").getByRole("button",{name:label,exact:true});
     await match.waitFor({state:"visible"}); assert.equal(await match.count(),1);
     await activate(match);
     await page.waitForFunction(id => window.__TUMBO_REALITY_ASSEMBLY__.getSnapshot().selectedId === id, id);
-    await waitNative(id,id==="paycore"?"paycore-console":"web-ai-console");
+    await waitNative(id,{"paycore":"paycore-console","web-ai":"web-ai-console","neural-mesh":"neural-mesh-console"}[id]);
   }
   async function navigate(expected) {
     stage = "face and object navigation";
@@ -401,6 +402,72 @@ async function runDevice(browser, device) {
     assert.equal((await readCouncil()).journal,null);assert.equal(await councilStatus().textContent(),"No provider council report imported.");
     await recordCheckpoint({label:"independent no-opener tab has no council history"});
   }
+  async function verifyMemory(fresh){
+    const mission=await exportCouncilReport(await runProviderCouncil({task:COUNCIL_MISSION_TASK}));
+    const arithmetic=await exportCouncilReport(await runProviderCouncil());
+    const before=await fund();
+    const region=()=>panel().getByRole("region",{name:"Provider Council evidence — not billing",exact:true});
+    const readMemory=()=>page.evaluate(key=>({journal:sessionStorage.getItem(key),local:localStorage.getItem(key)}),COUNCIL_MEMORY_KEY);
+    async function importReport(envelope){
+      stage="memory fixture import";
+      const input=region().getByLabel("Import a provider council report",{exact:true});
+      await input.scrollIntoViewIfNeeded();await (device.mobile?input.tap({trial:true}):input.click({trial:true}));
+      await input.setInputFiles({name:"memory-fixture.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(envelope))});
+      await page.waitForFunction(()=>document.querySelector('[aria-label="Provider Council evidence — not billing"] [role="status"]')?.textContent==="Latest report saved for this tab.");
+    }
+    async function remember(message){
+      stage="archive: "+message;
+      await activate(region().getByRole("button",{name:"Remember in Neural Mesh",exact:true}));
+      await page.waitForFunction(message=>document.querySelector('[aria-label="Council memory status"]')?.textContent===message,message);
+    }
+    await importReport(mission);
+    assert.equal((await readMemory()).journal,null,"import alone must not write Neural Memory");
+    await remember("Evidence remembered in Neural Mesh.");
+    const original=await readMemory();
+    assert.deepEqual(JSON.parse(original.journal),[mission]);assert.equal(original.local,null);
+    await remember("Already remembered in Neural Mesh.");
+    assert.deepEqual(await readMemory(),original);
+    await importReport(arithmetic);await remember("Evidence remembered in Neural Mesh.");
+    const both=await readMemory();
+    assert.deepEqual(JSON.parse(both.journal),[mission,arithmetic]);assert.equal(both.local,null);
+    assert.deepEqual(await read(page),before);
+    await recordCheckpoint({label:"two explicit memory saves; duplicates do not grow history; accounting unchanged"});
+    const recallRegion=()=>page.locator("#neural-mesh-console").getByRole("region",{name:"Neural Memory evidence",exact:true});
+    const recallStatus=()=>recallRegion().getByRole("status",{name:"Neural Memory status",exact:true});
+    async function waitRecall(expected){
+      await page.waitForFunction(expected=>document.querySelector('[aria-label="Neural Memory status"]')?.textContent===expected,expected);
+    }
+    async function inspectMemory(){
+      await select("neural-mesh");await waitRecall("2 matching / 2 remembered reports · this tab");
+      const search=recallRegion().getByRole("searchbox",{name:"Search Neural Memory",exact:true});
+      await search.fill("kimi over-budget");
+      await activate(recallRegion().getByRole("button",{name:"Recall evidence",exact:true}));
+      await waitRecall("1 matching / 2 remembered reports · this tab");
+      const results=recallRegion().getByLabel("Neural Memory results",{exact:true});
+      assert.equal(await results.locator("details").count(),1);
+      const detail=results.locator("summary");
+      await activate(detail);
+      assert.match(await results.textContent(),new RegExp(mission.reportSha256));
+      assert.match(await results.textContent(),/kimi · over-budget · A,C/);
+      assert.match(await results.textContent(),/Fixture · not live/);
+      assert.deepEqual(await readMemory(),both);
+      await recordCheckpoint({label:"native Neural Mesh recalls exact mission digest and dissent",digest:mission.reportSha256});
+      // Clear search before leaving, so the next opening starts at all evidence.
+      await search.fill("");await activate(recallRegion().getByRole("button",{name:"Recall evidence",exact:true}));
+      await waitRecall("2 matching / 2 remembered reports · this tab");
+    }
+    await inspectMemory();
+    await select("web-ai");await compute();assert.deepEqual(await read(page),before);
+    const restored=await reload([],fresh.journal,fresh);
+    assert.deepEqual(await readMemory(),both);balances(restored,fresh);
+    await inspectMemory();
+    await page.screenshot({path:resolve(out,device.name+"-neural-memory.png")});
+    const firstPage=page;
+    page=await newPage(firstPage.context());await page.goto(base.href,{waitUntil:"domcontentloaded"});await compute();
+    await select("neural-mesh");await waitRecall("0 matching / 0 remembered reports · this tab");
+    assert.equal((await readMemory()).journal,null);
+    await recordCheckpoint({label:"memory survives reload and remains isolated from independently opened tab"});
+  }
   async function verifyOrientation(fresh){
     const funded=await fund();
     const first=await upload(metered.envelope,"Saved 330 input and 20 output tokens.");
@@ -459,7 +526,9 @@ async function runDevice(browser, device) {
     const fresh = await checkpoint("empty native Compute object");
     history(fresh,[]); assert.equal(fresh.journal,null);
     assert.deepEqual(fresh.economy.timeline.events,[]); assert.deepEqual(fresh.metrics,["$0.00","$0.00","0","0"]);
-    if(scenario==="council"){
+    if(scenario==="memory"){
+      await verifyMemory(fresh);
+    }else if(scenario==="council"){
       await verifyCouncil(fresh);
     }else if(scenario==="orientation"){
       await verifyOrientation(fresh);
