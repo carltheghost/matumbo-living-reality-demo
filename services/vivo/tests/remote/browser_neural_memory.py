@@ -127,6 +127,13 @@ async def main():
                 text = await result.inner_text()
                 check("exact digest and dissent recalled on mobile",digest in text and "kimi · over-budget · A,C" in text and "Fixture · not live" in text)
                 check("only selected mission is shared",await result.locator("details").count()==1)
+                async with editor.expect_download(timeout=15000) as pending:
+                    await result.get_by_role("button",name="Download original report").click()
+                download=await pending.value
+                downloaded_path=await download.path()
+                check("authorized mobile export preserves original envelope",
+                      json.loads(downloaded_path.read_text(encoding="utf-8"))==reports[0] and
+                      download.suggested_filename=="council-fixture-"+digest[:12]+".json")
                 await editor_sheet.get_by_role("button",name="Reason from authorized evidence").click()
                 await status(editor_status,"Local reasoning complete · 1 authorized reports")
                 reasoning=editor_sheet.get_by_label("Advisory reasoning result")
@@ -141,11 +148,22 @@ async def main():
                 await status(editor_status,"No matching authorized evidence.")
                 check("fixture never promoted to live context",await result.locator("details").count()==0)
                 await editor_sheet.get_by_label("Agent evidence provenance").select_option("fixture")
+                await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
+                await status(editor_status,"Prepared 1 evidence reports")
+                await result.locator("summary").click()
+                stale_download=result.get_by_role("button",name="Download original report")
+                unexpected_downloads=[]
+                editor.on("download",lambda download: unexpected_downloads.append(download.suggested_filename))
                 await load_button.click()
                 await status(owner_status,"Select a collaborator.")
                 await invite_select.select_option(label=editor_actor+" · shared")
                 await owner_sheet.get_by_role("button",name="Revoke recall access").click()
                 await status(owner_status,"Future recall access revoked.")
+                # The displayed result predates revocation. A new download
+                # must use a fresh authorized get rather than these old bytes.
+                await stale_download.click()
+                await status(editor_status,"NOT_FOUND")
+                check("revoked evidence cannot be exported from stale view",not unexpected_downloads and await result.locator("details").count()==0)
                 await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
                 await status(editor_status,"No matching authorized evidence.")
                 check("revoked grant cannot be recalled",await result.locator("details").count()==0)

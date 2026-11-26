@@ -134,6 +134,17 @@ function addMemoryRecord(record){
     element('p',{textContent:'Advisory only; charges unknown.'}));
   if(record.localOptimum)card.append(element('p',{textContent:'Local optimum: '+record.localOptimum.candidate+' · value '+record.localOptimum.value}));
   for(const row of record.rows)card.append(element('p',{textContent:row.provider+' · '+row.verdict+(row.candidate?' · '+row.candidate:'')}));
+  const download=element('button',{type:'button',textContent:'Download original report'});
+  card.append(download,element('p',{className:'muted',textContent:'A downloaded copy is outside server permissions and cannot be revoked.'}));
+  download.onclick=memoryAction(async(client,current)=>{
+    const prepared=await client.prepareCouncilEvidenceDownload(record.memoryId);
+    if(!current())return;
+    const url=URL.createObjectURL(new Blob([prepared.text],{type:'application/json'}));
+    const link=element('a',{href:url,download:prepared.filename,hidden:true});
+    try{document.body.append(link);link.click();}
+    finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+    memoryStatus.textContent='Download requested. The original report digest is unchanged.';
+  });
   memoryResults.append(card);
   if(role==='owner'&&![...shareMemoryId.options].some(o=>o.value===record.memoryId))
     shareMemoryId.append(element('option',{value:record.memoryId,textContent:record.runId+' · '+record.mode}));

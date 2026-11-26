@@ -1,4 +1,5 @@
 import { createCouncilMemory, filterCouncilMemory } from "../domains/council-memory.js";
+import { prepareCouncilDownload, requestCouncilDownload } from "./council-download.js";
 import { NEURAL_MESH_SOURCE } from "../domains/neural-mesh.js?v=20260922-cache2";
 
 /**
@@ -329,6 +330,23 @@ export function createNeuralMeshConsole({
         for(const row of record.rows)card.appendChild(createText(documentRoot,"p","",row.provider+" · "+row.verdict+
           (row.candidate?" · "+row.candidate:"")));
         card.appendChild(createText(documentRoot,"p","","Advisory evidence only. Actual charges unknown."));
+        const download=createText(documentRoot,"button","","Download remembered report");download.type="button";
+        const exportStatus=createText(documentRoot,"p","","A downloaded copy is outside sharing controls; nothing is uploaded.");
+        exportStatus.setAttribute("aria-live","polite");
+        download.addEventListener("click",async()=>{
+          if(download.disabled)return;
+          const exportEpoch=recallEpoch;download.disabled=true;
+          try{
+            const original=await memory.getEvidence(record.memoryId);
+            if(!original)throw Error("Remembered evidence is unavailable.");
+            const prepared=await prepareCouncilDownload(original,{expectedDigest:record.evidenceDigest});
+            if(exportEpoch!==recallEpoch||!opened)return;
+            requestCouncilDownload(documentRoot,prepared);
+            exportStatus.textContent="Download requested. The original report digest is unchanged.";
+          }catch(error){if(exportEpoch===recallEpoch)exportStatus.textContent=error.message;}
+          finally{download.disabled=false;}
+        });
+        card.append(download,exportStatus);
         memoryResults.appendChild(card);
       }
     }catch(error){

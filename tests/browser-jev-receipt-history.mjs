@@ -1,7 +1,7 @@
 // Fixture-only full-app browser regression. No provider credentials or calls.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { livingReadingProjection } from "../src/domains/living-surface-layout-engine.js";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
@@ -420,7 +420,18 @@ async function runDevice(browser, device) {
       await activate(region().getByRole("button",{name:"Remember in Neural Mesh",exact:true}));
       await page.waitForFunction(message=>document.querySelector('[aria-label="Council memory status"]')?.textContent===message,message);
     }
+    async function verifyDownloaded(button,expected,label){
+      stage=label;
+      const pending=page.waitForEvent("download",{timeout:15000});
+      const [download]=await Promise.all([pending,activate(button)]);
+      const path=await download.path();
+      assert.ok(path);
+      assert.equal(download.suggestedFilename(),"council-fixture-"+expected.reportSha256.slice(0,12)+".json");
+      assert.deepEqual(JSON.parse(await readFile(path,"utf8")),expected);
+      await recordCheckpoint({label,digest:expected.reportSha256});
+    }
     await importReport(mission);
+    await verifyDownloaded(region().getByRole("button",{name:"Download Council report",exact:true}),mission,"Compute exports exact original Council evidence");
     assert.equal((await readMemory()).journal,null,"import alone must not write Neural Memory");
     await remember("Evidence remembered in Neural Mesh.");
     const original=await readMemory();
@@ -450,6 +461,7 @@ async function runDevice(browser, device) {
       assert.match(await results.textContent(),new RegExp(mission.reportSha256));
       assert.match(await results.textContent(),/kimi · over-budget · A,C/);
       assert.match(await results.textContent(),/Fixture · not live/);
+      await verifyDownloaded(results.getByRole("button",{name:"Download remembered report",exact:true}),mission,"Neural Mesh exports exact remembered evidence");
       assert.deepEqual(await readMemory(),both);
       await recordCheckpoint({label:"native Neural Mesh recalls exact mission digest and dissent",digest:mission.reportSha256});
       // Clear search before leaving, so the next opening starts at all evidence.

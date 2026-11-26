@@ -222,3 +222,25 @@ test('rehashed inconsistent provenance, duplicate observations and invented corr
   for(const mutate of mutations){const core=reasonCore(true);mutate(core);
     await assert.rejects(verifyAgentReasoningReceipt(await signReason(core),reasonScope),/MEMORY_REASONING_EVIDENCE_INVALID/);}
 });
+
+test('portable remote evidence uses a fresh authorized get and checks original bytes',async()=>{
+  const {transport,socket}=await admitted();
+  const report={schema:'matumbo.provider-council/2',mode:'fixture',runId:'fixture-portable',
+    worldActionExecuted:false,postedChargesUsd:null};
+  const reportJson=JSON.stringify(report),digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(reportJson))),b=>b.toString(16).padStart(2,'0')).join('');
+  const memoryId='council:'+digest,envelope={schema:'matumbo.provider-council-export/1',reportJson,reportSha256:digest};
+  const record={memoryId,evidenceDigest:digest,mode:'fixture',runId:report.runId,authority:'evidence-only',
+    providerAuthenticated:false,worldActionExecuted:false,postedChargesUsd:null};
+  let calls=0;
+  const respond=result=>async(url,init)=>{
+    calls++;assert.equal(url,'http://vivo.test/api/neural-memory');
+    assert.deepEqual(JSON.parse(init.body),{op:'get',args:{memoryId}});
+    return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result})};
+  };
+  const download=await transport.prepareCouncilEvidenceDownload(memoryId,respond({record,envelope}));
+  assert.deepEqual(JSON.parse(download.text),envelope);assert.equal(download.digest,digest);
+  await assert.rejects(transport.prepareCouncilEvidenceDownload(memoryId,respond({record,envelope:{...envelope,reportJson:reportJson+' '}})),/MEMORY_EVIDENCE_EXPORT_INVALID/);
+  await assert.rejects(transport.prepareCouncilEvidenceDownload(memoryId,async()=>({ok:false,json:async()=>({schema:'vivo.neural-memory/1',error:'NOT_FOUND'})})),/NOT_FOUND/);
+  assert.equal(calls,2);
+  await shutdown(transport,socket);
+});

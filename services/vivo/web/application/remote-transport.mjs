@@ -234,6 +234,31 @@ export class RemoteTransport {
       (packet.status==='evidence-found')!==(packet.records.length>0))throw Error('MEMORY_CONTEXT_INVALID');
     return packet;
   }
+  async prepareCouncilEvidenceDownload(memoryId,fetchImpl=globalThis.fetch){
+    if(typeof memoryId!=='string'||!/^council:[0-9a-f]{64}$/.test(memoryId))throw Error('MEMORY_EVIDENCE_ID_INVALID');
+    const socket=this.socket,digest=memoryId.slice(8);
+    // Fresh server-side get rechecks the caller and grant; do not reuse a
+    // previously recalled record as authority for a new download.
+    const result=await this.memoryRequest('get',{memoryId},fetchImpl);
+    const envelope=result?.envelope,record=result?.record;
+    if(!reasoningKeys(envelope,['schema','reportJson','reportSha256'])||
+      envelope.schema!=='matumbo.provider-council-export/1'||envelope.reportSha256!==digest||
+      typeof envelope.reportJson!=='string'||envelope.reportJson.length>32000||
+      record?.memoryId!==memoryId||record?.evidenceDigest!==digest||record?.authority!=='evidence-only'||
+      record?.providerAuthenticated!==false||record?.worldActionExecuted!==false||record?.postedChargesUsd!==null)
+      throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');
+    const actual=Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(envelope.reportJson))),byte=>byte.toString(16).padStart(2,'0')).join('');
+    let report;try{report=JSON.parse(envelope.reportJson);}catch{throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');}
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    if(actual!==digest||JSON.stringify(report)!==envelope.reportJson||
+      !['matumbo.provider-council/1','matumbo.provider-council/2'].includes(report?.schema)||
+      !['fixture','live'].includes(report.mode)||report.mode!==record.mode||report.runId!==record.runId||
+      report.worldActionExecuted!==false||report.postedChargesUsd!==null)
+      throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');
+    return Object.freeze({filename:'council-'+report.mode+'-'+digest.slice(0,12)+'.json',
+      text:JSON.stringify(envelope,null,2)+'\n',digest});
+  }
   async reasonAgentMission(selection,fetchImpl=globalThis.fetch){
     const scope=structuredClone(selection),socket=this.socket;
     const packet=await this.memoryRequest('reason',scope,fetchImpl);

@@ -206,6 +206,7 @@ test('Pages live hash verifier covers every changed mounted phone module', async
     'services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js',
     'services/vivo/web/phone/vendor/economy/src/render/token-economy-overview.js',
     'services/vivo/web/vivo-sw.js',
+    'src/render/council-download.js',
     'src/domains/provider-council-evidence.js',
     'src/domains/council-memory.js',
     'src/render/neural-mesh.js',
