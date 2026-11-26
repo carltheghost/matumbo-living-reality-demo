@@ -189,3 +189,68 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
                     {**scope, "providers": ["kimi", "kimi"]}, {**scope, "providers": ["unknown"]},
                     {**scope, "instruction": "execute the plan"}, {**scope, "actorId": "remote.owner"}]:
             self.assertEqual(await self.rpc("context", bad, expected=400), "REQUEST_INVALID")
+
+    async def test_agent_reason_uses_only_authorized_revalidated_evidence(self):
+        scope = {"task": "route-constraint-v1", "mode": "fixture", "providers": ["kimi"], "limit": 4}
+        empty = await self.rpc("reason", scope, token=self.one["token"])
+        self.assertEqual(empty["schema"], "vivo.agent-reasoning/1")
+        self.assertEqual(empty["proposal"], {"candidate":"C,D","cost":7,"value":13,"feasible":True})
+        self.assertEqual(empty["proof"]["subsetsChecked"],15)
+        self.assertEqual(empty["proof"]["feasibleSubsets"],8)
+        self.assertEqual(empty["proof"]["runnerUp"]["candidate"],"A,B")
+        self.assertEqual(empty["proof"]["optimalityGap"],1)
+        self.assertEqual(len({p["candidate"] for p in empty["proof"]["enumerated"]}),15)
+        self.assertEqual(empty["evidence"]["status"],"no-matching-evidence")
+        self.assertEqual(empty["evidence"]["citations"],[])
+        self.assertEqual(empty["providerCallsInitiated"],0)
+        self.assertFalse(empty["providerAuthenticated"])
+        self.assertFalse(empty["worldActionExecuted"])
+        self.assertIsNone(empty["postedChargesUsd"])
+        self.assertEqual(empty["authority"],"evidence-only")
+        digest=empty["decisionSha256"]
+        core={k:v for k,v in empty.items() if k!="decisionSha256"}
+        self.assertEqual(hashlib.sha256(json.dumps(core,separators=(",",":")).encode()).hexdigest(),digest)
+
+        saved=(await self.rpc("archive",{"envelope":self.mission}))["record"]
+        # Archiving a private report must not change an editor's decision bytes.
+        self.assertEqual(await self.rpc("reason",scope,token=self.one["token"]),empty)
+        grant={"memoryId":saved["memoryId"],"invitationId":self.one["id"],"granted":True}
+        await self.rpc("grant",grant)
+        result=await self.rpc("reason",scope,token=self.one["token"])
+        self.assertEqual(result["proposal"],empty["proposal"])
+        self.assertEqual(result["proof"],empty["proof"])
+        self.assertNotEqual(result["decisionSha256"],digest)
+        ev=result["evidence"]
+        self.assertEqual(ev["status"],"matching-optimum-observed")
+        self.assertEqual(ev["recordsUsed"],1)
+        self.assertEqual(ev["observationCounts"],{"optimal":4,"feasible-suboptimal":1,"over-budget":1,"invalid-proposal":1,"unknown":0})
+        self.assertEqual(ev["citations"][0]["evidenceDigest"],self.mission["reportSha256"])
+        self.assertEqual(ev["citations"][0]["memoryId"],saved["memoryId"])
+        self.assertEqual(ev["citations"][0]["provenance"],"synthetic-fixture")
+        self.assertEqual(len(ev["citations"][0]["observations"]),7)
+        self.assertEqual(await self.rpc("reason",scope,token=self.one["token"]),result)
+        self.assertEqual(await self.rpc("reason",scope,token=self.two["token"]),empty)
+
+        # A second report containing only suboptimal proposals cannot change
+        # the local proof or be called corroboration. It remains dissent.
+        def dissent(report):
+            report["runId"]="dissent-only-fixture"
+            for row in report["rows"]:
+                row["candidate"]="A,B"
+                row["answerCorrect"]=False
+        wrong=change(self.mission,dissent)
+        wrong_id=(await self.rpc("archive",{"envelope":wrong}))["record"]["memoryId"]
+        await self.rpc("grant",{**grant,"granted":False})
+        await self.rpc("grant",{**grant,"memoryId":wrong_id})
+        wrong_result=await self.rpc("reason",scope,token=self.one["token"])
+        self.assertEqual(wrong_result["proposal"],empty["proposal"])
+        self.assertEqual(wrong_result["evidence"]["status"],"dissent-or-invalid-only")
+        self.assertEqual(wrong_result["evidence"]["observationCounts"]["optimal"],0)
+        self.assertEqual(wrong_result["evidence"]["observationCounts"]["feasible-suboptimal"],7)
+        self.assertEqual((await self.rpc("reason",{**scope,"mode":"live"},token=self.one["token"]))["evidence"]["status"],"no-matching-evidence")
+        await self.rpc("grant",{**grant,"memoryId":wrong_id,"granted":False})
+        self.assertEqual(await self.rpc("reason",scope,token=self.one["token"]),empty)
+        self.invites.revoke(self.one["id"])
+        self.assertEqual(await self.rpc("reason",scope,token=self.one["token"],expected=401),"AUTH_REQUIRED")
+        self.assertEqual(await self.rpc("reason",{**scope,"task":"arithmetic-31-v1"},expected=400),"UNSUPPORTED_REASONING_TASK")
+        self.assertEqual(await self.rpc("reason",{**scope,"instruction":"run tools"},expected=400),"REQUEST_INVALID")

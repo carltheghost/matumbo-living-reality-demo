@@ -96,18 +96,27 @@ for(const [value,textContent] of [['fixture','Synthetic fixtures'],['live','Host
 for(const value of ['','openai','anthropic','google','deepseek','kimi','nvidia','xai'])
   providerScope.append(element('option',{value,textContent:value||'Any provider'}));
 const prepareEvidence=element('button',{type:'button',textContent:'Prepare agent evidence'});
-agentContext.append(taskScope,modeScope,providerScope,prepareEvidence);
+const reasonEvidence=element('button',{type:'button',textContent:'Reason from authorized evidence'});
+const reasoningResult=element('section');reasoningResult.setAttribute('aria-label','Advisory reasoning result');
+agentContext.append(taskScope,modeScope,providerScope,prepareEvidence,reasonEvidence,reasoningResult);
+function clearReasoning(){reasoningResult.replaceChildren();}
+for(const control of [taskScope,modeScope,providerScope])control.addEventListener('change',()=>{
+  memoryEpoch++;clearReasoning();memoryResults.replaceChildren();resetSharing();
+  memoryCursor=null;memoryMore.hidden=true;
+  reasonEvidence.disabled=taskScope.value!=='route-constraint-v1';
+  memoryStatus.textContent='Scope changed. Recall or reason using this selection.';
+});
 memorySheet.append(memoryOwner,memoryQuery,memoryRecall,memoryMore,agentContext,memoryStatus,memoryResults);
 let memoryEpoch=0,memoryCursor=null;
 resetSharing();
 function clearMemoryView(){
-  memoryEpoch++;memoryCursor=null;memoryResults.replaceChildren();resetSharing();
+  memoryEpoch++;memoryCursor=null;clearReasoning();memoryResults.replaceChildren();resetSharing();
   memoryFile.value='';memoryQuery.value='';memoryOwner.hidden=true;memoryMore.hidden=true;
-  taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;
+  taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;reasonEvidence.disabled=false;
   memoryStatus.textContent='Connect to recall evidence.';
 }
 const memoryAction=fn=>async()=>{
-  const client=transport,epoch=++memoryEpoch;
+  const client=transport,epoch=++memoryEpoch;clearReasoning();
   if(!client||client.closed){clearMemoryView();return;}
   const current=()=>transport===client&&!client.closed&&memoryEpoch===epoch;
   memoryStatus.textContent='Reading private memory…';
@@ -149,6 +158,33 @@ prepareEvidence.onclick=memoryAction(async(client,current)=>{
   packet.records.forEach(addMemoryRecord);
   memoryStatus.textContent=packet.status==='no-matching-evidence'?'No matching authorized evidence.':
     'Prepared '+packet.records.length+' evidence reports · advisory only'+(packet.truncated?' · more matches exist':'');
+});
+reasonEvidence.onclick=memoryAction(async(client,current)=>{
+  memoryResults.replaceChildren();resetSharing();
+  memoryCursor=null;memoryMore.hidden=true;
+  const result=await client.reasonAgentMission({task:taskScope.value,mode:modeScope.value,
+    providers:providerScope.value?[providerScope.value]:[],limit:4});
+  if(!current())return;
+  const p=result.proposal,proof=result.proof,e=result.evidence,c=e.observationCounts;
+  reasoningResult.append(element('h3',{textContent:'Local mathematical solution'}),
+    element('p',{textContent:'Verified plan: '+p.candidate+' · cost '+p.cost+' / '+proof.budget+' · value '+p.value}),
+    element('p',{textContent:proof.subsetsChecked+' subsets checked · '+proof.feasibleSubsets+' feasible · runner-up '+proof.runnerUp.candidate+' value '+proof.runnerUp.value}),
+    element('p',{textContent:({
+      'no-matching-evidence':'No matching authorized evidence. Local proof only.',
+      'matching-optimum-observed':'Matching optimum observed in authorized reports.',
+      'dissent-or-invalid-only':'Historical disagreement or invalid proposals only. Local proof is independent.',
+      'no-usable-proposal':'Reports recalled, but no usable provider proposal.'
+    })[e.status]}),
+    element('p',{textContent:c.optimal+' optimal · '+c['feasible-suboptimal']+' suboptimal · '+c['over-budget']+' over budget · '+c['invalid-proposal']+' invalid · '+c.unknown+' unknown observations'}),
+    element('p',{textContent:'Decision SHA-256: '+result.decisionSha256}),
+    element('p',{className:'muted',textContent:'Advisory only. No provider calls initiated; historical charges unknown. Repeated observations are not independent votes.'}));
+  for(const record of e.citations){
+    const detail=element('details');detail.append(element('summary',{textContent:record.provenance+' · '+record.runId}),
+      element('p',{textContent:'Evidence: '+record.evidenceDigest}));
+    for(const row of record.observations)detail.append(element('p',{textContent:row.provider+' · '+row.verdict+(row.candidate?' · '+row.candidate:'')}));
+    reasoningResult.append(detail);
+  }
+  memoryStatus.textContent='Local reasoning complete · '+e.recordsUsed+' authorized reports'+(e.truncated?' · more matches exist':'');
 });
 archiveMemory.onclick=memoryAction(async(client,current)=>{
   const file=memoryFile.files?.[0];if(!file||file.size>65536)throw Error('Choose a Council JSON report no larger than 64 KB.');

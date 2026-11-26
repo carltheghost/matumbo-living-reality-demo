@@ -127,6 +127,15 @@ async def main():
                 text = await result.inner_text()
                 check("exact digest and dissent recalled on mobile",digest in text and "kimi · over-budget · A,C" in text and "Fixture · not live" in text)
                 check("only selected mission is shared",await result.locator("details").count()==1)
+                await editor_sheet.get_by_role("button",name="Reason from authorized evidence").click()
+                await status(editor_status,"Local reasoning complete · 1 authorized reports")
+                reasoning=editor_sheet.get_by_label("Advisory reasoning result")
+                reasoning_text=await reasoning.inner_text()
+                check("local reasoning independently verifies the optimum",
+                      "Verified plan: C,D · cost 7 / 7 · value 13" in reasoning_text and "15 subsets checked · 8 feasible" in reasoning_text)
+                await reasoning.locator("summary").click()
+                reasoning_text=await reasoning.inner_text()
+                check("reasoning retains exact evidence digest and dissent",digest in reasoning_text and "kimi · over-budget · A,C" in reasoning_text)
                 await editor_sheet.get_by_label("Agent evidence provenance").select_option("live")
                 await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
                 await status(editor_status,"No matching authorized evidence.")
@@ -140,6 +149,11 @@ async def main():
                 await editor_sheet.get_by_role("button",name="Prepare agent evidence").click()
                 await status(editor_status,"No matching authorized evidence.")
                 check("revoked grant cannot be recalled",await result.locator("details").count()==0)
+                await editor_sheet.get_by_role("button",name="Reason from authorized evidence").click()
+                await status(editor_status,"Local reasoning complete · 0 authorized reports")
+                reasoning_text=await reasoning.inner_text()
+                check("revocation leaves local proof but no private evidence",
+                      "Verified plan: C,D" in reasoning_text and "Local proof only." in reasoning_text and digest not in reasoning_text)
                 check("no page errors",not errors)
                 check("no external browser requests",not forbidden)
             finally:
