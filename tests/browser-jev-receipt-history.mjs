@@ -562,7 +562,14 @@ async function runDevice(browser, device) {
           display:c.display,visibility:c.visibility,overflowY:c.overflowY,flex:c.flex,minHeight:c.minHeight,
           height:c.height,transform:c.transform};
       }
+      const focused=document.activeElement,control=p?.querySelector('input[placeholder="model name"]'),r=control?.getBoundingClientRect();
+      const hit=r&&document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+      const node=window.__TUMBO_REALITY_ASSEMBLY__?.getFeatureObject("web-ai")?.root;
       return {viewport:{width:innerWidth,height:innerHeight},selectedId:window.__TUMBO_REALITY_ASSEMBLY__?.getSnapshot()?.selectedId,
+        focusDiagnostic:{activeTag:focused?.tagName,activeId:focused?.id,activePlaceholder:focused?.getAttribute("placeholder"),
+          expectedControl:geometry(control),focused:focused===control,caret:control?[control.selectionStart,control.selectionEnd]:null,
+          centerHit:hit?{tag:hit.tagName,id:hit.id,className:typeof hit.className==="string"?hit.className:""}:null,
+          scaleRatio:node?node.scale.y/node.scale.x:null},
         assemblyClass:a?.className,readingProjection:a?.dataset.readingProjection,
         panel:geometry(p),head:geometry(p?.querySelector(".web-ai-head")),body:geometry(p?.querySelector(".web-ai-body")),
         tabs:geometry(p?.querySelector(".web-ai-tabs")),boundary:geometry(p?.querySelector(".web-ai-boundary")),

@@ -1,3 +1,4 @@
+import {readingAnchorTarget,readingControlHit} from './reading-anchor.js';
 import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20260923-spatial-tabs16';
 import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
@@ -169,7 +170,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       const control=document.activeElement;
       mountedSurface.resizeAnchor=mountedSurface.livePanel&&mountedSurface.front.contains(control)
         &&control?.matches?.('input,textarea,select,button,summary,a[href],[contenteditable="true"]')
-        ?{control,composition:null,until:performance.now()+1800}:null;
+        ?{control,frames:0,stableFrames:0,composition:null,lastTarget:null}:null;
     }
     css3dRenderer.setSize(innerWidth,innerHeight);
     if(active&&mountedSurface)focus();
@@ -180,14 +181,21 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(document.activeElement!==anchor.control||!record.front.contains(anchor.control)){
       record.resizeAnchor=null;return;
     }
-    const settled=performance.now()>=anchor.until;
-    if(anchor.composition!==record.composition||settled){
-      // Do not focus, remount, change selection, or replay an input event.
-      // Only scroll the existing focused control into the reflowed surface.
-      anchor.control.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
-      anchor.composition=record.composition;
-    }
-    if(settled)record.resizeAnchor=null;
+    // The same input may move thousands of local CSS pixels after reflow.
+    // Center it in the owning scroll skin in layout coordinates; never use
+    // transformed screen rectangles or scroll the outer world/document.
+    const skin=record.livePanel,target=readingAnchorTarget(anchor.control,skin);
+    if(target!==null&&Math.abs(skin.scrollTop-target)>1)skin.scrollTop=target;
+    const hit=readingControlHit(anchor.control,skin,innerWidth,innerHeight,(x,y)=>document.elementFromPoint(x,y));
+    const stable=hit&&target!==null&&!focusTarget&&anchor.composition===record.composition
+      &&anchor.lastTarget!==null&&Math.abs(anchor.lastTarget-target)<=1;
+    anchor.stableFrames=stable?anchor.stableFrames+1:0;
+    anchor.composition=record.composition;anchor.lastTarget=target;
+    // Count actual rendered frames, not a short wall-clock timeout: software
+    // rendering and expensive responsive layout can take seconds per frame.
+    // Stop after a stable, reachable control or a finite number of attempts.
+    // Pointer, keyboard and wheel intent still cancel immediately.
+    if(anchor.stableFrames>=3||++anchor.frames>=90)record.resizeAnchor=null;
   }
   function cancelReadingAnchor(){if(mountedSurface)mountedSurface.resizeAnchor=null;}
   import('three/addons/renderers/CSS3DRenderer.js').then(module=>{
