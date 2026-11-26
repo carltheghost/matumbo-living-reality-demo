@@ -1,5 +1,6 @@
 /** Local, owner-attached task evidence. Never executes or restores an action on load. */
-const SCHEMA='vivo.agent-task-journal/1',TOOL='task.progress',LIMIT=16,STEPS=64,HANDOFFS=16;
+import {TASK_JOURNAL_SCHEMA as SCHEMA,LEGACY_TASK_JOURNAL_SCHEMA,normalizePrerequisites,validateMissionGraph,addPrerequisites,assertMissionReady,completeMissionTask,missionView} from './mission-graph.mjs';
+const TOOL='task.progress',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
 const id=x=>typeof x==='string'&&x.length>0&&x.length<=256&&!/[\u0000-\u001f\u007f]/.test(x);
@@ -10,7 +11,7 @@ const fingerprint=x=>JSON.stringify({worldId:x.worldId,branchId:x.branchId,eyeId
 const digest=async text=>Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),n=>n.toString(16).padStart(2,'0')).join('');
 const empty=key=>({schema:SCHEMA,key,tasks:[]});
 const valid=(journal,key)=>{
-  need(journal?.schema===SCHEMA&&journal.key===key&&Array.isArray(journal.tasks)&&journal.tasks.length<=LIMIT,'TASK_STORAGE_INVALID');
+  need((journal?.schema===SCHEMA||journal?.schema===LEGACY_TASK_JOURNAL_SCHEMA)&&journal.key===key&&Array.isArray(journal.tasks)&&journal.tasks.length<=LIMIT,'TASK_STORAGE_INVALID');
   const tasks=new Set(),operations=new Set();
   for(const t of journal.tasks){
     need(id(t.id)&&id(t.sourceId)&&typeof t.title==='string'&&t.title.length>0&&t.title.length<=100&&Number.isSafeInteger(t.epoch)&&t.epoch>=1&&typeof t.closed==='boolean'&&Array.isArray(t.steps)&&t.steps.length<=STEPS&&!tasks.has(t.id),'TASK_STORAGE_INVALID');tasks.add(t.id);
@@ -21,7 +22,7 @@ const valid=(journal,key)=>{
     need(owner===t.sourceId,'TASK_STORAGE_INVALID');
     for(const s of t.steps){need(s&&(s.sourceId===undefined?history.length===0:owners.has(s.sourceId))&&(s.spaceId===undefined||id(s.spaceId)),'TASK_STORAGE_INVALID');need(id(s.operationId)&&id(s.entityId)&&/^[a-f0-9]{64}$/.test(s.sha256)&&['pending','confirmed','conflict','not-dispatched'].includes(s.state)&&!operations.has(s.operationId),'TASK_STORAGE_INVALID');operations.add(s.operationId);if(s.state==='confirmed')need(Number.isSafeInteger(s.revision)&&s.revision>=0&&typeof s.changed==='boolean','TASK_STORAGE_INVALID');}
   }
-  return journal;
+  return validateMissionGraph(journal);
 };
 /** Atomic same-origin IndexedDB updates; deliberately no volatile fallback. */
 export class IndexedDbTaskStore {
@@ -50,14 +51,15 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
   function checkBinding(b){need(syncScope()===b.key&&bindings.get(b.agent.sessionId)===b&&sameAgent(active(b.agent),b.agent),'TASK_ATTACHMENT_STALE');}
   function pause(session){const sessionId=typeof session==='string'?session:session?.sessionId;bindings.delete(sessionId);attaching.delete(sessionId);}
   function clear(){bindings.clear();attaching.clear();}
-  async function attach(session,taskId,title,transfer=null){
+  async function attach(session,taskId,title,transfer=null,dependsOn=[]){
+    const prerequisites=normalizePrerequisites(dependsOn);
     const key=scopeKey(),agent=active(session),request={};
     // A rejected handoff must not detach the recipient's unrelated task.
     // A successful attachment replaces its earlier volatile binding.
     if(!transfer)pause(agent);attaching.set(agent.sessionId,request);
     try{const chosen=await tx(key,j=>{
       let t;
-      if(taskId===null){need(typeof title==='string'&&title.trim().length>0&&title.trim().length<=100,'TASK_TITLE_INVALID');need(j.tasks.length<LIMIT,'TASK_CAPACITY');t={id:newId(),sourceId:agent.sourceId,title:title.trim(),epoch:1,closed:false,steps:[]};j.tasks.push(t);}
+      if(taskId===null){need(typeof title==='string'&&title.trim().length>0&&title.trim().length<=100,'TASK_TITLE_INVALID');need(j.tasks.length<LIMIT,'TASK_CAPACITY');t={id:newId(),sourceId:agent.sourceId,title:title.trim(),epoch:1,closed:false,steps:[]};addPrerequisites(j,t,prerequisites);j.tasks.push(t);}
       else{
         t=find(j,taskId);
         if(transfer){
@@ -83,6 +85,13 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
     return attach(session,taskId,null,{sourceId:expected.sourceId,epoch:expected.epoch});
   }
   async function finish(session){const b=binding(session);need(b,'TASK_NOT_ATTACHED');checkBinding(b);pause(b.agent);await tx(b.key,j=>{const t=owns(j,b);t.closed=true;});}
+  async function complete(session,expected){
+    const b=binding(session);need(b,'TASK_NOT_ATTACHED');checkBinding(b);
+    need(expected?.taskId===b.taskId&&expected?.epoch===b.epoch,'TASK_COMPLETION_EXPECTATION_REQUIRED');
+    const result=await tx(b.key,j=>{checkBinding(b);const t=owns(j,b);return completeMissionTask(j,t);});
+    if(bindings.get(b.agent.sessionId)===b)pause(b.agent);
+    return result;
+  }
   async function inspect(){const key=scopeKey();const tasks=await tx(key,j=>j.tasks);need(syncScope()===key,'TASK_ATTACHMENT_STALE');for(const [sid,b] of bindings){try{checkBinding(b);const t=tasks.find(t=>t.id===b.taskId);if(t&&!t.closed&&t.epoch===b.epoch)continue;}catch{}bindings.delete(sid);}return {tasks,attachments:[...bindings.values()].map(b=>({taskId:b.taskId,sourceId:b.agent.sourceId,sessionId:b.agent.sessionId})),warning:lastWarning};}
   async function reconcile(){
     const envelope=getEnvelope(),key=scopeKey();need(scopeOf(envelope)&&keyOf(scopeOf(envelope))===key,'TASK_SCOPE_CHANGED');
@@ -96,11 +105,11 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
   async function invokeFor(session,name,args={}){
     if(name!==TOOL&&name!=='vivo.world.edit')return downstream.invokeFor(session,name,args);
     const b=binding(session);
-    if(name===TOOL){need(b,'TASK_NOT_ATTACHED');need(args&&typeof args==='object'&&!Array.isArray(args)&&Object.keys(args).length===0,'TASK_ARGUMENTS_INVALID');const task=await tx(b.key,j=>owns(j,b));checkBinding(b);return {schema:SCHEMA,task,readOnly:true,authorizesAction:false};}
+    if(name===TOOL){need(b,'TASK_NOT_ATTACHED');need(args&&typeof args==='object'&&!Array.isArray(args)&&Object.keys(args).length===0,'TASK_ARGUMENTS_INVALID');const result=await tx(b.key,j=>{const task=owns(j,b);return {task,mission:missionView(j,task)};});checkBinding(b);return {schema:SCHEMA,...result,readOnly:true,authorizesAction:false};}
     if(!b)return downstream.invokeFor(session,name,args);
     checkBinding(b);const safe=structuredClone(args);const v=validateEdit(safe,getEnvelope());need(!v.prior,'TASK_OPERATION_ALREADY_RECORDED');const sha256=await digest(fingerprint(v));checkBinding(b);
     const step={operationId:v.operationId,entityId:v.entityId,spaceId:v.spaceId,sourceId:b.agent.sourceId,sha256,state:'pending'};
-    await tx(b.key,j=>{const t=owns(j,b);need(!j.tasks.some(x=>x.steps.some(s=>s.operationId===step.operationId)),'TASK_OPERATION_ALREADY_RECORDED');need(!t.steps.some(unresolved),'TASK_RECONCILIATION_REQUIRED');need(!j.tasks.some(x=>x!==t&&x.steps.some(s=>unresolved(s)&&s.entityId===step.entityId&&(s.spaceId===undefined||s.spaceId===step.spaceId))),'TASK_OBJECT_RESERVED');need(t.steps.length<STEPS,'TASK_STEP_CAPACITY');t.steps.push(step);});
+    await tx(b.key,j=>{const t=owns(j,b);assertMissionReady(j,t);need(!j.tasks.some(x=>x.steps.some(s=>s.operationId===step.operationId)),'TASK_OPERATION_ALREADY_RECORDED');need(!t.steps.some(unresolved),'TASK_RECONCILIATION_REQUIRED');need(!j.tasks.some(x=>x!==t&&x.steps.some(s=>unresolved(s)&&s.entityId===step.entityId&&(s.spaceId===undefined||s.spaceId===step.spaceId))),'TASK_OBJECT_RESERVED');need(t.steps.length<STEPS,'TASK_STEP_CAPACITY');t.steps.push(step);});
     try{checkBinding(b);await tx(b.key,j=>owns(j,b));checkBinding(b);}catch(error){await tx(b.key,j=>{const s=find(j,b.taskId).steps.find(x=>x.operationId===step.operationId);if(s?.state==='pending')s.state='not-dispatched';}).catch(()=>{});throw error;}
     try{return await downstream.invokeFor(b.agent,name,safe);}finally{
       // Unknown or expired receipt never means safe to retry. Preserve the
@@ -108,5 +117,5 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       try{if(syncScope()===b.key)await reconcile();}catch{lastWarning='Task evidence could not be refreshed. Review the existing operation before retrying.';}
     }
   }
-  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title)=>attach(session,null,title),resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
+  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
 }

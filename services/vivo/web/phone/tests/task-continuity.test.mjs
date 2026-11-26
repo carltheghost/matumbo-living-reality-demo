@@ -97,3 +97,60 @@ test('a rejected handoff preserves the recipient’s existing task attachment',a
   await assert.rejects(transfer(f,original),{code:'TASK_RECONCILIATION_REQUIRED'});
   assert.equal((await progress(f,'b')).task.id,recipient.taskId);
 });
+
+const complete=(f,agent,task)=>f.bridge.admin.complete(agent,{taskId:task.id,epoch:task.epoch});
+test('dependent task cannot dispatch until the owner completes its prerequisite with receipts',async()=>{
+  const f=fixture(),a=await attach(f);await f.bridge.admin.create('b','Next step',[a.taskId]);
+  let p=await progress(f,'b');assert.equal(p.mission.state,'blocked');assert.equal(p.mission.dependencies[0].status,'waiting');
+  await assert.rejects(run(f,'op2','b'),{code:'TASK_PREREQUISITES_INCOMPLETE'});assert.equal(f.calls(),0);assert.equal((await progress(f,'b')).task.steps.length,0);
+  await run(f);await assert.rejects(run(f,'op2','b'),{code:'TASK_PREREQUISITES_INCOMPLETE'});
+  await complete(f,'a',(await progress(f)).task);p=await progress(f,'b');assert.equal(p.mission.state,'ready');
+  assert.deepEqual(p.mission.dependencies[0].receipts.map(s=>[s.sourceId,s.operationId]),[['muse','op1']]);
+  assert.equal(p.mission.authorizesAction,false);assert.equal(f.calls(),1);await run(f,'op2','b');
+  const result=await complete(f,'b',(await progress(f,'b')).task);assert.equal(result.completed,true);assert.equal(result.closed,true);assert.equal(f.calls(),2);
+});
+test('archiving a prerequisite with confirmed receipts does not unlock its dependents',async()=>{
+  const f=fixture(),a=await attach(f);await f.bridge.admin.create('b','Next step',[a.taskId]);await run(f);await f.bridge.admin.finish('a');
+  const p=await progress(f,'b');assert.equal(p.mission.dependencies[0].status,'closed-incomplete');assert.equal(p.mission.dependencies[0].receipts.length,0);
+  await assert.rejects(run(f,'op2','b'),{code:'TASK_PREREQUISITES_INCOMPLETE'});
+});
+test('completion requires the reviewed task and epoch plus confirmed, reconciled work',async()=>{
+  const f=fixture();await attach(f);let t=(await progress(f)).task;
+  await assert.rejects(f.bridge.admin.complete('a',{taskId:'wrong',epoch:t.epoch}),{code:'TASK_COMPLETION_EXPECTATION_REQUIRED'});
+  await assert.rejects(complete(f,'a',t),{code:'TASK_EVIDENCE_REQUIRED'});
+  f.mode('missing');await run(f);t=(await progress(f)).task;await assert.rejects(complete(f,'a',t),{code:'TASK_RECONCILIATION_REQUIRED'});
+  f.receipt(edit());await f.bridge.admin.reconcile();await complete(f,'a',t);
+  await assert.rejects(f.bridge.admin.resume('a',t.id),{code:'TASK_SOURCE_MISMATCH'});
+});
+test('handoff and reconnect cannot bypass prerequisites or recreate a completed grant',async()=>{
+  const f=fixture(),a=await attach(f);f.sessions.set('c',{sourceId:'dot',sessionId:'c',generation:1});
+  await f.bridge.admin.create('b','Blocked task',[a.taskId]);const old=(await progress(f,'b')).task;
+  await transfer(f,old,'c');await assert.rejects(run(f,'op2','c'),{code:'TASK_PREREQUISITES_INCOMPLETE'});
+  await run(f);await complete(f,'a',(await progress(f)).task);
+  f.bridge=f.build();await assert.rejects(progress(f,'c'),{code:'TASK_NOT_ATTACHED'});await f.bridge.admin.resume('c',old.id);
+  assert.equal((await progress(f,'c')).mission.readyForJournaledEdits,true);await run(f,'op2','c');assert.equal(f.calls(),2);
+});
+test('legacy journal migration preserves old receipts but never assumes owner completion',async()=>{
+  const f=fixture(),key=JSON.stringify(['world','main']);
+  const old={id:'old',sourceId:'muse',title:'Old archived task',epoch:2,closed:true,steps:[{operationId:'old-op',entityId:'object',sha256:'a'.repeat(64),state:'confirmed',revision:3,changed:true}]};
+  f.store.values.set(key,{schema:SCHEMA,key,tasks:[clone(old)]});const rows=await inspect(f);
+  assert.deepEqual(rows,[old]);assert.equal(f.store.values.get(key).schema,'vivo.agent-task-journal/2');
+  await f.bridge.admin.create('b','Depends on old',['old']);assert.equal((await progress(f,'b')).mission.state,'blocked');
+});
+test('concurrent completion is exclusive and cannot grant a new session',async()=>{
+  const f=fixture();await attach(f);await run(f);const t=(await progress(f)).task;
+  const result=await Promise.allSettled([complete(f,'a',t),complete(f,'a',t)]);assert.equal(result.filter(r=>r.status==='fulfilled').length,1);
+  assert.equal((await inspect(f))[0].completed,true);assert.equal(f.calls(),1);await assert.rejects(progress(f),{code:'TASK_NOT_ATTACHED'});
+});
+test('task prerequisite inputs are copied before storage and must refer to existing local tasks',async()=>{
+  const f=fixture(),a=await attach(f);const deps=[a.taskId],release=f.store.hold(),work=f.bridge.admin.create('b','Copied',deps);deps.push('missing');release();await work;
+  assert.deepEqual((await progress(f,'b')).task.dependsOn,[a.taskId]);
+  await assert.rejects(f.bridge.admin.create('b','Invalid',['missing']),{code:'TASK_DEPENDENCIES_INVALID'});
+  await assert.rejects(f.bridge.admin.create('b','Invalid',[a.taskId,a.taskId]),{code:'TASK_DEPENDENCIES_INVALID'});
+});
+test('an attached agent sees only the explicit direct prerequisite evidence, not unrelated task records',async()=>{
+  const f=fixture(),a=await attach(f);await run(f);await complete(f,'a',(await progress(f)).task);
+  await f.bridge.admin.create('a','Private unrelated task');await run(f,'private-op');await complete(f,'a',(await progress(f)).task);
+  await f.bridge.admin.create('b','Dependent',[a.taskId]);const p=await progress(f,'b');assert.equal(p.mission.dependencies.length,1);
+  assert.equal(p.mission.dependencies[0].receipts[0].operationId,'op1');assert(!JSON.stringify(p).includes('private-op'));assert(!f.bridge.tools.listFor('b').some(t=>t.name.includes('complete')));
+});
