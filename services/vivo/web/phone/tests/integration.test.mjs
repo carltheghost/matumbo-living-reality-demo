@@ -161,7 +161,17 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /scope\.pathname/);
   assert.match(sw, /shell\.match\(scoped\('index\.html'\)\)/);
-  assert.match(sw, /SHELL_CACHE.*v23/);
+  // The browser upgrade test owns the explicit release name. Ensure the
+  // installed shell matches that latest target without pinning an older version
+  // in an unrelated tracker test.
+  const upgradeTest = await readFile(new URL('phone/tests/browser_service_worker_upgrade.py', root), 'utf8');
+  const declared = [...upgradeTest.matchAll(/^V(\d+)_CACHE = "(vivo-phone-shell-\d{4}-\d{2}-\d{2}-v\d+)"$/gm)]
+    .sort((a,b)=>Number(a[1])-Number(b[1]));
+  assert.ok(declared.length > 1, 'historical and current cache releases must be declared');
+  const current = declared.at(-1)[2];
+  assert.ok(current.endsWith('-v'+declared.at(-1)[1]));
+  const active = sw.match(/^const SHELL_CACHE = '(vivo-phone-shell-\d{4}-\d{2}-\d{2}-v\d+)';$/m)?.[1];
+  assert.equal(active, current, 'service-worker shell must match the latest tested upgrade target');
   assert.match(sw, /phone\/projection-parameters\.mjs/);
   for (const asset of ['phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'application/conversation-transport.mjs', 'phone/companion.mjs']) assert.match(sw, new RegExp(asset.replaceAll('.', '\\.')));
   assert.doesNotMatch(worker, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
