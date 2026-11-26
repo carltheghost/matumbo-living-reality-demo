@@ -26,11 +26,14 @@ test('the same surface projector follows a selected shape and grows with its obj
 });
 
 test('one fitted live panel preserves every tab form while staying inside the viewport',()=>{
-  const expectedAspect={phone:.86/1.5,square:1,rectangle:1.92/1.12,sphere:1,cylinder:1.36/1.64,cube:1,wave:1.92/1.12};
+  // The wave's cap includes both 7.5% crest/trough margins, unlike a flat rectangle.
+  const expectedAspect={phone:.86/1.5,square:1,rectangle:1.92/1.12,sphere:1,cylinder:1.36/1.64,cube:1,wave:1.92/(1.12*1.15)};
   for(const [shape,aspect] of Object.entries(expectedAspect)){
     const fit=realityObjectSurfaceEngine.fitPanel({shape,size:2,distance:4,approachScale:2,viewportWidth:420,viewportHeight:700});
     assert.equal(fit.shape,shape);assert.ok(fit.width<=388);assert.ok(fit.height<=524);assert.ok(fit.width>0&&fit.height>0);
-    assert.ok(Math.abs(fit.width/fit.height-aspect)<.02,`${shape} preserves its own silhouette`);
+    assert.ok(Math.abs(fit.width/fit.height-aspect)<.0002,`${shape} preserves its actual front silhouette`);
+    assert.ok(Math.abs(fit.aspectRatio-aspect)<.0002);
+    assert.ok(Math.abs(fit.width/fit.height-fit.primary.width/fit.primary.height)<1e-9,'uniform fit does not distort the face');
     assert.equal(fit.scrollable,true);
   }
 });

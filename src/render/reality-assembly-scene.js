@@ -1,4 +1,4 @@
-import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
+import {REALITY_TAB_FORMS,waveTabContour} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
 import {createLivingSurfaceMap} from '../domains/living-surface-layout-engine.js';
 
@@ -47,12 +47,10 @@ function roundedPanelShape(THREE,width,height,radius){
   return shape;
 }
 function wavePanelShape(THREE,width,height){
-  const shape=new THREE.Shape(),steps=28;
-  for(let i=0;i<=steps;i++){
-    const x=-width/2+width*i/steps,y=height/2+Math.sin(i/steps*Math.PI*4)*height*.075;
-    if(i===0)shape.moveTo(x,y);else shape.lineTo(x,y);
-  }
-  for(let i=steps;i>=0;i--){const x=-width/2+width*i/steps,y=-height/2+Math.sin(i/steps*Math.PI*4+Math.PI)*height*.075;shape.lineTo(x,y);}
+  const shape=new THREE.Shape();
+  waveTabContour(width,height).forEach(([x,y],index)=>{
+    if(index===0)shape.moveTo(x,y);else shape.lineTo(x,y);
+  });
   shape.closePath();return shape;
 }
 function tabSurfaceDepth(node,x,y,extra=.012){

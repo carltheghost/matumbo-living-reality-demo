@@ -72,11 +72,29 @@ test('phone orientation adapts the whole reading body without changing canonical
     assert.ok(composition.actualHeight<=frame.availableHeight+.5);
     assert.ok(Math.abs(composition.width-composition.actualWidth)<10);
     assert.ok(Math.abs(composition.height-composition.actualHeight)<10,'vertical glyph density compensates body stretch');
-    if(viewportWidth<700&&['wave','rectangle'].includes(shape))assert.ok(projection.stretch[1]>2,'wide forms unfold vertically as bodies');
+    // Portrait adapts the actual front envelope, not its nominal body
+    // rectangle. Wave crests already supply extra height before stretching.
+    const nativeAspect=face.width/face.height;
+    const expectedAspect=viewportWidth<700?Math.min(nativeAspect,.78):Math.max(nativeAspect,1.7);
+    assert.ok(Math.abs(composition.actualWidth/composition.actualHeight-expectedAspect)<1e-9,`${shape} projects its full silhouette into the intended reading aspect`);
+    assert.ok(Math.abs(projection.targetAspect-expectedAspect)<1e-9);
+    if(viewportWidth<700&&['wave','rectangle'].includes(shape)){
+      assert.equal(projection.stretch[0],1,'wide forms keep their projected width scale');
+      assert.ok(projection.stretch[1]>1,'wide forms unfold vertically as bodies');
+      assert.ok(Math.abs(projection.stretch[1]-nativeAspect/.78)<1e-9);
+    }
+    assert.equal(projection.stretch[2],1,'depth is not changed by orientation');
+    assert.deepEqual(createLivingSurfaceMap(shape).body,REALITY_TAB_FORMS[shape],'canonical form dimensions remain unchanged');
     if(viewportHeight<600&&shape==='phone')assert.ok(projection.stretch[0]>2,'landscape phone becomes a broad reading body');
     assert.ok(Object.isFrozen(projection.stretch));
   }
-  assert.deepEqual(livingReadingProjection({shape:'wave',viewportWidth:1440,viewportHeight:900}).stretch,[1,1,1]);
+  for(const shape of Object.keys(REALITY_TAB_FORMS)){
+    assert.deepEqual(livingReadingProjection({shape,viewportWidth:1440,viewportHeight:900}).stretch,[1,1,1]);
+  }
+  const wavePortrait=livingReadingProjection({shape:'wave',viewportWidth:390,viewportHeight:844});
+  const rectanglePortrait=livingReadingProjection({shape:'rectangle',viewportWidth:390,viewportHeight:844});
+  assert.ok(Math.abs(wavePortrait.stretch[1]-(1.92/(1.12*1.15))/.78)<1e-9,'wave already includes crest/trough height');
+  assert.ok(wavePortrait.stretch[1]<rectanglePortrait.stretch[1],'same reading aspect without over-stretching the wave');
 });
 
 test('content is clamped to a readable viewport surface instead of stretching the object body',()=>{

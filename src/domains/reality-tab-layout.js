@@ -9,6 +9,27 @@ export const REALITY_TAB_FORMS=Object.freeze({
   cube:Object.freeze({label:'Cube',width:1.42,height:1.42,depth:1.42,radius:.71}),
   wave:Object.freeze({label:'Wave',width:1.92,height:1.12,depth:.18,radius:.98}),
 });
+// The nominal wave height is the midline-to-midline panel height. Its
+// two crest/trough edges add 7.5% on each side to the front envelope.
+// Share the actual sampled contour between the 3D cap and CSS skin;
+// the extrusion bevel is a separate visual rim.
+export const WAVE_TAB_PROFILE=Object.freeze({amplitude:.075,cycles:2,segments:28});
+export function waveTabEnvelopeHeight(height){
+  return height*(1+2*WAVE_TAB_PROFILE.amplitude);
+}
+export function waveTabContour(width,height){
+  if(!Number.isFinite(width)||width<=0||!Number.isFinite(height)||height<=0)throw Error('Wave dimensions must be finite and positive');
+  const {amplitude,cycles,segments}=WAVE_TAB_PROFILE,points=[];
+  for(let i=0;i<=segments;i++){
+    const t=i/segments;
+    points.push(Object.freeze([-width/2+width*t,height/2+Math.sin(t*Math.PI*2*cycles)*height*amplitude]));
+  }
+  for(let i=segments;i>=0;i--){
+    const t=i/segments;
+    points.push(Object.freeze([-width/2+width*t,-height/2-Math.sin(t*Math.PI*2*cycles)*height*amplitude]));
+  }
+  return Object.freeze(points);
+}
 export const REALITY_TAB_FORM_IDS=Object.freeze(Object.keys(REALITY_TAB_FORMS));
 export const REALITY_TAB_SIZE_MIN=.35;
 export const REALITY_TAB_SIZE_MAX=24;
