@@ -393,9 +393,33 @@ comparisonTarget.setAttribute('aria-label','Mission target value');
 const comparisonRun=element('button',{type:'button',textContent:'Compare and verify budgets'});
 const comparisonResult=element('section');comparisonResult.setAttribute('aria-label','Verified budget comparison result');
 comparisonArea.append(comparisonBudgets,comparisonTarget,comparisonRun,comparisonResult);
-plannerArea.append(dependencyExample,missionInput,missionPlan,plannerResult,comparisonArea);
+const scenarioArea=element('details');
+scenarioArea.append(element('summary',{textContent:'Compare mission uncertainty scenarios'}),
+  element('p',{className:'muted',textContent:'Supply 2–8 joint value scenarios with every job ID. Costs, dependencies and conflicts remain fixed. NOM must match the mission values. Compare nominal value, worst-case value and maximum regret. No scenario probabilities or predictions are implied.'}));
+const scenarioInput=element('textarea',{rows:8,maxLength:8192,value:''});
+scenarioInput.setAttribute('aria-label','Mission value scenarios');
+const scenarioExample=element('button',{type:'button',textContent:'Load illustrative value scenarios'});
+const scenarioRun=element('button',{type:'button',textContent:'Compare and verify scenarios'});
+const scenarioResult=element('section');scenarioResult.setAttribute('aria-label','Verified mission scenario result');
+scenarioExample.onclick=()=>{
+  try{
+    const {jobs}=JSON.parse(missionInput.value);
+    if(!Array.isArray(jobs)||jobs.length<1||jobs.length>12||
+      jobs.some(j=>typeof j.id!=='string'||!/^[A-Z][A-Z0-9]{0,7}$/.test(j.id)||!Number.isSafeInteger(j.value)||j.value<0||j.value>1000000))
+      throw Error('Invalid jobs');
+    const nominal=Object.fromEntries(jobs.map(j=>[j.id,j.value]));
+    const stress=Object.fromEntries(jobs.map((j,i)=>[j.id,i%2?j.value:Math.floor(j.value/2)]));
+    scenarioInput.value=JSON.stringify([{id:'NOM',values:nominal},{id:'STRESS',values:stress}],null,2);
+    scenarioInput.dispatchEvent(new Event('input'));
+  }catch{scenarioResult.textContent='Enter valid mission jobs before loading scenarios.';}
+};
+scenarioArea.append(scenarioExample,scenarioInput,scenarioRun,scenarioResult);
+plannerArea.append(dependencyExample,missionInput,missionPlan,plannerResult,comparisonArea,scenarioArea);
 agentContext.append(plannerArea);
-function clearReasoning(){reasoningResult.replaceChildren();plannerResult.replaceChildren();comparisonResult.replaceChildren();}
+function clearReasoning(){reasoningResult.replaceChildren();plannerResult.replaceChildren();comparisonResult.replaceChildren();scenarioResult.replaceChildren();}
+scenarioInput.addEventListener('input',()=>{
+  memoryEpoch++;scenarioResult.replaceChildren();memoryStatus.textContent='Scenario assumptions changed. Verify again.';
+});
 for(const control of [comparisonBudgets,comparisonTarget])control.addEventListener('input',()=>{
   memoryEpoch++;comparisonResult.replaceChildren();memoryStatus.textContent='Comparison assumptions changed. Verify again.';
 });
@@ -417,6 +441,7 @@ function clearMemoryView(){
   taskScope.value='route-constraint-v1';modeScope.value='fixture';providerScope.value='';agentContext.open=false;reasonEvidence.disabled=false;
   missionInput.value=JSON.stringify(defaultMission,null,2);plannerArea.open=false;
   comparisonBudgets.value='5,7,10';comparisonTarget.value='';comparisonArea.open=false;
+  scenarioInput.value='';scenarioArea.open=false;
   memoryStatus.textContent='Connect to recall evidence.';
 }
 const memoryAction=fn=>async()=>{
@@ -574,6 +599,42 @@ comparisonRun.onclick=memoryAction(async(client,current)=>{
     element('p',{textContent:'Decision SHA-256: '+result.decisionSha256}),
     element('p',{className:'muted',textContent:'Hypothetical estimates only. No memory reports recalled, provider calls, billing or world action.'}));
   memoryStatus.textContent='Budget comparison verified · '+result.scenarios.length+' scenarios';
+});
+scenarioRun.onclick=memoryAction(async(client,current)=>{
+  let mission,scenarios;
+  if(missionInput.value.length>8192||scenarioInput.value.length>8192)throw Error('Scenario definition is too large.');
+  try{mission=JSON.parse(missionInput.value);scenarios=JSON.parse(scenarioInput.value);}
+  catch{throw Error('Mission and scenarios must be valid JSON.');}
+  memoryResults.replaceChildren();resetSharing();memoryCursor=null;memoryMore.hidden=true;
+  const result=await client.compareMissionScenarios({mission,scenarios,nominalId:'NOM'});
+  if(!current())return;
+  scenarioResult.append(element('h4',{textContent:'Independently verified scenario choices'}));
+  const table=element('table'),header=element('thead'),heading=element('tr'),body=element('tbody');
+  for(const label of ['Criterion','Plan','Cost','Nominal','Worst','Max regret'])heading.append(element('th',{textContent:label}));
+  header.append(heading);table.append(header,body);
+  for(const [label,p] of [['Nominal optimum',result.nominalChoice],['Maximin',result.maximinChoice],['Minimax regret',result.minimaxRegretChoice]]){
+    const row=element('tr');
+    for(const value of [label,p?(p.candidate||'Empty choice'):'Infeasible',p?.cost??'—',p?.nominalValue??'—',p?.worstValue??'—',p?.maximumRegret??'—'])
+      row.append(element('td',{textContent:String(value)}));
+    body.append(row);
+  }
+  scenarioResult.append(table);
+  if(result.status==='feasible'){
+    const comparison=element('table'),h=element('thead'),r=element('tr'),b=element('tbody');
+    for(const label of ['Scenario','Best possible','Nominal plan','Maximin plan','Minimax regret plan'])r.append(element('th',{textContent:label}));
+    h.append(r);comparison.append(h,b);
+    result.scenarioOptima.forEach((item,i)=>{
+      const tr=element('tr');
+      for(const value of [item.scenarioId,item.proposal.values[i].value,result.nominalChoice.values[i].value,
+        result.maximinChoice.values[i].value,result.minimaxRegretChoice.values[i].value])tr.append(element('td',{textContent:String(value)}));
+      b.append(tr);
+    });
+    scenarioResult.append(comparison);
+  }else scenarioResult.append(element('p',{textContent:'No combination satisfies the fixed resource constraints.'}));
+  scenarioResult.append(element('p',{textContent:result.proof.subsetsChecked+' subsets checked · '+result.proof.feasibleSubsets+' feasible fixed plans'}),
+    element('p',{textContent:'Decision SHA-256: '+result.decisionSha256}),
+    element('p',{className:'muted',textContent:'Regret is the value lost relative to the best feasible plan in that scenario. Worst case means the minimum among supplied scenarios, not a real-world guarantee. No memory recall, model calls or execution.'}));
+  memoryStatus.textContent='Scenario comparison verified · '+result.scenarios.length+' scenarios';
 });
 archiveMemory.onclick=memoryAction(async(client,current)=>{
   const file=memoryFile.files?.[0];if(!file||file.size>65536)throw Error('Choose a Council JSON report no larger than 64 KB.');

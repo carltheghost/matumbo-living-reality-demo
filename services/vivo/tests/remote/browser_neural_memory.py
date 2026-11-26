@@ -264,6 +264,30 @@ async def main():
                 await status(editor_status,"Budget comparison verified · 3 scenarios")
                 check("unattainable target reported without inventing a plan",
                       "Target 26 is unattainable under these constraints." in await comparison.inner_text())
+                saved_definition=await mission_input.input_value()
+                await mission_input.fill(json.dumps({"budget":1,"jobs":[{"id":"A","cost":1,"value":10},
+                    {"id":"B","cost":1,"value":6},{"id":"C","cost":1,"value":8}],"required":[],"conflicts":[]}))
+                await editor_sheet.get_by_text("Compare mission uncertainty scenarios",exact=True).click()
+                await editor_sheet.get_by_label("Mission value scenarios").fill(json.dumps([
+                    {"id":"NOM","values":{"A":10,"B":6,"C":8}},{"id":"STRESS","values":{"A":0,"B":6,"C":5}}]))
+                await editor_sheet.get_by_role("button",name="Compare and verify scenarios").click()
+                await status(editor_status,"Scenario comparison verified · 2 scenarios")
+                scenario_result=editor_sheet.get_by_label("Verified mission scenario result")
+                choices=scenario_result.locator("table").first.locator("tbody tr")
+                actual=[await choices.nth(i).locator("td").all_inner_texts() for i in range(await choices.count())]
+                check("scenario solver distinguishes nominal maximin and minimax regret choices",
+                      actual==[["Nominal optimum","A","1","10","0","6"],["Maximin","B","1","6","6","4"],
+                               ["Minimax regret","C","1","8","5","2"]])
+                check("scenario comparison preserves explicit assumptions without recalling memory",
+                      "Worst case means the minimum among supplied scenarios" in await scenario_result.inner_text()
+                      and digest not in await scenario_result.inner_text())
+                await editor_sheet.get_by_label("Mission value scenarios").fill(json.dumps([
+                    {"id":"NOM","values":{"A":9,"B":6,"C":8}},{"id":"STRESS","values":{"A":0,"B":6,"C":5}}]))
+                check("editing scenario invalidates the displayed proof",not (await scenario_result.inner_text()).strip())
+                await editor_sheet.get_by_role("button",name="Compare and verify scenarios").click()
+                await status(editor_status,"MISSION_SCENARIO_NOMINAL_MISMATCH")
+                check("mismatched nominal scenario is rejected",not (await scenario_result.inner_text()).strip())
+                await mission_input.fill(saved_definition)
                 dependency_mission=json.loads(await mission_input.input_value())
                 dependency_mission["required"]=["C"];dependency_mission["budget"]=9
                 await mission_input.fill(json.dumps(dependency_mission))
