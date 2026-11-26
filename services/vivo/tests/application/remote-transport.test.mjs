@@ -244,3 +244,30 @@ test('portable remote evidence uses a fresh authorized get and checks original b
   assert.equal(calls,2);
   await shutdown(transport,socket);
 });
+
+
+test('remote capsule review and restore use the dedicated owner-only path and exact reviewed revision',async()=>{
+  const {transport,socket}=await admitted();
+  const capsule={schema:'matumbo.neural-memory-capsule/1',journalJson:'[]',journalSha256:'a'.repeat(64)};
+  const review={schema:'vivo.memory-capsule-review/1',capsuleDigest:capsule.journalSha256,baseRevision:'b'.repeat(64),
+    current:0,incoming:2,added:2,duplicates:0,resulting:2,fixture:2,liveClaims:0,newReportsPrivate:true};
+  const result={schema:'vivo.memory-capsule-restore/1',capsuleDigest:capsule.journalSha256,status:'restored',
+    added:2,duplicates:0,total:2,newReportsPrivate:true};
+  const calls=[];
+  const response=async(url,init)=>{
+    const body=JSON.parse(init.body);calls.push(body);
+    assert.equal(url,'http://vivo.test/api/neural-memory/capsule');
+    assert.equal(init.redirect,'error');
+    return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:body.op==='preview'?review:result})};
+  };
+  assert.deepEqual(await transport.reviewMemoryCapsule(capsule,response),review);
+  assert.deepEqual(await transport.restoreMemoryCapsule(capsule,review,response),result);
+  assert.deepEqual(calls,[{op:'preview',args:{capsule}},{op:'restore',args:{capsule,review:{capsuleDigest:review.capsuleDigest,baseRevision:review.baseRevision}}}]);
+  await assert.rejects(transport.restoreMemoryCapsule(capsule,{...review,capsuleDigest:'c'.repeat(64)},response),/MEMORY_CAPSULE_REVIEW_REQUIRED/);
+  await assert.rejects(transport.reviewMemoryCapsule(capsule,async()=>({ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:{...review,newReportsPrivate:false}})})),/MEMORY_CAPSULE_REVIEW_INVALID/);
+  transport.role='editor';
+  await assert.rejects(transport.reviewMemoryCapsule(capsule,response),/MEMORY_OWNER_REQUIRED/);
+  await assert.rejects(transport.restoreMemoryCapsule(capsule,review,response),/MEMORY_OWNER_REQUIRED/);
+  assert.equal(calls.length,2);
+  await shutdown(transport,socket);
+});
