@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - 'src/domains/simulated-economy.js'
+      - 'src/domains/jev-advice-receipt.js'
+      - 'src/render/web-ai.js'
+      - 'tests/compute-economy-expanded.test.mjs'
+      - 'tests/web-ai-compute.test.mjs'
       - 'src/render/simulated-economy-panel.js'
       - 'src/domains/token*.js'
       - 'tests/simulated-economy.test.mjs'
@@ -24,7 +28,7 @@ defaults:
 jobs:
   focused-simulated-economy-token-panel:
     name: Focused simulated economy/token/panel checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +38,9 @@ jobs:
 
       - name: Run simulated economy accounting and persistence tests
         run: node --test tests/simulated-economy.test.mjs
+
+      - name: Run Compute Economy and Web AI checks
+        run: node --test tests/compute-economy-expanded.test.mjs tests/web-ai-compute.test.mjs
 
       - name: Run house-pool ownership and escrow tests
         run: node --test tests/house-pool-reservations.test.mjs

@@ -1,0 +1,65 @@
+name: Jev receipt browser regression
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'src/**'
+      - 'vendor/**'
+      - 'tests/browser-jev-receipt-history.mjs'
+      - 'package.json'
+      - '.github/workflows/jev-receipt-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    name: Jev receipt browser / ${{ matrix.device }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [desktop, mobile]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser dependency
+        run: |
+          npm install --no-save --package-lock=false playwright@1.57.0
+          npx playwright install --with-deps chromium
+      - name: Run actual object and receipt regression
+        env:
+          MATUMBO_BROWSER_DEVICE: ${{ matrix.device }}
+          MATUMBO_BROWSER_EVIDENCE_DIR: browser-evidence/jev-receipt-history
+          OPENAI_API_KEY: ''
+        run: |
+          set -euo pipefail
+          mkdir -p browser-evidence
+          repo_dir="$(basename "$GITHUB_WORKSPACE")"
+          python3 -m http.server 8123 --bind 127.0.0.1 --directory "$GITHUB_WORKSPACE/.." >browser-evidence/server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          export MATUMBO_PREVIEW_URL="http://127.0.0.1:8123/${repo_dir}/index.html?feature=web-ai"
+          python3 - <<'PY'
+          import os, time, urllib.request
+          for _ in range(80):
+              try:
+                  with urllib.request.urlopen(os.environ["MATUMBO_PREVIEW_URL"], timeout=2) as response:
+                      if response.status == 200:
+                          break
+              except OSError:
+                  time.sleep(.25)
+          else:
+              raise SystemExit("static preview failed readiness")
+          PY
+          npm run --silent test:browser:jev-receipts | tee browser-evidence/console.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-receipt-browser-${{ matrix.device }}
+          path: browser-evidence/
+          retention-days: 7

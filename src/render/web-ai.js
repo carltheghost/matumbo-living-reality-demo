@@ -1,3 +1,4 @@
+import { createJevUsageJournal } from "../domains/jev-advice-receipt.js";
 /**
  * web-ai.js — Web + AI glass console renderer.
  *
@@ -527,6 +528,86 @@ export function createWebAiConsole({
   economyStatus.dataset.kind = "info";
   form.appendChild(economyStatus);
   economySection.appendChild(form);
+  // Imported observations belong to the Compute object, before the demo
+  // wallet/router/labs. Keep them visually and semantically separate from
+  // verified spend, rewards and the page-session accounting timeline.
+  const receiptSection = el(doc, "div", "web-ai-economy-section");
+  receiptSection.setAttribute("role", "region");
+  receiptSection.setAttribute("aria-label", "Imported Jev usage — not billing");
+  receiptSection.appendChild(el(doc, "strong", "web-ai-economy-title", "IMPORTED JEV USAGE · NOT BILLING"));
+  economySection.insertBefore(receiptSection, metrics);
+  const receiptLabel = el(doc, "label", "web-ai-economy-statusline", "Import a Vivo Jev usage receipt");
+  const receiptFile = el(doc, "input");
+  receiptFile.type = "file";
+  receiptFile.accept = ".json,application/json";
+  receiptFile.setAttribute("aria-describedby", "web-ai-jev-import-boundary");
+  receiptLabel.appendChild(receiptFile);
+  const receiptStatus = el(doc, "p", "web-ai-status");
+  receiptStatus.setAttribute("role", "status");
+  receiptSection.append(receiptLabel, receiptStatus);
+  const jevJournal = createJevUsageJournal({ storage: sessionStore });
+  const receiptHistory = el(doc, "div", "web-ai-economy-section");
+  receiptHistory.setAttribute("aria-label", "Saved Jev receipt history");
+  receiptSection.appendChild(receiptHistory);
+
+  function renderJevHistory() {
+    receiptHistory.replaceChildren();
+    receiptHistory.appendChild(el(doc, "strong", "web-ai-economy-title", "SAVED USAGE · THIS TAB"));
+    try {
+      const rows = jevJournal.snapshot();
+      const total = rows.reduce((sum, row) => sum + (row.usage
+        ? BigInt(row.usage.input_tokens) + BigInt(row.usage.output_tokens) : 0n), 0n);
+      const unknown = rows.filter(row => row.usage === null).length;
+      receiptHistory.appendChild(el(doc, "p", "web-ai-economy-statusline",
+        rows.length + " saved receipts · " + total.toLocaleString() + " reported tokens · " + unknown + " without counts"));
+      rows.slice(-5).reverse().forEach(row => {
+        receiptHistory.appendChild(el(doc, "div", "web-ai-economy-statusline",
+          row.model + " · " + (row.usage
+            ? row.usage.input_tokens.toLocaleString() + " in / " + row.usage.output_tokens.toLocaleString() + " out"
+            : "counts unavailable")));
+      });
+    } catch (error) {
+      receiptHistory.appendChild(el(doc, "p", "web-ai-status", error.message));
+    }
+  }
+
+  receiptFile.addEventListener("change", async () => {
+    const file = receiptFile.files?.[0];
+    if (!file) return;
+    receiptFile.disabled = true;
+    try {
+      if (file.size > 64 * 1024) throw new Error("Choose a receipt no larger than 64 KB.");
+      const imported = await jevJournal.importReceipt(JSON.parse(await file.text()));
+      renderJevHistory();
+      if (imported.status === "duplicate") {
+        receiptStatus.textContent = "This request is already in the saved usage history.";
+        return;
+      }
+      const row = imported.row;
+      try {
+        appendEconomicEvent("provider.usage-observed", "typesafe", {
+          model: row.model, usage: row.usage, receiptSha256: row.receiptSha256,
+        });
+      } catch {
+        receiptStatus.textContent = "Receipt saved; the page-session timeline could not be updated.";
+        return;
+      }
+      receiptStatus.textContent = row.usage
+        ? "Saved " + row.usage.input_tokens + " input and " + row.usage.output_tokens + " output tokens."
+        : "Saved the receipt. Token counts were unavailable.";
+    } catch (error) {
+      receiptStatus.textContent = error instanceof SyntaxError ? "The receipt is not valid JSON." : error.message;
+    } finally {
+      receiptFile.value = "";
+      receiptFile.disabled = false;
+    }
+  });
+  renderJevHistory();
+  const receiptBoundary = el(doc, "p", "web-ai-economy-statusline",
+    "Saved history survives reloads in this tab, not guaranteed after closing it. Imported receipts are not provider-authenticated and do not change demo credits, rewards or posted charges. Provider billing remains authoritative.");
+  receiptBoundary.id = "web-ai-jev-import-boundary";
+  receiptSection.appendChild(receiptBoundary);
+
 
   const treasurySection = el(doc, "div", "web-ai-economy-section");
   const treasuryTitle = el(doc, "div", "web-ai-economy-title", "PLAN + TREASURY LAB");
