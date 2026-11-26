@@ -358,3 +358,53 @@ test('owner experience remains branch-local and no source receives credit merely
   f.branch('fork');f.bridge.syncScope();assert.deepEqual((await f.bridge.admin.inspect()).experience,[]);
   f.branch('main');f.bridge.syncScope();assert.deepEqual((await f.bridge.admin.inspect()).experience,main);
 });
+
+const recallTool='neural.missionRecall',recallQuery={spaceId:'room',entityId:'object'};
+async function recallFixture(){
+  const f=fixture(),first=await attach(f);await run(f,'shared-op');await complete(f,'a',(await progress(f)).task);
+  const hidden=await f.bridge.admin.create('a','Unshared history');await run(f,'private-op');await complete(f,'a',(await progress(f)).task);
+  const target=await f.bridge.admin.create('b','Independent future mission');
+  return {f,first,hidden,target,grant:()=>f.bridge.admin.grantMissionRecall('b',{taskId:target.taskId,epoch:target.epoch,sourceTaskIds:[first.taskId]})};
+}
+test('explicit mission recall grant shares only selected completed history with the exact attachment',async()=>{
+  const {f,first,target,grant}=await recallFixture();assert.equal((await progress(f,'b')).mission.dependencies.length,0);
+  assert(!f.bridge.tools.listFor('b').some(t=>t.name===recallTool));await assert.rejects(f.bridge.tools.invokeFor('b',recallTool,recallQuery),{code:'MISSION_RECALL_NOT_GRANTED'});
+  await grant();assert(f.bridge.tools.listFor('b').some(t=>t.name===recallTool));
+  const r=await f.bridge.tools.invokeFor('b',recallTool,recallQuery);assert.equal(r.total,1);assert.equal(r.matches[0].taskId,first.taskId);assert.equal(r.matches[0].operationId,'shared-op');assert.equal(r.matches[0].sourceId,'muse');assert.equal(r.authorizesAction,false);
+  assert(!JSON.stringify(r).includes('private-op'));assert.equal(f.calls(),2);
+  assert.deepEqual((await f.bridge.admin.inspect()).missionRecallGrants,[{taskId:target.taskId,sessionId:'b',sourceTaskIds:[first.taskId]}]);
+  await assert.rejects(f.bridge.tools.invokeFor('a',recallTool,recallQuery),{code:'TASK_NOT_ATTACHED'});
+  await assert.rejects(f.bridge.tools.invokeFor('b',recallTool,{...recallQuery,taskId:'unshared'}),{code:'MISSION_RECALL_ARGUMENTS_INVALID'});
+});
+test('revocation during an in-flight lookup fences the result',async()=>{
+  const {f,grant}=await recallFixture();await grant();
+  const release=f.store.hold(),pending=f.bridge.tools.invokeFor('b',recallTool,recallQuery);await release.entered;
+  f.bridge.admin.revokeMissionRecall('b');release();
+  await assert.rejects(pending,{code:'MISSION_RECALL_GRANT_STALE'});assert(!f.bridge.tools.listFor('b').some(t=>t.name===recallTool));assert.equal(f.calls(),2);
+});
+test('revocation while a grant is pending cannot restore access',async()=>{
+  const {f,grant}=await recallFixture();const release=f.store.hold(),pending=grant();await release.entered;
+  f.bridge.admin.revokeMissionRecall('b');release();await assert.rejects(pending,{code:'MISSION_RECALL_GRANT_STALE'});
+  assert.deepEqual((await f.bridge.admin.inspect()).missionRecallGrants,[]);
+});
+test('replacement attachment and reload require fresh explicit evidence sharing',async()=>{
+  const {f,first,target,grant}=await recallFixture();await grant();
+  await f.bridge.admin.create('b','New task');assert(!f.bridge.tools.listFor('b').some(t=>t.name===recallTool));
+  f.bridge=f.build();const resumed=await f.bridge.admin.resume('b',target.taskId);
+  assert(!f.bridge.tools.listFor('b').some(t=>t.name===recallTool));
+  await f.bridge.admin.grantMissionRecall('b',{taskId:target.taskId,epoch:resumed.epoch,sourceTaskIds:[first.taskId]});
+  assert.equal((await f.bridge.tools.invokeFor('b',recallTool,recallQuery)).total,1);
+  f.branch('fork');f.bridge.syncScope();f.branch('main');f.bridge.syncScope();
+  assert.deepEqual((await f.bridge.admin.inspect()).missionRecallGrants,[]);assert.equal(f.calls(),2);
+});
+test('old task epoch and incomplete evidence fail closed',async()=>{
+  const {f,first,target}=await recallFixture();const source=await f.bridge.admin.create('a','Incomplete evidence');
+  await assert.rejects(f.bridge.admin.grantMissionRecall('b',{taskId:target.taskId,epoch:target.epoch+1,sourceTaskIds:[first.taskId]}),{code:'MISSION_RECALL_TARGET_STALE'});
+  await assert.rejects(f.bridge.admin.grantMissionRecall('b',{taskId:target.taskId,epoch:target.epoch,sourceTaskIds:[source.taskId]}),{code:'MISSION_RECALL_SOURCE_UNAVAILABLE'});
+  assert.deepEqual((await f.bridge.admin.inspect()).missionRecallGrants,[]);
+});
+test('another tab changing the task epoch fences the old recall grant',async()=>{
+  const {f,target,grant}=await recallFixture();await grant();await f.build().admin.resume('b',target.taskId);
+  await assert.rejects(f.bridge.tools.invokeFor('b',recallTool,recallQuery),{code:'TASK_ATTACHMENT_STALE'});
+  assert.deepEqual((await f.bridge.admin.inspect()).missionRecallGrants,[]);assert.equal(f.calls(),2);
+});

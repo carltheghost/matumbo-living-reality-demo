@@ -4,7 +4,8 @@ import {rankMissionAgents} from './mission-orchestrator.mjs';
 import {compileMissionPlan,buildPlannedTasks,validatePlanMetadata,summarizeMissionPlans} from './mission-planner.mjs';
 import {diagnoseMissionTask,recoverySnapshot,reopenReviewedTask,validateRecoveryHistory} from './mission-recovery.mjs';
 import {collectMissionExperience,taskMissionExperience} from './mission-experience.mjs';
-const TOOL='task.progress',LIMIT=16,STEPS=64,HANDOFFS=16;
+import {selectMissionEvidence,normalizeMissionRecall,recallMissionEvidence} from './mission-recall.mjs';
+const TOOL='task.progress',RECALL='neural.missionRecall',LIMIT=16,STEPS=64,HANDOFFS=16;
 const fail=code=>Object.assign(new Error(code),{code});
 const need=(condition,code)=>{if(!condition)throw fail(code);};
 const id=x=>typeof x==='string'&&x.length>0&&x.length<=256&&!/[\u0000-\u001f\u007f]/.test(x);
@@ -43,7 +44,7 @@ export class IndexedDbTaskStore {
 }
 /** Host is trusted; its native registry remains the only world-action authority. */
 export function createTaskContinuity({registry,downstream,validateEdit,getEnvelope,store=new IndexedDbTaskStore(),newId=()=>crypto.randomUUID()}){
-  const bindings=new Map(),attaching=new Map();let currentKey=null,lastWarning=null,scopeEpoch=0,planDraft=null,recoveryDraft=null;
+  const bindings=new Map(),attaching=new Map(),recallGrants=new Map();let currentKey=null,lastWarning=null,scopeEpoch=0,planDraft=null,recoveryDraft=null;
   const active=session=>{const a=registry.agentController.assertActive(session);return {sourceId:a.sourceId,sessionId:a.sessionId,generation:a.generation};};
   const sameAgent=(a,b)=>a?.sessionId===b?.sessionId&&a?.generation===b?.generation&&a?.sourceId===b?.sourceId;
   function syncScope(){const scope=scopeOf(getEnvelope());const key=scope?keyOf(scope):null;if(key!==currentKey){clear();currentKey=key;}return key;}
@@ -53,8 +54,8 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
   const owns=(j,b)=>{const t=find(j,b.taskId);need(!t.closed&&t.sourceId===b.agent.sourceId&&t.epoch===b.epoch,'TASK_ATTACHMENT_STALE');return t;};
   function binding(session){syncScope();const agent=active(session),b=bindings.get(agent.sessionId);if(b&&!sameAgent(b.agent,agent)){bindings.delete(agent.sessionId);return null;}return b||null;}
   function checkBinding(b){need(syncScope()===b.key&&bindings.get(b.agent.sessionId)===b&&sameAgent(active(b.agent),b.agent),'TASK_ATTACHMENT_STALE');}
-  function pause(session){const sessionId=typeof session==='string'?session:session?.sessionId;bindings.delete(sessionId);attaching.delete(sessionId);}
-  function clear(){bindings.clear();attaching.clear();planDraft=null;recoveryDraft=null;scopeEpoch++;}
+  function pause(session){const sessionId=typeof session==='string'?session:session?.sessionId;bindings.delete(sessionId);attaching.delete(sessionId);recallGrants.delete(sessionId);}
+  function clear(){bindings.clear();attaching.clear();recallGrants.clear();planDraft=null;recoveryDraft=null;scopeEpoch++;}
   // Owner-side review only. The preview is kept in this host, not entrusted to
   // a mutable client response. Saving never attaches or dispatches a task.
   function assertPlanCurrent(draft){
@@ -209,7 +210,7 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       return {taskId:t.id,epoch:t.epoch};
     });
     need(syncScope()===key&&attaching.get(agent.sessionId)===request&&sameAgent(active(agent),agent),'TASK_ATTACHMENT_STALE');
-    const b={...chosen,key,agent};bindings.set(agent.sessionId,b);return {...chosen,sourceId:agent.sourceId};
+    const b={...chosen,key,agent};recallGrants.delete(agent.sessionId);bindings.set(agent.sessionId,b);return {...chosen,sourceId:agent.sourceId};
     }finally{if(attaching.get(agent.sessionId)===request)attaching.delete(agent.sessionId);}
   }
   async function handoff(session,taskId,expected){
@@ -224,7 +225,7 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
     if(bindings.get(b.agent.sessionId)===b)pause(b.agent);
     return result;
   }
-  async function inspect(){const key=scopeKey(),epoch=scopeEpoch;const tasks=await tx(key,j=>j.tasks);need(syncScope()===key&&scopeEpoch===epoch,'TASK_ATTACHMENT_STALE');for(const [sid,b] of bindings){try{checkBinding(b);const t=tasks.find(t=>t.id===b.taskId);if(t&&!t.closed&&t.epoch===b.epoch)continue;}catch{}bindings.delete(sid);}return {tasks,plans:summarizeMissionPlans(tasks),experience:collectMissionExperience(tasks),attachments:[...bindings.values()].map(b=>({taskId:b.taskId,sourceId:b.agent.sourceId,sessionId:b.agent.sessionId})),warning:lastWarning};}
+  async function inspect(){const key=scopeKey(),epoch=scopeEpoch;const tasks=await tx(key,j=>j.tasks);need(syncScope()===key&&scopeEpoch===epoch,'TASK_ATTACHMENT_STALE');for(const [sid,b] of bindings){try{checkBinding(b);const t=tasks.find(t=>t.id===b.taskId);if(t&&!t.closed&&t.epoch===b.epoch)continue;}catch{}bindings.delete(sid);recallGrants.delete(sid);}return {tasks,missionRecallGrants:[...bindings.values()].flatMap(b=>{const grant=recallGrantFor(b);return grant?[{taskId:b.taskId,sessionId:b.agent.sessionId,sourceTaskIds:[...grant.sourceTaskIds]}]:[];}),plans:summarizeMissionPlans(tasks),experience:collectMissionExperience(tasks),attachments:[...bindings.values()].map(b=>({taskId:b.taskId,sourceId:b.agent.sourceId,sessionId:b.agent.sessionId})),warning:lastWarning};}
   async function reconcile(){
     const envelope=getEnvelope(),key=scopeKey();need(scopeOf(envelope)&&keyOf(scopeOf(envelope))===key,'TASK_SCOPE_CHANGED');
     const receipts=Array.isArray(envelope.snapshot.localOperationResults)?envelope.snapshot.localOperationResults:[];
@@ -233,10 +234,47 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
     const result=await tx(key,j=>{for(const t of j.tasks)for(const s of t.steps){if(s.state!=='pending')continue;const r=byId.get(s.operationId);if(!r)continue;if(r.sha256!==s.sha256){s.state='conflict';continue;}if(Number.isSafeInteger(r.revision)&&r.revision>=0&&typeof r.changed==='boolean'){s.state='confirmed';s.revision=r.revision;s.changed=r.changed;}}return j.tasks;});
     need(syncScope()===key,'TASK_SCOPE_CHANGED');lastWarning=null;return result;
   }
-  function listFor(session){const tools=downstream.listFor(session);try{if(binding(session))return [...tools,{name:TOOL,description:'Read the attached local task journal. This grants no action authority.'}];}catch{}return tools;}
+  function recallGrantFor(b){
+    const g=b&&recallGrants.get(b.agent.sessionId);
+    return g?.ready&&g.binding===b?g:null;
+  }
+  function assertRecallGrant(b,g){
+    checkBinding(b);need(recallGrants.get(b.agent.sessionId)===g&&g.binding===b,'MISSION_RECALL_GRANT_STALE');
+  }
+  function revokeMissionRecall(session){const sid=typeof session==='string'?session:session?.sessionId;recallGrants.delete(sid);}
+  async function grantMissionRecall(session,expected){
+    const b=binding(session);need(b,'TASK_NOT_ATTACHED');checkBinding(b);
+    need(expected?.taskId===b.taskId&&expected?.epoch===b.epoch,'MISSION_RECALL_TARGET_STALE');
+    const sourceTaskIds=normalizePrerequisites(expected?.sourceTaskIds);
+    const g={binding:b,sourceTaskIds,ready:false};
+    recallGrants.set(b.agent.sessionId,g);
+    try{
+      await tx(b.key,j=>{assertRecallGrant(b,g);owns(j,b);selectMissionEvidence(j.tasks,b.taskId,sourceTaskIds);});
+      assertRecallGrant(b,g);g.ready=true;
+      return {taskId:b.taskId,sourceTaskIds:[...sourceTaskIds],readOnly:true,authorizesAction:false};
+    }catch(e){if(recallGrants.get(b.agent.sessionId)===g)recallGrants.delete(b.agent.sessionId);throw e;}
+  }
+  async function recallFor(b,args){
+    need(b,'TASK_NOT_ATTACHED');const g=recallGrantFor(b);need(g,'MISSION_RECALL_NOT_GRANTED');
+    const query=normalizeMissionRecall(args);assertRecallGrant(b,g);
+    const result=await tx(b.key,j=>{
+      assertRecallGrant(b,g);owns(j,b);
+      const [worldId,projectId]=JSON.parse(b.key);
+      const tasks=selectMissionEvidence(j.tasks,b.taskId,g.sourceTaskIds);
+      return recallMissionEvidence({scope:{worldId,projectId},tasks,args:query});
+    });
+    assertRecallGrant(b,g);return result;
+  }
+  function listFor(session){
+    const tools=downstream.listFor(session);
+    try{const b=binding(session);if(b)return [...tools,{name:TOOL,description:'Read the attached local task journal. This grants no action authority.'},
+      ...(recallGrantFor(b)?[{name:RECALL,description:'Read owner-selected completed mission evidence for this attachment. Exact spaceId and entityId, optional offset and limit (1–32). No action authority.'}]:[])];}catch{}
+    return tools;
+  }
   async function invokeFor(session,name,args={}){
-    if(name!==TOOL&&name!=='vivo.world.edit')return downstream.invokeFor(session,name,args);
+    if(name!==TOOL&&name!==RECALL&&name!=='vivo.world.edit')return downstream.invokeFor(session,name,args);
     const b=binding(session);
+    if(name===RECALL)return recallFor(b,args);
     if(name===TOOL){need(b,'TASK_NOT_ATTACHED');need(args&&typeof args==='object'&&!Array.isArray(args)&&Object.keys(args).length===0,'TASK_ARGUMENTS_INVALID');const result=await tx(b.key,j=>{const task=owns(j,b);const mission=missionView(j,task);return {task,mission,experience:taskMissionExperience(task,mission)};});checkBinding(b);return {schema:SCHEMA,...result,readOnly:true,authorizesAction:false};}
     if(!b)return downstream.invokeFor(session,name,args);
     checkBinding(b);const safe=structuredClone(args);const v=validateEdit(safe,getEnvelope());need(!v.prior,'TASK_OPERATION_ALREADY_RECORDED');const sha256=await digest(fingerprint(v));checkBinding(b);
@@ -249,5 +287,5 @@ export function createTaskContinuity({registry,downstream,validateEdit,getEnvelo
       try{if(syncScope()===b.key)await reconcile();}catch{lastWarning='Task evidence could not be refreshed. Review the existing operation before retrying.';}
     }
   }
-  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,approveRecommendation,previewPlan,commitPlan,discardPlan,diagnose,commitRecovery,discardRecovery,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
+  return Object.freeze({syncScope,tools:Object.freeze({listFor,invokeFor}),admin:Object.freeze({create:(session,title,dependsOn=[])=>attach(session,null,title,null,dependsOn),complete,recommend,approveRecommendation,previewPlan,commitPlan,discardPlan,diagnose,commitRecovery,discardRecovery,grantMissionRecall,revokeMissionRecall,resume:(session,taskId)=>attach(session,taskId),handoff,pause,clear,finish,inspect,reconcile})});
 }

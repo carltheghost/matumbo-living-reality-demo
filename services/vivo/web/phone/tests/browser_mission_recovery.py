@@ -86,19 +86,42 @@ def exercise(page, route, label):
     idle()
     experience_text=panel.locator("#vivoMissionExperience").inner_text()
     assert "recovery-a" in experience_text and "recovery-c" in experience_text and "completed task contribution(s)" in experience_text,experience_text
+    future=page.evaluate("agent=>window.VivaPhoneAgentAdmin.taskAccess.create(agent,'Independent future mission')",setup["c"])
+    panel.get_by_role("button",name="Refresh saved tasks").click()
+    idle()
+    panel.get_by_role("combobox",name="Saved task in this world and branch").select_option(future["taskId"])
+    panel.locator("#vivoMemoryAgent").select_option(setup["c"]["sessionId"])
+    assert not page.evaluate("agent=>window.VivaAgentTools.listFor(agent).some(t=>t.name==='neural.missionRecall')",setup["c"])
+    panel.get_by_role("listbox",name="Completed mission evidence sources").select_option(setup["root"]["taskId"])
+    panel.get_by_role("button",name="Grant selected mission evidence").click()
+    idle()
+    assert page.evaluate("agent=>window.VivaAgentTools.listFor(agent).some(t=>t.name==='neural.missionRecall')",setup["c"])
+    panel.get_by_role("textbox",name="Recall space ID").fill("root")
+    panel.get_by_role("textbox",name="Recall entity ID").fill("relic")
+    panel.get_by_role("button",name="Recall exact object evidence").click()
+    idle()
+    recall_text=panel.locator("#vivoMissionRecall").inner_text()
+    assert "2 exact confirmed receipt(s)" in recall_text and "recovery:before" in recall_text and "recovery:after" in recall_text,recall_text
+    recall=page.evaluate("agent=>window.VivaAgentTools.invokeFor(agent,'neural.missionRecall',{spaceId:'root',entityId:'relic'})",setup["c"])
+    assert recall["total"]==2 and recall["authorizesAction"] is False and recall["learned"] is False,recall
+    assert [(r["operationId"],r["sourceId"]) for r in recall["matches"]]==[("recovery:before","recovery-a"),("recovery:after","recovery-c")],recall
+    assert not page.evaluate("agent=>window.VivaAgentTools.listFor(agent).some(t=>t.name==='neural.missionRecall')",setup["b"])
+    completed=page.evaluate("()=>window.VivaPhoneAgentAdmin.taskAccess.inspect()")
+    assert len(completed["missionRecallGrants"])==1,completed
     enter_local(page,route,world_id)
     open_agent_panel(page)
     restored=page.evaluate("""async()=>{
       const state=await window.VivaPhoneAgentAdmin.taskAccess.inspect(),e=await window.VivaPhoneEngine.snapshot();
-      return {tasks:state.tasks,experience:state.experience,attachments:state.attachments,branchId:e.branchId,
+      return {tasks:state.tasks,experience:state.experience,attachments:state.attachments,grants:state.missionRecallGrants,branchId:e.branchId,
         receipts:e.snapshot.localOperationResults.filter(r=>r.operationId.startsWith('recovery:')).map(r=>r.operationId)};
     }""")
     assert restored["tasks"]==completed["tasks"] and restored["attachments"]==[],restored
-    assert restored["experience"]==completed["experience"],restored
+    assert restored["experience"]==completed["experience"] and restored["grants"]==[],restored
     assert restored["branchId"]==second["branchId"] and sorted(restored["receipts"])==["recovery:after","recovery:before"],restored
     return {"rootDiagnosed":True,"reopened":True,"replacementRecommended":True,"originalReceiptPreserved":True,
             "dependentBlockedUntilCompletion":True,"reload":True,"autoGrant":False,"nativeOperations":2,
-            "collectiveExperiencePreserved":True,"originalSourceCredited":True,"scopedAgentExperience":True}
+            "collectiveExperiencePreserved":True,"originalSourceCredited":True,"scopedAgentExperience":True,
+            "exactNeuralRecall":True,"grantNotRestored":True,"crossMissionReuse":True}
 
 
 def main(base):
