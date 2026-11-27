@@ -264,27 +264,71 @@ def touch_material_node(page, pointer_id: int, suffix: str = "r1c2") -> dict:
 
 
 def wait_material_admission(page, pointer_id: int, point: dict) -> None:
-    contact_id = f"touch:{pointer_id}"
+    probe = page.evaluate_handle(
+        "expected => ({ expected, waitingFor: 'adapter', lastWorkerContacts: null })",
+        {"contactId": f"touch:{pointer_id}", "nodeId": point["nodeId"]},
+    )
     try:
         page.wait_for_function(
-            "({id,node}) => window.VivaPhoneEngine.materialContacts().some(c => c.contactId === id && c.nodeId === node)",
-            arg={"id": contact_id, "node": point["nodeId"]},
-        )
-        page.wait_for_function(
-            "id => window.VivaPhoneEngine.materialSnapshot().then(value => value.activeContacts.some(c => c.contactId === id))",
-            arg=contact_id,
-        )
+            """probe => {
+              const engine = window.VivaPhoneEngine;
+              const matches = contact => contact.contactId === probe.expected.contactId &&
+                contact.nodeId === probe.expected.nodeId;
+              if (!engine.materialContacts().some(matches)) {
+                probe.waitingFor = 'adapter';
+                return false;
+              }
+              probe.waitingFor = 'worker';
+              if (probe.workerError) throw new Error(probe.workerError);
+              if (probe.lastWorkerContacts?.some(matches)) return true;
+              // Playwright 1.57 polls the predicate's immediate truthiness.
+              // A Promise is truthy even when its eventual value is false.
+              if (!probe.reading) {
+                probe.reading = true;
+                engine.materialSnapshot().then(({ activeContacts }) => {
+                  probe.lastWorkerContacts = activeContacts.map(({ contactId, nodeId }) => ({ contactId, nodeId }));
+                }).catch(error => { probe.workerError = String(error); })
+                  .finally(() => { probe.reading = false; });
+              }
+              return false;
+            }""",
+            arg=probe,
+        ).dispose()
     except PlaywrightTimeoutError as error:
-        details = page.evaluate(
-            """async () => ({
-              status: document.querySelector('#status')?.textContent,
+        # The worker may be the reason we timed out. Read only the last reply
+        # and synchronous page state so diagnostics cannot wait on it again.
+        details = probe.evaluate(
+            """probe => ({
+              ...probe,
+              status: (document.querySelector('#phoneStatus') || document.querySelector('#status'))?.textContent,
               contacts: window.VivaPhoneEngine.materialContacts(),
-              rigid: window.VivaPhoneEngine.interaction()?.contacts,
-              acceptedContacts: (await window.VivaPhoneEngine.materialSnapshot()).activeContacts,
-              lastDraw: window.VivaShared.R._lastDraw,
+              rigid: window.VivaPhoneEngine.interaction?.()?.contacts,
+              lastDraw: window.VivaShared?.R?._lastDraw,
             })"""
         )
-        raise AssertionError("Material contact admission failed: " + json.dumps({"hit":point,"state":details})) from error
+        raise AssertionError("Material contact admission failed: " + json.dumps({"hit": point, "state": details})) from error
+    finally:
+        probe.dispose()
+
+
+def check_delayed_admission_probe(browser) -> None:
+    """Exercise the wait itself before running the real mounted worker flows."""
+    page = browser.new_page()
+    try:
+        page.set_default_timeout(12000)
+        page.evaluate("""() => {
+          const contact = { contactId: 'touch:701', nodeId: 'expected' };
+          const replies = [[], [{ ...contact, nodeId: 'other' }], [contact]];
+          window.probeReads = 0;
+          window.VivaPhoneEngine = {
+            materialContacts: () => [contact],
+            materialSnapshot: async () => ({ activeContacts: replies[window.probeReads++] || [] }),
+          };
+        }""")
+        wait_material_admission(page, 701, {"nodeId": "expected"})
+        assert page.evaluate("window.probeReads") == 3, "Admission must wait for the exact worker contact and node"
+    finally:
+        page.close()
 
 
 def pinch_hand_at(screen_x: float, screen_y: float, width: float, height: float) -> list[dict[str, float]]:
@@ -349,12 +393,9 @@ def run_flow(page, route: str, world_id: str, include_hand: bool) -> dict:
     dispatch_pointer(page, "pointermove", 701, point["x"] + 36, point["y"] + 18)
     dispatch_pointer(page, "pointerup", 701, point["x"] + 36, point["y"] + 18)
     page.wait_for_function("() => window.VivaPhoneEngine.materialContacts().length === 0")
-    page.wait_for_function(
-        "revision => window.VivaPhoneEngine.materialSnapshot().then(value => Number(value.body.bodyRevision) > revision)",
-        arg=body_before["bodyRevision"],
-    )
     after = material_snapshot(page)
     body_after = after["body"]
+    assert body_after["bodyRevision"] > body_before["bodyRevision"], after
     moved = body_after["nodes"][point["nodeId"]]["q"] != body_before["nodes"][point["nodeId"]]["q"]
     assert moved, {"before": body_before, "after": body_after}
     assert geometry_scale == page.evaluate("() => window.VivaPhoneEngine.snapshot().then(value => value.snapshot.spaces.root.entities.workpiece.geometry.scale)")
@@ -368,8 +409,8 @@ def run_flow(page, route: str, world_id: str, include_hand: bool) -> dict:
     page.get_by_role("button", name="Enter local Vivo").click()
     page.wait_for_selector("#phoneFieldAtlas", state="attached")
     page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
-    page.wait_for_function("() => window.VivaPhoneEngine.materialSnapshot().then(value => value.activeContacts.length === 0)")
     reloaded = material_snapshot(page)
+    assert not reloaded["activeContacts"], reloaded["activeContacts"]
     assert reloaded["body"]["bodyRevision"] >= body_after["bodyRevision"], reloaded
     assert reloaded["body"]["nodes"][point["nodeId"]]["q"] == body_after["nodes"][point["nodeId"]]["q"], reloaded
     assert_coherent_material_state(coherent_material_state(page))
@@ -425,6 +466,7 @@ def main(base_url: str) -> None:
         if executable:
             launch_options["executable_path"] = executable
         browser = playwright.chromium.launch(**launch_options)
+        check_delayed_admission_probe(browser)
         init_script = """
         (() => {
           window.__phoneCameraCalls = 0;
