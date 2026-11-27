@@ -414,6 +414,83 @@ export async function verifyMissionScenarioComparison(packet,request,{cryptoApi=
   return packet;
 }
 
+function normalizeConditionalMission(request){
+  missionCheck(reasoningKeys(request,['mission','scenarios','nominalId','observation']));
+  const {mission,scenarios,nominalId}=normalizeMissionScenarios({mission:request.mission,scenarios:request.scenarios,nominalId:request.nominalId});
+  const o=request.observation,scenarioIds=scenarios.map(item=>item.id),seen=new Set(),names=new Set(),signals=[];
+  const invalid=()=>{throw Error('MISSION_POLICY_INVALID');};
+  if(!reasoningKeys(o,['cost','signals'])||!missionInteger(o.cost,0,mission.budget)||
+    !Array.isArray(o.signals)||o.signals.length<1||o.signals.length>scenarios.length)invalid();
+  for(const signal of o.signals){
+    if(!reasoningKeys(signal,['id','scenarioIds'])||typeof signal.id!=='string'||!/^[A-Z][A-Z0-9]{0,7}$/.test(signal.id)||
+      names.has(signal.id)||!Array.isArray(signal.scenarioIds)||!signal.scenarioIds.length||signal.scenarioIds.length>scenarios.length)invalid();
+    for(const id of signal.scenarioIds){
+      if(!scenarioIds.includes(id)||seen.has(id))invalid();
+      seen.add(id);
+    }
+    names.add(signal.id);
+    signals.push({id:signal.id,scenarioIds:[...signal.scenarioIds].sort(asciiCompare)});
+  }
+  if(seen.size!==scenarioIds.length)invalid();
+  signals.sort((a,b)=>asciiCompare(a.id,b.id));
+  return {mission,scenarios,nominalId,observation:{cost:o.cost,signals}};
+}
+export async function verifyConditionalMissionPolicy(packet,request,{cryptoApi=globalThis.crypto}={}){
+  const {mission,scenarios,nominalId,observation}=normalizeConditionalMission(request);
+  const remainingBudget=mission.budget-observation.cost,scenarioIds=scenarios.map(s=>s.id);
+  // Enumerate independent bitmasks, with one common full-budget regret reference.
+  const rows=enumerateMissionRows(mission),full=rows.filter(r=>r[3]).map(([candidate,cost])=>{
+    const ids=candidate?candidate.split(','):[];
+    return [candidate,cost,scenarios.map(s=>ids.reduce((sum,id)=>sum+s.values[id],0))];
+  });
+  const ceilings=full.length?scenarioIds.map((_,i)=>full.reduce((best,r)=>Math.max(best,r[2][i]),0)):[];
+  const reduced=full.filter(r=>r[1]<=remainingBudget),all=ceilings.map((_,i)=>i);
+  // Compare each projected action using only its signal's scenario values.
+  // The per-branch optimum gives the global primary optimum because the
+  // groups partition the scenarios and have independent choices.
+  function project(row,indices,extra){
+    return {candidate:row[0],totalCost:row[1]+extra,
+      values:indices.map(i=>({scenarioId:scenarioIds[i],value:row[2][i]})),
+      worstValue:Math.min(...indices.map(i=>row[2][i])),
+      maximumRegret:Math.max(...indices.map(i=>ceilings[i]-row[2][i]))};
+  }
+  const pick=(plans,indices,criterion,extra=0)=>{
+    const compare=(a,b)=>(criterion==='maximin'?b.worstValue-a.worstValue||a.maximumRegret-b.maximumRegret:
+      a.maximumRegret-b.maximumRegret||b.worstValue-a.worstValue)||a.totalCost-b.totalCost||asciiCompare(a.candidate,b.candidate);
+    // Independent reduction rather than the server's tuple-key selection.
+    return plans.reduce((best,row)=>{
+      const p=project(row,indices,extra);
+      return !best||compare(p,best)<0?p:best;
+    },null);
+  };
+  const policy=criterion=>{
+    const immediate=pick(full,all,criterion),reducedBudgetFixed=pick(reduced,all,criterion);
+    const branches=observation.signals.map(signal=>({signalId:signal.id,
+      proposal:pick(reduced,signal.scenarioIds.map(id=>scenarioIds.indexOf(id)),criterion,observation.cost)}));
+    const conditional=branches.every(b=>b.proposal!==null)?{branches,
+      worstValue:Math.min(...branches.map(b=>b.proposal.worstValue)),
+      maximumRegret:Math.max(...branches.map(b=>b.proposal.maximumRegret)),
+      maximumTotalCost:Math.max(...branches.map(b=>b.proposal.totalCost))}:null;
+    return {immediate,reducedBudgetFixed,conditional,
+      worstValueChange:conditional&&immediate?conditional.worstValue-immediate.worstValue:null,
+      regretReduction:conditional&&immediate?immediate.maximumRegret-conditional.maximumRegret:null};
+  };
+  const core={schema:'vivo.agent-conditional-policy/1',mission,
+    missionSha256:await missionHash(JSON.stringify(mission),cryptoApi),scenarios,nominalId,observation,remainingBudget,
+    referenceOptima:ceilings.map((value,i)=>({scenarioId:scenarioIds[i],value})),
+    maximin:policy('maximin'),minimaxRegret:policy('minimax-regret'),
+    proof:{method:'exhaustive-partition-policy/1',subsetsChecked:rows.length,fullBudgetFeasible:full.length,postObservationFeasible:reduced.length,
+      evaluationSha256:await missionHash(JSON.stringify(full),cryptoApi),
+      assumptions:'one-perfectly-observed-declared-signal-fixed-cost-no-probabilities',
+      maximinRanking:'group-worst-desc-regret-asc-cost-asc-id-asc',
+      regretRanking:'group-regret-asc-worst-desc-cost-asc-id-asc',
+      regretReference:'full-budget-per-scenario-optima'},
+    evidence:{status:'hypothetical-conditional-policy',recordsUsed:0},
+    authority:'evidence-only',providerAuthenticated:false,providerCallsInitiated:0,postedChargesUsd:null,worldActionExecuted:false};
+  missionCheck(JSON.stringify(packet)===JSON.stringify({...core,decisionSha256:await missionHash(JSON.stringify(core),cryptoApi)}));
+  return packet;
+}
+
 export class RemoteTransport {
   constructor({url,token,WebSocket:Socket=globalThis.WebSocket,onState=()=>{},onError=()=>{},onClose=()=>{},timeoutMs=7000}={}) {
     if(typeof url!=='string'||!url.length||typeof token!=='string'||token.length<20||typeof Socket!=='function')
@@ -750,6 +827,13 @@ export class RemoteTransport {
       throw Error('MEMORY_EVIDENCE_EXPORT_INVALID');
     return Object.freeze({filename:'council-'+report.mode+'-'+digest.slice(0,12)+'.json',
       text:JSON.stringify(envelope,null,2)+'\n',digest});
+  }
+  async planConditionalMission(request,fetchImpl=globalThis.fetch){
+    const scope=normalizeConditionalMission(request),socket=this.socket;
+    const packet=await this.memoryRequest('conditional-policy',scope,fetchImpl);
+    await verifyConditionalMissionPolicy(packet,scope);
+    if(this.closed||this.socket!==socket)throw Error('REMOTE_CLOSED');
+    return packet;
   }
   async compareMissionScenarios(request,fetchImpl=globalThis.fetch){
     const scope=normalizeMissionScenarios(request),socket=this.socket;
