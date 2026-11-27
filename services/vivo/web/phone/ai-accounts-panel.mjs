@@ -145,7 +145,8 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
       +s.workflows.length+'/'+s.workflowTotal+' workflow runs'+(s.workflowPageComplete?'':' (first page only)')+'\n'
       +s.workflows.map(w=>(w.name||'Workflow')+' · '+w.status+(w.conclusion?' · '+w.conclusion:'')).join('\n');
     let inputEpoch=0;
-    const reset=()=>{inputEpoch++;discardGitHubReview();grantButton.disabled=true;createButton.disabled=true;output.textContent='Review the repository, PR and optional file before sharing.';};
+    let branchReview=null;
+    const reset=()=>{resetDevelopment();inputEpoch++;discardGitHubReview();grantButton.disabled=true;createButton.disabled=true;output.textContent='Review the repository, PR and optional file before sharing.';};
     resetGitHubView=()=>{reset();repository.value='';pull.value='';file.value='';agent.value='';output.textContent='World changed. Review the GitHub scope again.';};
     const current=epoch=>!disposed&&selectionEpoch===epoch&&selected?.id==='github-agent';
     const configureButton=button('Check GitHub connector',run(async()=>{
@@ -165,7 +166,7 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
     function finishGrant(admin,session){
       if(!githubReview)throw Error('Verify and review the PR first.');
       const grant=admin.githubAccess.grant(session,githubReview.token);
-      githubReview=null;grantButton.disabled=true;createButton.disabled=true;refreshAgents();agent.value=grant.sessionId;
+      githubReview=null;grantButton.disabled=true;createButton.disabled=true;refreshAgents();agent.value=grant.sessionId;resetDevelopment();
       output.textContent='Read-only grant: '+grant.repository+' · PR #'+grant.pullNumber+'\nCommit '+grant.headSha+'\nAgent '+grant.sourceId+'\nFile: '+(grant.filePath||'none')+'\nNo write access or Copilot execution.';
       state.textContent='GitHub reader grant active for this native session.';refreshMemoryAgents();
     }
@@ -186,15 +187,86 @@ export function mountIntelligence({root,request=globalThis.fetch.bind(globalThis
       output.textContent=tool==='github.pull.read'?show(value):value.path+' · '+value.headSha+'\n'+value.size+' bytes\n\n'+value.content;
       state.textContent='Read-only GitHub evidence received.';
     };
+    const development=node('details');development.append(node('summary','GitHub development proposal'));
+    const summary=node('input');summary.maxLength=240;summary.placeholder='Proposed repair';summary.setAttribute('aria-label','GitHub change summary');
+    const plan=node('textarea');plan.rows=3;plan.maxLength=1200;plan.placeholder='Tests to run (not yet executed)';plan.setAttribute('aria-label','GitHub proposed test plan');
+    const replacement=node('textarea');replacement.rows=6;replacement.maxLength=8000;replacement.placeholder='Complete replacement text for the approved file';replacement.setAttribute('aria-label','GitHub proposed replacement');
+    const proposedView=node('pre','No staged proposal.');proposedView.id='vivoGitHubProposal';proposedView.setAttribute('aria-live','polite');proposedView.style.whiteSpace='pre-wrap';proposedView.style.overflowWrap='anywhere';
+    const slug=node('input');slug.maxLength=40;slug.placeholder='repair-tests';slug.setAttribute('aria-label','GitHub development branch label');
+    const confirmation=node('input');confirmation.maxLength=120;confirmation.placeholder='Type the exact reviewed ref';confirmation.setAttribute('aria-label','Confirm exact GitHub branch ref');
+    const branchView=node('pre','No branch reviewed.');branchView.id='vivoGitHubBranch';branchView.setAttribute('aria-live','polite');branchView.style.whiteSpace='pre-wrap';branchView.style.overflowWrap='anywhere';
+    const receipts=node('pre','Host receipt history not loaded.');receipts.id='vivoGitHubBranchReceipts';receipts.setAttribute('aria-live','polite');
+    receipts.style.whiteSpace='pre-wrap';receipts.style.overflowWrap='anywhere';
+    const receiptPicker=node('select');receiptPicker.setAttribute('aria-label','Uncertain GitHub branch receipt');
+    const resetBranch=()=>{branchReview=null;confirmation.value='';approveBranch.disabled=true;branchView.textContent='No branch reviewed.';};
+    function resetDevelopment(){resetBranch();summary.value='';plan.value='';replacement.value='';slug.value='';proposedView.textContent='No proposal inspected for this selection.';}
+    function showProposal(value){
+      resetBranch();
+      proposedView.textContent=value?value.repository+' · '+value.filePath+'\nBase commit: '+value.headSha+'\nBase blob: '+value.baseBlobSha+'\nProposed by '+value.sourceId+'\n'+value.summary+'\nTEST PLAN (not executed): '+value.testPlan+'\n\nORIGINAL\n'+value.original+'\n\nPROPOSED REPLACEMENT (not applied)\n'+value.replacement:'No staged proposal.';
+    }
+    const stage=button('Stage local GitHub change proposal',run(async()=>{
+      const epoch=selectionEpoch,view=inputEpoch,session=agent.value;
+      if(!session)throw Error('Select a granted agent first.');
+      const value=await globalThis.VivaAgentTools.invokeFor(session,'github.change.propose',{summary:summary.value,testPlan:plan.value,replacement:replacement.value});
+      if(!current(epoch)||view!==inputEpoch||agent.value!==session)return;
+      showProposal(value);state.textContent='Proposal staged locally; no code has been applied or tested.';
+    }));
+    const inspectProposal=button('Inspect staged GitHub proposal',run(async()=>{
+      if(!agent.value)throw Error('Select a granted agent first.');
+      showProposal(access().githubAccess.proposal(agent.value));
+    }));
+    const discardProposal=button('Discard local GitHub proposal',run(async()=>{
+      if(!agent.value)throw Error('Select a granted agent first.');
+      access().githubAccess.discardProposal(agent.value);resetDevelopment();
+      state.textContent='Local proposal discarded. Repository unchanged.';
+    }));
+    const reviewBranch=button('Review new GitHub development branch',run(async()=>{
+      resetBranch();const epoch=selectionEpoch,view=inputEpoch,session=agent.value,requested=slug.value.trim();
+      if(!session)throw Error('Select a granted agent first.');
+      const value=await access().githubAccess.previewBranch(session,requested);
+      if(!current(epoch)||view!==inputEpoch||agent.value!==session||slug.value.trim()!==requested)return;
+      branchReview=value;
+      branchView.textContent='Repository: '+value.repository+'\nBase commit: '+value.headSha+'\nNew ref: '+value.ref+'\nExpires in five minutes. Creation may trigger repository workflows. This does not apply the proposal or execute tests.';
+      approveBranch.disabled=false;state.textContent='Review the exact new branch and type its ref to approve.';
+    }));
+    const approveBranch=button('Approve and create reviewed branch',run(async()=>{
+      const value=branchReview,session=agent.value,epoch=selectionEpoch,view=inputEpoch;
+      if(!value||confirmation.value!==value.ref)throw Error('Type the exact reviewed branch ref first.');
+      branchReview=null;approveBranch.disabled=true;confirmation.value='';
+      let result;
+      try{result=await access().githubAccess.createBranch(session,value.reviewId,value.ref);}
+      catch(error){if(current(epoch)&&view===inputEpoch){branchView.textContent='Result not confirmed. Check host branch receipts before any further attempt.\n'+message(error);}throw error;}
+      if(!current(epoch)||view!==inputEpoch||agent.value!==session)return;
+      branchView.textContent=result.state+' · '+result.ref+'\nBase commit: '+result.headSha+'\n'+(result.reason||'GitHub acknowledged new branch creation.')+'\nCode remains unapplied. No automatic retry.';
+      state.textContent='Branch result: '+result.state+'.';
+    }));
+    approveBranch.disabled=true;
+    const renderReceipts=data=>{
+      if(data?.schema!=='vivo.github-branch-status/1')throw Error('Branch writer not available on this host.');
+      receiptPicker.replaceChildren();const empty=node('option','Select an uncertain receipt');empty.value='';receiptPicker.append(empty);
+      receipts.textContent=(data.configured?'Branch writer configured; separate explicit confirmation required.':'Branch writer disabled on this host.')+'\nProcess-local receipts:\n'+
+        (data.receipts.map(r=>r.state+' · '+r.repository+' · '+r.ref+'\n'+r.headSha+(r.reason?' · '+r.reason:'')).join('\n')||'None');
+      for(const r of data.receipts.filter(r=>['uncertain','observed-matching','observed-different'].includes(r.state))){
+        const option=node('option',r.ref+' · '+r.state);option.value=r.reviewId;receiptPicker.append(option);
+      }
+    };
+    development.append(node('p','Stage one exact replacement locally, inspect original and proposed text, and review a new empty development branch. Branch creation requires a separate configured writer token. It does not apply code, run tests or create a pull request.'),
+      summary,plan,replacement,stage,inspectProposal,discardProposal,proposedView,slug,reviewBranch,confirmation,approveBranch,branchView,
+      button('Check GitHub branch writer and receipts',run(async()=>{const e=selectionEpoch;const data=await api('/github/branch');if(current(e))renderReceipts(data);})),
+      receiptPicker,button('Reconcile selected branch receipt',run(async()=>{
+        const e=selectionEpoch;if(!receiptPicker.value)throw Error('Select an uncertain branch receipt.');
+        await api('/github/branch/reconcile',{reviewId:receiptPicker.value});const data=await api('/github/branch');if(current(e))renderReceipts(data);
+      })),receipts);
+    slug.addEventListener('input',resetBranch);
     for(const input of [repository,pull,file])input.addEventListener('input',reset);
-    agent.addEventListener('change',()=>{output.textContent='Select a granted session and request a fresh read.';});
+    agent.addEventListener('change',()=>{inputEpoch++;resetDevelopment();output.textContent='Select a granted session and request a fresh read.';});
     refreshAgents();
     detail.append(node('p','Local host only. Configure a repository-restricted read-only GitHub token outside the web page. This is a repository tool, not a GitHub Copilot model or coding-agent sign-in.'),
       configureButton,repository,pull,file,reviewButton,agent,grantButton,createButton,
       button('Refresh GitHub agent sessions',()=>refreshAgents()),button('Read reviewed pull request',run(()=>read('github.pull.read'))),
       button('Read approved GitHub file',run(()=>read('github.file.read'))),
-      button('Revoke selected GitHub agent access',run(async()=>{if(!agent.value)throw Error('Select an agent first.');access().githubAccess.revoke(agent.value);output.textContent='GitHub access revoked for selected session.';state.textContent='Local GitHub agent grant revoked. Host credentials unchanged.';})),
-      output);
+      button('Revoke selected GitHub agent access',run(async()=>{if(!agent.value)throw Error('Select an agent first.');access().githubAccess.revoke(agent.value);resetDevelopment();output.textContent='GitHub access revoked for selected session.';state.textContent='Local GitHub agent grant revoked. Host credentials unchanged.';})),
+      output,development);
     const help=node('a','GitHub token setup');help.href='https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens';help.target='_blank';help.rel='noopener noreferrer';detail.append(help);
   }
   const offerLogin=async connectionId=>{
