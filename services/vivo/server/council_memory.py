@@ -298,8 +298,7 @@ def mission_budget_comparison(args):
     return {**result, "decisionSha256": hashlib.sha256(canonical(result).encode("utf-8")).hexdigest()}
 
 
-def mission_scenario_comparison(args):
-    """Exact fixed-plan comparison under explicit joint value assumptions."""
+def normalize_mission_scenarios(args):
     need(exact(args, {"mission", "scenarios", "nominalId"}), "MISSION_SCENARIO_INVALID")
     mission = normalize_agent_mission(args["mission"])
     supplied, nominal_id = args["scenarios"], args["nominalId"]
@@ -320,6 +319,13 @@ def mission_scenario_comparison(args):
     nominal = next(i for i,item in enumerate(scenarios) if item["id"] == nominal_id)
     need(scenarios[nominal]["values"] == {job["id"]:job["value"] for job in mission["jobs"]},
          "MISSION_SCENARIO_NOMINAL_MISMATCH")
+    return mission, scenarios, nominal_id
+
+
+def mission_scenario_comparison(args):
+    """Exact fixed-plan comparison under explicit joint value assumptions."""
+    mission, scenarios, nominal_id = normalize_mission_scenarios(args)
+    nominal = next(i for i,item in enumerate(scenarios) if item["id"] == nominal_id)
     rows = mission_rows(mission)
     feasible = []
     for candidate,cost,_,allowed in rows:
@@ -354,6 +360,107 @@ def mission_scenario_comparison(args):
                  "maximinRanking":"worst-desc-nominal-desc-cost-asc-id-asc",
                  "regretRanking":"regret-asc-worst-desc-nominal-desc-cost-asc-id-asc"},
         "evidence":{"status":"hypothetical-scenario-comparison","recordsUsed":0},
+        "authority":"evidence-only","providerAuthenticated":False,"providerCallsInitiated":0,
+        "postedChargesUsd":None,"worldActionExecuted":False,
+    }
+    return {**result,"decisionSha256":hashlib.sha256(canonical(result).encode("utf-8")).hexdigest()}
+
+
+def mission_conditional_policy(args):
+    """One observation before choosing; deterministic, bounded, advisory.
+
+    Every scenario belongs to exactly one observable signal. A signal is
+    assumed available as declared, not measured or inferred by this solver.
+    All regret uses the same full-budget scenario optima as reference.
+    """
+    need(exact(args, {"mission", "scenarios", "nominalId", "observation"}), "MISSION_POLICY_INVALID")
+    mission, scenarios, nominal_id = normalize_mission_scenarios(
+        {key:args[key] for key in ("mission", "scenarios", "nominalId")})
+    observation = args["observation"]
+    need(exact(observation, {"cost", "signals"})
+         and integer(observation["cost"], 0, mission["budget"])
+         and isinstance(observation["signals"], list)
+         and 1 <= len(observation["signals"]) <= len(scenarios), "MISSION_POLICY_INVALID")
+    scenario_ids = [item["id"] for item in scenarios]
+    groups, seen, names = [], set(), set()
+    for signal in observation["signals"]:
+        need(exact(signal, {"id", "scenarioIds"}) and matches(MISSION_JOB_ID, signal["id"])
+             and signal["id"] not in names and isinstance(signal["scenarioIds"], list)
+             and 1 <= len(signal["scenarioIds"]) <= len(scenarios)
+             and all(isinstance(i,str) and i in scenario_ids for i in signal["scenarioIds"]),
+             "MISSION_POLICY_INVALID")
+        for i in signal["scenarioIds"]:
+            need(i not in seen, "MISSION_POLICY_INVALID")
+            seen.add(i)
+        names.add(signal["id"])
+        groups.append({"id":signal["id"],"scenarioIds":sorted(signal["scenarioIds"])})
+    need(seen == set(scenario_ids), "MISSION_POLICY_INVALID")
+    groups.sort(key=lambda group:group["id"])
+    observation = {"cost":observation["cost"],"signals":groups}
+    remaining = mission["budget"] - observation["cost"]
+    rows = mission_rows(mission)
+    full = []
+    for candidate,cost,_,allowed in rows:
+        if allowed:
+            chosen = candidate.split(",") if candidate else []
+            full.append([candidate,cost,[sum(item["values"][job] for job in chosen) for item in scenarios]])
+    ceilings = [max(row[2][i] for row in full) for i in range(len(scenarios))] if full else []
+    reduced = [row for row in full if row[1] <= remaining]
+    all_indices = list(range(len(scenarios)))
+
+    def score(row, indices):
+        return min(row[2][i] for i in indices), max(ceilings[i]-row[2][i] for i in indices)
+
+    def choose(plans, indices, criterion):
+        def rank(row):
+            worst, regret = score(row,indices)
+            # Tie rules deliberately depend only on values in the signal's
+            # group, then cost and stable ID; no clairvoyant tie-breaking.
+            return (-worst,regret,row[1],row[0]) if criterion=="maximin" else (regret,-worst,row[1],row[0])
+        return min(plans,key=rank,default=None)
+
+    def project(row, indices, extra=0):
+        if row is None:
+            return None
+        worst, regret = score(row,indices)
+        return {"candidate":row[0],"totalCost":row[1]+extra,
+                "values":[{"scenarioId":scenario_ids[i],"value":row[2][i]} for i in indices],
+                "worstValue":worst,"maximumRegret":regret}
+
+    def policy(criterion):
+        fixed = project(choose(full,all_indices,criterion),all_indices)
+        reduced_fixed = project(choose(reduced,all_indices,criterion),all_indices)
+        branches = []
+        for group in groups:
+            indices = [scenario_ids.index(i) for i in group["scenarioIds"]]
+            branches.append({"signalId":group["id"],"proposal":project(
+                choose(reduced,indices,criterion),indices,observation["cost"])})
+        possible = all(branch["proposal"] is not None for branch in branches)
+        conditional = None
+        if possible:
+            conditional = {"branches":branches,
+                "worstValue":min(branch["proposal"]["worstValue"] for branch in branches),
+                "maximumRegret":max(branch["proposal"]["maximumRegret"] for branch in branches),
+                "maximumTotalCost":max(branch["proposal"]["totalCost"] for branch in branches)}
+        return {"immediate":fixed,"reducedBudgetFixed":reduced_fixed,"conditional":conditional,
+                "worstValueChange":conditional["worstValue"]-fixed["worstValue"] if possible and fixed else None,
+                "regretReduction":fixed["maximumRegret"]-conditional["maximumRegret"] if possible and fixed else None}
+
+    result = {
+        "schema":"vivo.agent-conditional-policy/1","mission":mission,
+        "missionSha256":hashlib.sha256(canonical(mission).encode("utf-8")).hexdigest(),
+        "scenarios":scenarios,"nominalId":nominal_id,"observation":observation,
+        "remainingBudget":remaining,
+        "referenceOptima":[{"scenarioId":i,"value":value} for i,value in zip(scenario_ids,ceilings)],
+        "maximin":policy("maximin"),"minimaxRegret":policy("minimax-regret"),
+        "proof":{"method":"exhaustive-partition-policy/1","subsetsChecked":len(rows),
+                 "fullBudgetFeasible":len(full),"postObservationFeasible":len(reduced),
+                 "evaluationSha256":hashlib.sha256(canonical(full).encode("utf-8")).hexdigest(),
+                 "assumptions":"one-perfectly-observed-declared-signal-fixed-cost-no-probabilities",
+                 "maximinRanking":"group-worst-desc-regret-asc-cost-asc-id-asc",
+                 "regretRanking":"group-regret-asc-worst-desc-cost-asc-id-asc",
+                 "regretReference":"full-budget-per-scenario-optima"},
+        "evidence":{"status":"hypothetical-conditional-policy","recordsUsed":0},
         "authority":"evidence-only","providerAuthenticated":False,"providerCallsInitiated":0,
         "postedChargesUsd":None,"worldActionExecuted":False,
     }
@@ -1033,6 +1140,8 @@ class EvidenceVault:
             return mission_budget_comparison(args)
         if op == "compare-scenarios":
             return mission_scenario_comparison(args)
+        if op == "conditional-policy":
+            return mission_conditional_policy(args)
         if op == "get":
             need(exact(args, {"memoryId"}), "REQUEST_INVALID")
             return self.get(principal, args["memoryId"])
