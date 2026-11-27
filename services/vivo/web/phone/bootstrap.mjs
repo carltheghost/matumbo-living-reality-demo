@@ -1561,7 +1561,7 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.
     invoke: (name, args, context) => {
       const session=context?.session||context?.sessionId;
       if(name==='vivo.world.edit'&&!session)return registry.invoke(name,args,context);
-      return ['neural.predict','neural.missionRecall','neural.missionTrace','neural.missionForecast','task.progress','vivo.world.edit','github.pull.read','github.file.read'].includes(name)
+      return ['neural.predict','neural.missionRecall','neural.missionTrace','neural.missionForecast','task.progress','vivo.world.edit','github.pull.read','github.file.read','github.change.propose'].includes(name)
         ? githubBridge.tools.invokeFor(session,name,args)
         : registry.invoke(name,args,context);
     },

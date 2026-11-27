@@ -102,4 +102,42 @@ class HostTests(unittest.TestCase):
         self.assertEqual(status,200);self.assertEqual(json.loads(body)['content'],'print(1)')
         self.assertEqual(self.req('POST',API+'/github/file',{**payload,'expectedHeadSha':'c'*40,'path':'src/main.py'})[0],400)
         self.assertEqual(self.req('POST',API+'/github/inspect',{'repository':'other/repo','pullNumber':7})[0],400)
+    def test_branch_writer_disabled_and_owner_http_boundary(self):
+        self.assertEqual(self.req('GET',API+'/github/branch')[0],401)
+        self.login_local()
+        status,_,body=self.req('GET',API+'/github/branch')
+        self.assertEqual(status,200);self.assertFalse(json.loads(body)['configured'])
+        payload={'reviewId':'unreviewed','confirmation':'refs/heads/main'}
+        self.assertEqual(self.req('POST',API+'/github/branch/execute',payload,{'Origin':'https://evil.invalid'})[0],403)
+        self.assertEqual(self.req('POST',API+'/github/branch/execute',payload,{'X-Vivo-Action':''})[0],403)
+        status,_,body=self.req('POST',API+'/github/branch/execute',payload)
+        self.assertEqual(status,400);self.assertEqual(json.loads(body)['error'],'GITHUB_BRANCH_REVIEW_STALE')
+        self.assertEqual(self.req('POST',API+'/github/branch/merge',payload)[0],404)
+    def test_owner_branch_preview_and_single_dispatch_via_loopback(self):
+        from github_branch import GitHubBranchBroker
+        class Reader:
+            def get(self,path):
+                if '/pulls/' not in path:raise AssertionError(path)
+                return {'number':7,'head':{'sha':'a'*40,'repo':{'full_name':'owner/repo'}},'base':{'repo':{'full_name':'owner/repo'}},'state':'open'}
+        class Writer:
+            def __init__(self):self.calls=[]
+            def create(self,repo,ref,sha):
+                self.calls.append((repo,ref,sha))
+                return {'ref':ref,'object':{'type':'commit','sha':sha}}
+        writer=Writer();self.server.github=GitHubReadBroker(['owner/repo'],http=Reader())
+        self.server.github_branch=GitHubBranchBroker(self.server.github,['owner/repo'],http=writer)
+        self.login_local()
+        payload={'repository':'owner/repo','pullNumber':7,'expectedHeadSha':'a'*40,'slug':'repair'}
+        status,_,body=self.req('POST',API+'/github/branch/preview',payload)
+        self.assertEqual(status,200);review=json.loads(body);self.assertEqual(writer.calls,[])
+        approval={'reviewId':review['reviewId'],'confirmation':review['ref']}
+        self.assertEqual(self.req('POST',API+'/github/branch/execute',{**approval,'confirmation':'refs/heads/main'})[0],400)
+        self.assertEqual(writer.calls,[])
+        status,_,body=self.req('POST',API+'/github/branch/execute',approval)
+        self.assertEqual(status,200);receipt=json.loads(body);self.assertEqual(receipt['state'],'created')
+        self.assertFalse(receipt['codeApplied']);self.assertEqual(len(writer.calls),1)
+        self.assertEqual(self.req('POST',API+'/github/branch/execute',approval)[0],400)
+        self.assertEqual(len(writer.calls),1)
+        status,_,body=self.req('GET',API+'/github/branch')
+        self.assertEqual(status,200);self.assertEqual(json.loads(body)['receipts'],[receipt])
 if __name__=='__main__':unittest.main()

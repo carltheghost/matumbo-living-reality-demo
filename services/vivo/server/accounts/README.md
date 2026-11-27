@@ -164,3 +164,48 @@ Six bridge tests executed against the exact committed JavaScript module with
 synthetic responses. Python broker and loopback endpoint tests, provider DOM
 checks and cache upgrade require hosted verification. A real credentialed
 host request and external agent acceptance are separate release gates.
+
+## GitHub development proposal and owner-approved branch creation
+
+A session with an explicitly approved file can use `github.change.propose`
+to stage one local replacement (up to 8000 characters), a short summary and
+test plan against the exact commit and original blob. The owner can inspect
+the original and replacement text or discard the proposal. It does not
+execute code or tests, modify a file, or create a remote resource. Proposals
+are local memory and disappear on grant replacement, scope change or reload.
+
+Branch creation is separately opt-in and **owner-only** in the documented
+same-page trust model. By default it is disabled. Configure a distinct,
+repository-restricted token in the local process environment
+`VIVO_GITHUB_BRANCH_TOKEN`, with Contents write access for the selected
+repositories. GitHub token permissions are broader than this broker's
+single endpoint; use least privilege and do not share the token with the
+browser. See https://docs.github.com/en/rest/git/refs?apiVersion=2022-11-28#create-a-reference .
+Use the separate allowlist flag (must be a subset of the read allowlist):
+
+```sh
+python services/vivo/server/accounts/host.py --repo . --github-repository OWNER/REPO --github-branch-repository OWNER/REPO
+```
+
+The owner reviews the exact new `refs/heads/vivo/agent/<label>-<random>`
+ref and pinned same-repository open PR head, then explicitly types that ref.
+A host-held five-minute ticket is claimed once; the host rechecks the
+source PR and dispatches only POST /repos/{owner}/{repo}/git/refs with
+the reviewed ref/SHA. No existing ref updates/deletions, file changes,
+commits, PR creation, merges, workflow dispatch or arbitrary write proxy.
+Creating a branch may trigger existing repository workflows and cost.
+No agent-facing branch-write tool. Local agent revocation fences future
+requests, but a previously dispatched mutation cannot be cancelled.
+
+A lost or inconsistent response after dispatch is uncertain, not permission
+to retry. Inspect the bounded host receipt journal (32 entries per process)
+and explicitly reconcile an uncertain receipt via the exact GET ref.
+An observed matching ref is not independent proof of creation attribution.
+No automatic retries or rollback. Host process restart loses this local
+receipt journal; record the exact reviewed ref externally before executing
+and reconcile it in GitHub if the host restarts. Pending tickets expire;
+completed/uncertain receipts are retained until host shutdown. The existing
+same-origin owner-session boundary is not a sandbox for malicious page
+scripts. The host allowlists and separate credentials are the external
+permission boundary. Live token and actual GitHub write acceptance remain
+unverified; all submitted tests use synthetic provider responses.
