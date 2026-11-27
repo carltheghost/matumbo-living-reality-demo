@@ -413,12 +413,35 @@ scenarioExample.onclick=()=>{
     scenarioInput.dispatchEvent(new Event('input'));
   }catch{scenarioResult.textContent='Enter valid mission jobs before loading scenarios.';}
 };
-scenarioArea.append(scenarioExample,scenarioInput,scenarioRun,scenarioResult);
+const conditionalArea=element('details');
+conditionalArea.append(element('summary',{textContent:'Plan after an observable signal'}),
+  element('p',{className:'muted',textContent:'Declare an observation resource cost and 1–8 mutually exclusive signals. Each scenario must belong to exactly one signal. The signal is assumed to be perfectly observed before a plan is chosen. No sensor, provider call or automatic execution occurs.'}));
+const observationInput=element('textarea',{rows:8,maxLength:8192,value:''});
+observationInput.setAttribute('aria-label','Mission observation definition');
+const observationExample=element('button',{type:'button',textContent:'Load illustrative observation'});
+const conditionalRun=element('button',{type:'button',textContent:'Compare and verify conditional policy'});
+const conditionalResult=element('section');conditionalResult.setAttribute('aria-label','Verified conditional mission policy');
+observationExample.onclick=()=>{
+  try{
+    const scenarios=JSON.parse(scenarioInput.value),mission=JSON.parse(missionInput.value);
+    if(!Array.isArray(scenarios)||scenarios.length<2||scenarios.length>8||
+      scenarios.some(item=>typeof item.id!=='string'||!/^[A-Z][A-Z0-9]{0,7}$/.test(item.id))||
+      !Number.isSafeInteger(mission.budget)||mission.budget<0)throw Error('Invalid scenarios');
+    observationInput.value=JSON.stringify({cost:Math.min(1,mission.budget),
+      signals:scenarios.map((item,i)=>({id:'S'+(i+1),scenarioIds:[item.id]}))},null,2);
+    observationInput.dispatchEvent(new Event('input'));
+  }catch{conditionalResult.textContent='Enter valid mission scenarios before loading an illustrative observation.';}
+};
+conditionalArea.append(observationExample,observationInput,conditionalRun,conditionalResult);
+scenarioArea.append(scenarioExample,scenarioInput,scenarioRun,scenarioResult,conditionalArea);
 plannerArea.append(dependencyExample,missionInput,missionPlan,plannerResult,comparisonArea,scenarioArea);
 agentContext.append(plannerArea);
-function clearReasoning(){reasoningResult.replaceChildren();plannerResult.replaceChildren();comparisonResult.replaceChildren();scenarioResult.replaceChildren();}
+function clearReasoning(){reasoningResult.replaceChildren();plannerResult.replaceChildren();comparisonResult.replaceChildren();scenarioResult.replaceChildren();conditionalResult.replaceChildren();}
 scenarioInput.addEventListener('input',()=>{
-  memoryEpoch++;scenarioResult.replaceChildren();memoryStatus.textContent='Scenario assumptions changed. Verify again.';
+  memoryEpoch++;scenarioResult.replaceChildren();conditionalResult.replaceChildren();memoryStatus.textContent='Scenario assumptions changed. Verify again.';
+});
+observationInput.addEventListener('input',()=>{
+  memoryEpoch++;conditionalResult.replaceChildren();memoryStatus.textContent='Observation assumptions changed. Verify again.';
 });
 for(const control of [comparisonBudgets,comparisonTarget])control.addEventListener('input',()=>{
   memoryEpoch++;comparisonResult.replaceChildren();memoryStatus.textContent='Comparison assumptions changed. Verify again.';
@@ -442,6 +465,7 @@ function clearMemoryView(){
   missionInput.value=JSON.stringify(defaultMission,null,2);plannerArea.open=false;
   comparisonBudgets.value='5,7,10';comparisonTarget.value='';comparisonArea.open=false;
   scenarioInput.value='';scenarioArea.open=false;
+  observationInput.value='';conditionalArea.open=false;
   memoryStatus.textContent='Connect to recall evidence.';
 }
 const memoryAction=fn=>async()=>{
@@ -635,6 +659,48 @@ scenarioRun.onclick=memoryAction(async(client,current)=>{
     element('p',{textContent:'Decision SHA-256: '+result.decisionSha256}),
     element('p',{className:'muted',textContent:'Regret is the value lost relative to the best feasible plan in that scenario. Worst case means the minimum among supplied scenarios, not a real-world guarantee. No memory recall, model calls or execution.'}));
   memoryStatus.textContent='Scenario comparison verified · '+result.scenarios.length+' scenarios';
+});
+conditionalRun.onclick=memoryAction(async(client,current)=>{
+  if([missionInput,scenarioInput,observationInput].some(input=>input.value.length>8192))throw Error('Conditional definition is too large.');
+  let mission,scenarios,observation;
+  try{mission=JSON.parse(missionInput.value);scenarios=JSON.parse(scenarioInput.value);observation=JSON.parse(observationInput.value);}
+  catch{throw Error('Mission, scenarios and observation must be valid JSON.');}
+  memoryResults.replaceChildren();resetSharing();memoryCursor=null;memoryMore.hidden=true;
+  const result=await client.planConditionalMission({mission,scenarios,nominalId:'NOM',observation});
+  if(!current())return;
+  conditionalResult.append(element('h4',{textContent:'Independently verified conditional policy'}),
+    element('p',{textContent:'Observation cost '+result.observation.cost+' · remaining budget '+result.remainingBudget}));
+  for(const [label,policy] of [['Maximin',result.maximin],['Minimax regret',result.minimaxRegret]]){
+    const section=element('section');
+    section.setAttribute('aria-label',label+' policy');
+    section.append(element('h5',{textContent:label}),
+      element('p',{textContent:policy.immediate?
+        'Immediate plan: '+(policy.immediate.candidate||'Empty choice')+' · worst value '+policy.immediate.worstValue+' · maximum regret '+policy.immediate.maximumRegret:
+        'No feasible immediate plan.'}),
+      element('p',{textContent:policy.reducedBudgetFixed?
+        'Fixed plan at reduced budget (without observation): '+(policy.reducedBudgetFixed.candidate||'Empty choice')+' · worst value '+policy.reducedBudgetFixed.worstValue+' · maximum regret '+policy.reducedBudgetFixed.maximumRegret:
+        'No feasible fixed plan at reduced budget.'}));
+    if(policy.conditional){
+      section.append(element('p',{textContent:'Conditional worst value '+policy.conditional.worstValue+' · maximum regret '+policy.conditional.maximumRegret+
+        ' · maximum total cost '+policy.conditional.maximumTotalCost}),
+        element('p',{textContent:'Worst-value change '+policy.worstValueChange+' · regret reduction '+policy.regretReduction}));
+      const table=element('table'),header=element('thead'),row=element('tr'),body=element('tbody');
+      for(const label of ['Signal','Selected plan','Total cost','Worst value','Max regret'])row.append(element('th',{textContent:label}));
+      header.append(row);table.append(header,body);
+      for(const branch of policy.conditional.branches){
+        const tr=element('tr'),p=branch.proposal;
+        for(const value of [branch.signalId,p.candidate||'Empty choice',p.totalCost,p.worstValue,p.maximumRegret])
+          tr.append(element('td',{textContent:String(value)}));
+        body.append(tr);
+      }
+      section.append(table);
+    }else section.append(element('p',{textContent:'Observation leaves no feasible conditional plan. Do not treat this as an execution recommendation.'}));
+    conditionalResult.append(section);
+  }
+  conditionalResult.append(element('p',{textContent:result.proof.subsetsChecked+' subsets checked · '+result.proof.postObservationFeasible+' feasible after observation'}),
+    element('p',{textContent:'Decision SHA-256: '+result.decisionSha256}),
+    element('p',{className:'muted',textContent:'All regret is measured against full-budget scenario optima. Conditional results assume the declared signal is correct and available; no probabilities, live observations, memory recall or world action.'}));
+  memoryStatus.textContent='Conditional policy verified · '+result.observation.signals.length+' signals';
 });
 archiveMemory.onclick=memoryAction(async(client,current)=>{
   const file=memoryFile.files?.[0];if(!file||file.size>65536)throw Error('Choose a Council JSON report no larger than 64 KB.');

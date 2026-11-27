@@ -287,6 +287,34 @@ async def main():
                 await editor_sheet.get_by_role("button",name="Compare and verify scenarios").click()
                 await status(editor_status,"MISSION_SCENARIO_NOMINAL_MISMATCH")
                 check("mismatched nominal scenario is rejected",not (await scenario_result.inner_text()).strip())
+                # Conditional policy requires exact partitions and charges observation cost.
+                await mission_input.fill(json.dumps({"budget":2,"jobs":[{"id":"A","cost":1,"value":10},
+                    {"id":"B","cost":1,"value":0}],"required":[],"conflicts":[["A","B"]]}))
+                await editor_sheet.get_by_label("Mission value scenarios").fill(json.dumps([
+                    {"id":"NOM","values":{"A":10,"B":0}},{"id":"STRESS","values":{"A":0,"B":10}}]))
+                await editor_sheet.get_by_text("Plan after an observable signal",exact=True).click()
+                observation=editor_sheet.get_by_label("Mission observation definition")
+                await observation.fill(json.dumps({"cost":1,"signals":[
+                    {"id":"NORMAL","scenarioIds":["NOM"]},{"id":"ADVERSE","scenarioIds":["STRESS"]}]}))
+                await editor_sheet.get_by_role("button",name="Compare and verify conditional policy").click()
+                await status(editor_status,"Conditional policy verified · 2 signals")
+                conditional=editor_sheet.get_by_label("Verified conditional mission policy")
+                maximin=conditional.get_by_label("Maximin policy")
+                branch_rows=maximin.locator("tbody tr")
+                actual=[await branch_rows.nth(i).locator("td").all_inner_texts() for i in range(await branch_rows.count())]
+                check("conditional planner chooses per signal and accounts for observation cost",
+                      actual==[["ADVERSE","B","2","10","0"],["NORMAL","A","2","10","0"]] and
+                      "Worst-value change 10 · regret reduction 10" in await maximin.inner_text())
+                await observation.fill(json.dumps({"cost":1,"signals":[{"id":"UNKNOWN","scenarioIds":["NOM","STRESS"]}]}))
+                check("changing observation clears prior policy",not (await conditional.inner_text()).strip())
+                await editor_sheet.get_by_role("button",name="Compare and verify conditional policy").click()
+                await status(editor_status,"Conditional policy verified · 1 signals")
+                check("ambiguous signal cannot claim perfect information gain",
+                      "Worst-value change 0 · regret reduction 0" in await maximin.inner_text())
+                await observation.fill(json.dumps({"cost":1,"signals":[{"id":"UNKNOWN","scenarioIds":["NOM"]}]}))
+                await editor_sheet.get_by_role("button",name="Compare and verify conditional policy").click()
+                await status(editor_status,"MISSION_POLICY_INVALID")
+                check("incomplete signal coverage rejected",not (await conditional.inner_text()).strip())
                 await mission_input.fill(saved_definition)
                 dependency_mission=json.loads(await mission_input.input_value())
                 dependency_mission["required"]=["C"];dependency_mission["budget"]=9
