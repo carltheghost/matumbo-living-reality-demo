@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RemoteTransport,verifyMissionScenarioComparison,verifyMissionBudgetComparison,verifyAgentMissionPlan,normalizeAgentMission,verifyMemoryBackupSet,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
+import {RemoteTransport,verifyConditionalMissionPolicy,verifyMissionScenarioComparison,verifyMissionBudgetComparison,verifyAgentMissionPlan,normalizeAgentMission,verifyMemoryBackupSet,verifyAgentReasoningReceipt} from '../../web/application/remote-transport.mjs';
 
 class FakeSocket {
   static instances=[];
@@ -555,5 +555,54 @@ test('joint scenario comparison verifies nominal maximin and minimax regret inde
     await assert.rejects(verifyMissionScenarioComparison(await sign(bad),request),/MEMORY_MISSION_INVALID/);
   await assert.rejects(transport.compareMissionScenarios({...request,scenarios:[{id:'NOM',values:{A:9,B:6,C:8}},scenarios[1]]},
     async()=>{throw Error('no network expected');}),/MISSION_SCENARIO_NOMINAL_MISMATCH/);
+  await shutdown(transport,socket);
+});
+
+
+test('conditional policies independently verify partition coverage, observation cost and common regret reference',async()=>{
+  const {transport,socket}=await admitted();
+  const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+  const mission={budget:2,jobs:[{id:'A',cost:1,value:10},{id:'B',cost:1,value:0}],required:[],conflicts:[['A','B']]};
+  const scenarios=[{id:'NOM',values:{A:10,B:0}},{id:'STRESS',values:{A:0,B:10}}],nominalId='NOM';
+  const observation={cost:1,signals:[{id:'ADVERSE',scenarioIds:['STRESS']},{id:'NORMAL',scenarioIds:['NOM']}]};
+  const request={mission,scenarios,nominalId,observation};
+  const fixed={candidate:'',totalCost:0,values:[{scenarioId:'NOM',value:0},{scenarioId:'STRESS',value:0}],worstValue:0,maximumRegret:10};
+  const branch=(signalId,candidate,scenarioId)=>({signalId,proposal:{candidate,totalCost:2,values:[{scenarioId,value:10}],worstValue:10,maximumRegret:0}});
+  const conditional={branches:[branch('ADVERSE','B','STRESS'),branch('NORMAL','A','NOM')],worstValue:10,maximumRegret:0,maximumTotalCost:2};
+  const policy={immediate:fixed,reducedBudgetFixed:fixed,conditional,worstValueChange:10,regretReduction:10};
+  const core={schema:'vivo.agent-conditional-policy/1',mission,missionSha256:await hash(JSON.stringify(mission)),scenarios,nominalId,observation,remainingBudget:1,
+    referenceOptima:[{scenarioId:'NOM',value:10},{scenarioId:'STRESS',value:10}],
+    maximin:policy,minimaxRegret:policy,
+    proof:{method:'exhaustive-partition-policy/1',subsetsChecked:4,fullBudgetFeasible:3,postObservationFeasible:3,
+      evaluationSha256:await hash(JSON.stringify([['',0,[0,0]],['A',1,[10,0]],['B',1,[0,10]]])),
+      assumptions:'one-perfectly-observed-declared-signal-fixed-cost-no-probabilities',
+      maximinRanking:'group-worst-desc-regret-asc-cost-asc-id-asc',regretRanking:'group-regret-asc-worst-desc-cost-asc-id-asc',
+      regretReference:'full-budget-per-scenario-optima'},
+    evidence:{status:'hypothetical-conditional-policy',recordsUsed:0},
+    authority:'evidence-only',providerAuthenticated:false,providerCallsInitiated:0,postedChargesUsd:null,worldActionExecuted:false};
+  const sign=async value=>({...value,decisionSha256:await hash(JSON.stringify(value))});
+  const packet=await sign(core);
+  assert.deepEqual(await transport.planConditionalMission({...request,observation:{...observation,signals:[...observation.signals].reverse()}},
+    async(url,init)=>{
+      assert.equal(url,'http://vivo.test/api/neural-memory');
+      assert.deepEqual(JSON.parse(init.body),{op:'conditional-policy',args:request});
+      return {ok:true,json:async()=>({schema:'vivo.neural-memory/1',result:packet})};
+    }),packet);
+  for(const bad of [
+    {...core,remainingBudget:2},
+    {...core,maximin:{...policy,worstValueChange:11}},
+    {...core,minimaxRegret:{...policy,conditional:{...conditional,maximumTotalCost:1}}},
+    {...core,maximin:{...policy,conditional:{...conditional,branches:[...conditional.branches].reverse()}}},
+    {...core,referenceOptima:[{scenarioId:'NOM',value:9},{scenarioId:'STRESS',value:10}]},
+    {...core,proof:{...core.proof,postObservationFeasible:4}},
+    {...core,proof:{...core.proof,regretReference:'reduced-budget-reference'}},
+    {...core,evidence:{...core.evidence,recordsUsed:1}},
+    {...core,worldActionExecuted:true}
+  ])await assert.rejects(verifyConditionalMissionPolicy(await sign(bad),request),/MEMORY_MISSION_INVALID/);
+  for(const invalid of [{cost:3,signals:observation.signals},{cost:0,signals:observation.signals.slice(0,1)},
+    {cost:0,signals:[{id:'X',scenarioIds:['NOM','NOM','STRESS']}]}]){
+    await assert.rejects(transport.planConditionalMission({...request,observation:invalid},
+      async()=>{throw Error('no request expected');}),/MISSION_POLICY_INVALID/);
+  }
   await shutdown(transport,socket);
 });

@@ -782,3 +782,61 @@ class CouncilMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(bounded["proof"]["feasibleSubsets"],4096)
         self.assertEqual(bounded["nominalChoice"]["nominalValue"],12)
         self.assertEqual(bounded["maximinChoice"]["worstValue"],0)
+
+
+    async def test_conditional_policy_information_gain_cost_and_ambiguity(self):
+        mission={"budget":2,"jobs":[{"id":"A","cost":1,"value":10},{"id":"B","cost":1,"value":0}],
+                 "required":[],"conflicts":[["A","B"]]}
+        scenarios=[{"id":"NOM","values":{"A":10,"B":0}},{"id":"STRESS","values":{"A":0,"B":10}}]
+        signals=[{"id":"NORMAL","scenarioIds":["NOM"]},{"id":"ADVERSE","scenarioIds":["STRESS"]}]
+        args={"mission":mission,"scenarios":scenarios,"nominalId":"NOM","observation":{"cost":1,"signals":signals}}
+        result=await self.rpc("conditional-policy",args)
+        self.assertEqual(result["remainingBudget"],1)
+        self.assertEqual(result["maximin"]["immediate"]["worstValue"],0)
+        self.assertEqual(result["maximin"]["conditional"]["worstValue"],10)
+        self.assertEqual(result["maximin"]["worstValueChange"],10)
+        self.assertEqual(result["minimaxRegret"]["regretReduction"],10)
+        self.assertEqual(result["minimaxRegret"]["conditional"]["maximumRegret"],0)
+        self.assertEqual(result["maximin"]["conditional"]["maximumTotalCost"],2)
+        self.assertEqual([b["proposal"]["candidate"] for b in result["maximin"]["conditional"]["branches"]],["B","A"])
+        ambiguous=await self.rpc("conditional-policy",{**args,"observation":{"cost":1,
+            "signals":[{"id":"UNKNOWN","scenarioIds":["NOM","STRESS"]}]}})
+        self.assertEqual(ambiguous["maximin"]["worstValueChange"],0)
+        self.assertEqual(ambiguous["minimaxRegret"]["regretReduction"],0)
+        expensive=await self.rpc("conditional-policy",{**args,"observation":{"cost":2,"signals":signals}})
+        self.assertEqual(expensive["maximin"]["conditional"]["worstValue"],0)
+        self.assertEqual(expensive["maximin"]["conditional"]["maximumRegret"],10)
+        self.assertEqual(expensive["maximin"]["conditional"]["maximumTotalCost"],2)
+        self.assertEqual(await self.rpc("conditional-policy",args,token=self.one["token"]),result)
+        await self.rpc("archive",{"envelope":self.mission})
+        self.assertEqual(await self.rpc("conditional-policy",args),result)
+        self.assertNotIn(self.mission["reportSha256"],json.dumps(result))
+
+    async def test_conditional_policy_required_jobs_partition_and_bounds(self):
+        mission={"budget":2,"jobs":[{"id":"A","cost":1,"value":3},{"id":"B","cost":1,"value":5}],
+                 "required":["B"],"conflicts":[],"dependencies":[["B","A"]]}
+        scenarios=[{"id":"NOM","values":{"A":3,"B":5}},{"id":"STRESS","values":{"A":0,"B":2}}]
+        signals=[{"id":"NORMAL","scenarioIds":["NOM"]},{"id":"ADVERSE","scenarioIds":["STRESS"]}]
+        args={"mission":mission,"scenarios":scenarios,"nominalId":"NOM","observation":{"cost":1,"signals":signals}}
+        result=await self.rpc("conditional-policy",args)
+        self.assertEqual(result["maximin"]["immediate"]["candidate"],"A,B")
+        self.assertIsNone(result["maximin"]["conditional"])
+        self.assertIsNone(result["minimaxRegret"]["regretReduction"])
+        self.assertEqual(result["proof"]["postObservationFeasible"],0)
+        for invalid in ({"cost":3,"signals":signals},{"cost":True,"signals":signals},
+                        {"cost":0,"signals":signals[:1]},
+                        {"cost":0,"signals":[{"id":"X","scenarioIds":["NOM","NOM","STRESS"]}]},
+                        {"cost":0,"signals":[{"id":"X","scenarioIds":["NOM"]},{"id":"X","scenarioIds":["STRESS"]}]},
+                        {"cost":0,"signals":[{"id":"X","scenarioIds":["NOM","OTHER"]}]}):
+            self.assertEqual(await self.rpc("conditional-policy",{**args,"observation":invalid},expected=400),"MISSION_POLICY_INVALID")
+        self.assertEqual(await self.rpc("conditional-policy",args,token=None,expected=401),"AUTH_REQUIRED")
+        jobs=[{"id":f"J{i:02}","cost":1,"value":1} for i in range(12)]
+        bounded=await self.rpc("conditional-policy",{"mission":{"budget":12,"jobs":jobs,"required":[],"conflicts":[]},
+            "scenarios":[{"id":"NOM","values":{j["id"]:1 for j in jobs}},
+                         *[{"id":f"S{i}","values":{j["id"]:i for j in jobs}} for i in range(7)]],
+            "nominalId":"NOM","observation":{"cost":1,"signals":[{"id":"N","scenarioIds":["NOM"]},
+                *[{"id":f"S{i}","scenarioIds":[f"S{i}"]} for i in range(7)]]}})
+        self.assertEqual(bounded["proof"]["subsetsChecked"],4096)
+        self.assertEqual(bounded["proof"]["fullBudgetFeasible"],4096)
+        self.assertEqual(bounded["proof"]["postObservationFeasible"],4095)
+        self.assertEqual(bounded["maximin"]["conditional"]["maximumTotalCost"],12)
