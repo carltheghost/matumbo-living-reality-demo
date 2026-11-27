@@ -1,0 +1,3 @@
+# Preserve exact archived runtime bytes on all operating systems.
+*.py -text
+RUNTIME-HASHES.json -text
