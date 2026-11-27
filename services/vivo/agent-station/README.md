@@ -19,3 +19,27 @@ python station.py --db /private/path/station.sqlite serve --origin http://127.0.
 Without memory binding, omit all four memory options. Only use an existing, reviewed database; do not guess its location or identity. Enrollment is operator-controlled using `station.py --db ... enroll --help`. Keep credentials private. Do not expose the loopback broker through a tunnel, proxy or public network. Existing agents must bind explicitly; world edits still require their original native approvals. If the broker cannot be reached, the interface remains disconnected.
 
 **Strategy** compares existing assigned missions via `/v1/owner/continuity/strategy/compare`. Review the exact alternative dependencies and owner-supplied estimates; a separate explicit graph confirmation invokes the existing organization setup API. Preview does not dispatch work or consume model credits. Advanced v0.12 agent tools remain available through the existing local MCP client.
+
+## Activate the existing private runtime safely
+
+The source checkout includes the same `upgrade_v012.py` exact-hash guard from the verified v0.12 archive. The Station directory pins exact source bytes against Git line-ending conversion; an older Windows checkout with converted or modified runtime files must be reconciled rather than force-upgraded. Use the existing private installed Station directory, not a replacement database or world. Stop the old broker and any other writers, consistently checkpoint its SQLite WAL, and keep byte-identical private backups of the SQLite and Apollo files **outside the public repository and web tree**. Never copy secrets or databases into the repository. Inspect the installed directory using the guard's default dry-run first:
+
+```powershell
+python .\upgrade_v012.py "<existing Station directory>"
+```
+
+Only after a supported exact base is reported, backups are verified by the operator, and the broker remains stopped, use the same command with `--apply`. Do not force unknown hashes, replace an independently modified UI, or delete journal files to pass a check. The guard does not discover all databases, take a process lock, or back up the owner's stores automatically.
+
+The owner-operated `launch_existing.py` defaults to a read-only preflight. Use the exact existing database path, native world ID, and trusted browser origin from the original deployment. For the GitHub Pages route the origin is `https://carltheghost.github.io` (an origin does not include the repository path). For a local route use its existing exact `http://127.0.0.1:PORT` or `http://localhost:PORT` origin. Switching origins may select a different browser-local world; do not invent a new world to satisfy this check.
+
+```powershell
+python .\launch_existing.py --station-dir "<existing Station directory>" --db "<existing station.sqlite>" --world "<exact enrolled world ID>" --origin "https://carltheghost.github.io" --confirm-stopped --db-backup "<private stopped SQLite backup>"
+```
+
+If the existing Station is bound to Apollo, include **all** of `--memory "<existing Apollo store>" --memory-scope "<original scope>" --memory-owner "<original owner>" --memory-backup "<private stopped Apollo backup>"`. Make the original Apollo reader available through the same reviewed Python environment; optionally include `--probe-task "<known exact native mission task ID>"` to confirm a scoped read. No active memory grant may be silently stranded by a changed binding or by starting without Apollo.
+
+The preflight validates every installed runtime hash, recognized database tables and integrity, exact enrolled world/host, memory binding, unresolved action status, source origin and loopback port. It reads a stopped, consistently checkpointed SQLite store in immutable read-only mode. It does not prove that all other writers are stopped; the explicit owner confirmation is required. It refuses a missing database, unknown source/schema, pending running actions or queued native edits, changed backup bytes, nonempty WAL/journal or unavailable port. Resolve these through the existing owner-reviewed procedure rather than changing records to make it pass. It does not enroll a user, delete records, choose paths or modify source.
+
+If preflight passes, append `--start` to the same command. Start requires distinct byte-identical backups for each configured store. This runs the existing broker in the foreground on loopback only, with no bearer token on the command line. Keep that terminal open. In the **original** Vivo browser profile and world, open Advanced → Agent Station and explicitly connect with the existing owner and exact-world host credentials. Only a confirmed native receipt and an exact Apollo recall demonstrate the corresponding live features. A successful preflight or process start is not evidence of a connected browser or a verified user-world receipt. Browser local-network access policy may still require a user-controlled permission; do not disable browser protections.
+
+Run the startup guard regression with `python -m unittest test_launch_existing -v`. It uses disposable stores, an isolated Apollo reader fixture and a real loopback HTTP startup smoke on Linux. No owner's store, token or native world is used.
